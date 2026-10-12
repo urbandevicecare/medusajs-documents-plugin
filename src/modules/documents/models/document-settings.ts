@@ -53,6 +53,7 @@ export const DocumentSettings = model.define("document_settings", {
   packing_slip_template: model.text().default("modern"),
   receipt_template: model.text().default("modern"),
   estimate_template: model.text().default("modern"),
+  job_card_template: model.text().default("modern"),
   custom_doc_template: model.text().default("modern"),
 });
 

@@ -439,6 +439,7 @@ export const DocumentsPage = () => {
                   <Select.Item value="invoice">Invoices</Select.Item>
                   <Select.Item value="receipt">Receipts</Select.Item>
                   <Select.Item value="estimate">Estimates / Quotes</Select.Item>
+                  <Select.Item value="job_card">Job Cards</Select.Item>
                   <Select.Item value="packing_slip">Packing Slips</Select.Item>
                   <Select.Item value="custom">Custom Documents</Select.Item>
                 </Select.Content>
@@ -764,6 +765,37 @@ export const DocumentsPage = () => {
                   className="text-xs font-semibold text-ui-fg-interactive hover:underline inline-flex items-center gap-1"
                 >
                   <ArrowDownTray className="w-3.5 h-3.5" /> Preview Custom Doc Template
+                </a>
+              </div>
+            </div>
+
+            {/* Repair Job Card Template */}
+            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
+              <div>
+                <Label className="font-semibold text-sm">Repair Job Card Template</Label>
+                <Text className="text-xs text-ui-fg-subtle mb-3">Workshop intake job card with device specs, inspection checklist & technician sign-off.</Text>
+                <Select
+                  value={settings.job_card_template || "modern"}
+                  onValueChange={(v) => updateSettingField("job_card_template", v)}
+                >
+                  <Select.Trigger size="small">
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="modern">Modern Minimalist</Select.Item>
+                    <Select.Item value="classic">Classic Corporate</Select.Item>
+                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                  </Select.Content>
+                </Select>
+              </div>
+              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
+                <a
+                  href={`/api/admin/documents/templates/preview?style=${settings.job_card_template || "modern"}&type=job_card`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-semibold text-ui-fg-interactive hover:underline inline-flex items-center gap-1"
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5" /> Preview Job Card Template
                 </a>
               </div>
             </div>

@@ -112,14 +112,23 @@ export default async function repairDocumentsSubscriber({
     const isPaid = ticket.payment_status === "captured" || ticket.payment_status === "paid" || eventName === "repair.payment_received";
     const isAwaitingApproval = ticket.status === "awaiting_approval";
 
-    const docType = isPaid ? "receipt" : (isAwaitingApproval ? "estimate" : "invoice");
-    const docTitle = isPaid ? "Repair Payment Receipt" : (isAwaitingApproval ? "Repair Estimate / Quote" : "Repair Invoice");
+    let docType: any = isPaid ? "receipt" : (isAwaitingApproval ? "estimate" : "invoice");
+    let docTitle = isPaid ? "Repair Payment Receipt" : (isAwaitingApproval ? "Repair Estimate / Quote" : "Repair Invoice");
 
+    if (eventName === "repair.created") {
+      docType = "job_card";
+      docTitle = "Repair Job Card";
+    }
+
+    const displayId = docType === "job_card" ? `JOB-${ticket.ticket_number}` : `RT-${ticket.ticket_number}`;
     const totalEstimate = Number(ticket.total_actual && ticket.total_actual > 0 ? ticket.total_actual : ticket.total_estimate || 0);
+
+    const trackingUrl = ticket.approval_token ? `${storeUrl}/repairs/track?token=${ticket.approval_token}` : undefined;
+    const paymentOrTrackingLink = docType === "job_card" ? (trackingUrl || paymentInfo.paymentLink) : paymentInfo.paymentLink;
 
     await documentService.generateDocument(
       {
-        display_id: `RT-${ticket.ticket_number}`,
+        display_id: displayId,
         title: docTitle,
         type: docType,
         repair_ticket_id: ticket.id,
@@ -132,12 +141,17 @@ export default async function repairDocumentsSubscriber({
         total: totalEstimate,
         currency_code: "usd",
         payment_status: isPaid ? "paid" : "unpaid",
-        payment_link: paymentInfo.paymentLink || undefined,
-        auto_send: true,
+        payment_link: paymentOrTrackingLink || undefined,
+        auto_send: docType !== "job_card", // Invoices/receipts/estimates auto-send, Job cards are primarily for intake workshop
         email_subject: `${docTitle} for Ticket #${ticket.ticket_number} (${ticket.device?.model_name || "Device"})`,
+        notes: ticket.terms_accepted != null ? `Intake Consent: Terms Accepted: ${ticket.terms_accepted ? "Yes" : "No"} | Data Wipe: ${ticket.data_wiped_consent ? "Yes" : "No"}` : undefined,
         custom_fields: {
           "Device Model": ticket.device?.model_name || "N/A",
+          "Brand": ticket.device?.brand || "N/A",
           "Serial / IMEI": ticket.device?.serial_number || ticket.device?.imei || "N/A",
+          "Condition": ticket.device?.condition || "Not specified",
+          "Accessories": ticket.accessories || "None",
+          "Technician": ticket.technician_name || "Unassigned",
           "Issue": ticket.issue_description || "Standard Repair",
         },
       },

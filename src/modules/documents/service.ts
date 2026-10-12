@@ -1,4 +1,4 @@
-import { MedusaService } from "@medusajs/framework/utils";
+import { MedusaService, ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { DocumentSettings } from "./models/document-settings";
 import { DocumentRecord } from "./models/document-record";
 import { DocumentLink } from "./models/document-link";
@@ -10,20 +10,20 @@ import { NotificationSender } from "../../services/notification-sender";
 export interface GenerateDocumentInput {
   display_id?: string;
   title?: string;
-  type: "invoice" | "receipt" | "estimate" | "packing_slip" | "custom";
-  customer: {
+  type: "invoice" | "receipt" | "estimate" | "packing_slip" | "custom" | "job_card";
+  customer?: {
     name: string;
     email?: string;
     phone?: string;
     address?: string;
   };
-  items: LineItem[];
+  items?: LineItem[];
   subtotal?: number;
   tax_total?: number;
   shipping_total?: number;
   discount_total?: number;
-  total: number;
-  currency_code: string;
+  total?: number;
+  currency_code?: string;
   order_id?: string;
   repair_ticket_id?: string;
   payment_status?: string;
@@ -100,8 +100,90 @@ export class DocumentModuleService extends MedusaService({
     const settings = await this.getSettings();
     const storeUrl = (settings.storefront_url || process.env.STORE_URL || "http://localhost:3000").replace(/\/$/, "");
 
+    // 0. Auto-hydrate repair ticket data if needed
+    if (input.repair_ticket_id && (!input.customer || !input.items || input.items.length === 0)) {
+      try {
+        const query = container?.resolve?.(ContainerRegistrationKeys.QUERY);
+        if (query) {
+          const { data: tickets } = await query.graph({
+            entity: "repair_ticket",
+            fields: ["*", "device.*", "product_variants.*"],
+            filters: { id: input.repair_ticket_id },
+          });
+          if (tickets && tickets.length > 0) {
+            const ticket = tickets[0];
+            input.display_id = input.display_id || (input.type === "job_card" ? `JOB-${ticket.ticket_number}` : `RT-${ticket.ticket_number}`);
+            input.title = input.title || (input.type === "job_card" ? "Repair Job Card" : "Repair Document");
+            let customerName = "Valued Customer";
+            let customerEmail: string | undefined = undefined;
+            let customerPhone: string | undefined = undefined;
+            if (ticket.customer_id) {
+              const custMod = container.resolve("customer", { allowUnregistered: true });
+              if (custMod) {
+                const c = await custMod.retrieveCustomer(ticket.customer_id);
+                if (c) {
+                  customerName = c.first_name ? `${c.first_name} ${c.last_name || ""}`.trim() : c.email || customerName;
+                  customerEmail = c.email || undefined;
+                  customerPhone = c.phone || undefined;
+                }
+              }
+            }
+            if (!input.customer) {
+              input.customer = {
+                name: customerName,
+                email: customerEmail,
+                phone: customerPhone,
+              };
+            }
+            if (!input.items || input.items.length === 0) {
+              input.items = [];
+              if (ticket.product_variants) {
+                for (const pv of ticket.product_variants) {
+                  input.items.push({
+                    title: pv.title || "Replacement Part",
+                    description: pv.sku ? `SKU: ${pv.sku}` : "",
+                    quantity: 1,
+                    unit_price: 0,
+                  });
+                }
+              }
+              if (input.items.length === 0) {
+                input.items.push({
+                  title: `Diagnostic / Repair Inspection (#${ticket.ticket_number})`,
+                  description: ticket.issue_description || "Standard device repair service",
+                  quantity: 1,
+                  unit_price: Number(ticket.total_estimate || 0),
+                  total: Number(ticket.total_estimate || 0),
+                });
+              }
+            }
+            input.custom_fields = {
+              "Device Model": ticket.device?.model_name || "N/A",
+              "Brand": ticket.device?.brand || "N/A",
+              "Serial / IMEI": ticket.device?.serial_number || ticket.device?.imei || "N/A",
+              "Condition": ticket.device?.condition || "Not specified",
+              "Accessories": ticket.accessories || "None",
+              "Technician": ticket.technician_name || "Unassigned",
+              "Reported Issue": ticket.issue_description || "Standard Repair",
+              ...(input.custom_fields || {}),
+            };
+            if (input.type === "job_card" && ticket.approval_token) {
+              input.payment_link = `${storeUrl}/repairs/track?token=${ticket.approval_token}`;
+            }
+          }
+        }
+      } catch (err) {}
+    }
+
+    if (!input.customer) {
+      input.customer = { name: "Customer" };
+    }
+    if (!input.items) {
+      input.items = [];
+    }
+
     // Generate unique display ID if not given
-    const prefix = settings.zoho_invoice_prefix || "DOC-";
+    const prefix = input.type === "job_card" ? "JOB-" : (settings.zoho_invoice_prefix || "DOC-");
     const displayId = input.display_id || `${prefix}${Math.floor(100000 + Math.random() * 900000)}`;
 
     // Prepare short payment link if payment link is present
@@ -218,6 +300,7 @@ export class DocumentModuleService extends MedusaService({
       if (input.type === "packing_slip") templateName = settings.packing_slip_template || "modern";
       else if (input.type === "receipt") templateName = settings.receipt_template || "modern";
       else if (input.type === "estimate") templateName = settings.estimate_template || "modern";
+      else if (input.type === "job_card") templateName = settings.job_card_template || "modern";
       else if (input.type === "custom") templateName = settings.custom_doc_template || "modern";
 
       const docData: DocumentData = {
@@ -246,8 +329,8 @@ export class DocumentModuleService extends MedusaService({
         tax_total: input.tax_total,
         shipping_total: input.shipping_total,
         discount_total: input.discount_total,
-        total: input.total,
-        currency_code: input.currency_code,
+        total: input.total != null ? input.total : 0,
+        currency_code: input.currency_code || "usd",
         payment_status: input.payment_status || "unpaid",
         payment_link: shortPaymentLink || input.payment_link,
         qr_url: shortPaymentLink || input.payment_link,

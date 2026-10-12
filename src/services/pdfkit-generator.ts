@@ -13,7 +13,7 @@ export interface LineItem {
 export interface DocumentData {
   display_id: string;
   title?: string;
-  type: "invoice" | "receipt" | "estimate" | "packing_slip" | "custom";
+  type: "invoice" | "receipt" | "estimate" | "packing_slip" | "custom" | "job_card";
   date?: string;
   due_date?: string;
   customer: {
@@ -106,6 +106,7 @@ export class PDFKitGenerator {
 
         // Document Badge & Details (Right side)
         const docTitle = data.title || (
+          data.type === "job_card" ? "REPAIR JOB CARD" :
           data.type === "invoice" ? "TAX INVOICE" :
           data.type === "receipt" ? "PAYMENT RECEIPT" :
           data.type === "packing_slip" ? "PACKING SLIP" :
@@ -125,6 +126,9 @@ export class PDFKitGenerator {
           try {
             const qrBuf = await QRCode.toBuffer(data.qr_url, { width: 55, margin: 0 });
             doc.image(qrBuf, 500, headerY + 62, { width: 55, height: 55 });
+            if (data.type === "job_card") {
+              doc.fontSize(6).fillColor(subtleColor).text("Scan to Track", 500, headerY + 120, { width: 55, align: "center" });
+            }
           } catch (e) {}
         }
 
@@ -133,7 +137,8 @@ export class PDFKitGenerator {
 
         // Bill To / Customer details block
         const billToY = 145;
-        doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(9).text("RECIPIENT / BILLED TO:", 40, billToY);
+        const recipientLabel = data.type === "job_card" ? "CUSTOMER INTAKE DETAILS:" : "RECIPIENT / BILLED TO:";
+        doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(9).text(recipientLabel, 40, billToY);
         doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(11).text(data.customer.name, 40, billToY + 14);
         
         let cY = billToY + 28;
@@ -155,7 +160,8 @@ export class PDFKitGenerator {
         if (data.custom_fields && Object.keys(data.custom_fields).length > 0) {
           let cfX = 300;
           let cfY = billToY;
-          doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(9).text("REFERENCE DETAILS:", cfX, cfY);
+          const refLabel = data.type === "job_card" ? "DEVICE & WORKSHOP DETAILS:" : "REFERENCE DETAILS:";
+          doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(9).text(refLabel, cfX, cfY);
           cfY += 14;
           for (const [k, v] of Object.entries(data.custom_fields)) {
             doc.font("Helvetica-Bold").fontSize(8).fillColor(darkColor).text(`${k}: `, cfX, cfY, { continued: true });
@@ -173,30 +179,34 @@ export class PDFKitGenerator {
         }
 
         // Table Header
-        const showPricing = data.type !== "packing_slip";
+        const showPricing = data.type !== "packing_slip" && data.type !== "job_card";
         doc.rect(40, tableStartY, 515, 22).fill(lightBg);
         doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(8);
-        doc.text("ITEM & DESCRIPTION", 50, tableStartY + 7);
-        doc.text("QTY", 340, tableStartY + 7, { width: 40, align: "center" });
+        doc.text(data.type === "job_card" ? "DIAGNOSTIC / REPAIR SERVICE TASK" : "ITEM & DESCRIPTION", 50, tableStartY + 7);
+        doc.text(data.type === "job_card" ? "CHECK" : "QTY", 340, tableStartY + 7, { width: 40, align: "center" });
         if (showPricing) {
           doc.text("RATE", 400, tableStartY + 7, { width: 60, align: "right" });
           doc.text("AMOUNT", 480, tableStartY + 7, { width: 65, align: "right" });
+        } else if (data.type === "job_card") {
+          doc.text("STATUS", 480, tableStartY + 7, { width: 65, align: "right" });
         }
 
         // Items Rows
         let rowY = tableStartY + 26;
         for (const item of data.items || []) {
-          doc.font("Helvetica-Bold").fontSize(9).fillColor(darkColor).text(item.title, 50, rowY);
+          doc.font("Helvetica-Bold").fontSize(9).fillColor(darkColor).text(data.type === "job_card" ? `[  ]  ${item.title}` : item.title, 50, rowY);
           if (item.description) {
             doc.font("Helvetica").fontSize(8).fillColor(subtleColor).text(item.description, 50, rowY + 11, { width: 280 });
           }
 
-          doc.font("Helvetica").fontSize(8).fillColor(darkColor).text(String(item.quantity), 340, rowY, { width: 40, align: "center" });
+          doc.font("Helvetica").fontSize(8).fillColor(darkColor).text(data.type === "job_card" ? `[  ]` : String(item.quantity), 340, rowY, { width: 40, align: "center" });
 
           if (showPricing) {
             doc.text(this.formatCurrency(item.unit_price, data.currency_code), 400, rowY, { width: 60, align: "right" });
             const itemTotal = item.total != null ? item.total : item.quantity * item.unit_price;
             doc.font("Helvetica-Bold").text(this.formatCurrency(itemTotal, data.currency_code), 480, rowY, { width: 65, align: "right" });
+          } else if (data.type === "job_card") {
+            doc.font("Helvetica").fontSize(8).fillColor(subtleColor).text("PENDING", 480, rowY, { width: 65, align: "right" });
           }
 
           const rowHeight = item.description ? 28 : 20;
@@ -233,34 +243,48 @@ export class PDFKitGenerator {
           rowY = totY + 35;
         }
 
+        // Job Card Signatures Block
+        if (data.type === "job_card") {
+          const sigY = Math.min(Math.max(rowY + 25, 610), 650);
+          doc.strokeColor(borderColor).lineWidth(1).moveTo(40, sigY).lineTo(240, sigY).stroke();
+          doc.font("Helvetica-Bold").fontSize(8).fillColor(darkColor).text("CUSTOMER SIGNATURE", 40, sigY + 5);
+          doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text("I authorize inspection & accept diagnostic terms.", 40, sigY + 16);
+
+          doc.strokeColor(borderColor).lineWidth(1).moveTo(355, sigY).lineTo(555, sigY).stroke();
+          doc.font("Helvetica-Bold").fontSize(8).fillColor(darkColor).text("WORKSHOP TECHNICIAN SIGNATURE", 355, sigY + 5);
+          doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text("Device intake verified & inspection logged.", 355, sigY + 16);
+          rowY = sigY + 35;
+        }
+
         // Notes & Payment Instructions Box
         if (data.company.payment_details || data.payment_link || data.notes) {
-          const infoBoxY = Math.max(rowY, 640);
-          doc.rect(40, infoBoxY, 515, 65).fill(lightBg);
+          const infoBoxY = Math.max(rowY + 10, 680);
+          doc.rect(40, infoBoxY, 515, 45).fill(lightBg);
 
-          let curY = infoBoxY + 8;
-          if (data.company.payment_details) {
-            doc.font("Helvetica-Bold").fontSize(8).fillColor(primaryColor).text("PAYMENT INSTRUCTIONS:", 50, curY);
-            doc.font("Helvetica").fontSize(7.5).fillColor(darkColor).text(data.company.payment_details, 50, curY + 11, { width: 500 });
-            curY += 26;
-          }
-          if (data.payment_link) {
-            doc.font("Helvetica-Bold").fontSize(8).fillColor(primaryColor).text("PAY ONLINE LINK:", 50, curY);
-            doc.font("Helvetica").fontSize(7.5).fillColor("#2563eb").text(data.payment_link, 50, curY + 10, { width: 500 });
+          let curY = infoBoxY + 6;
+          if (data.type !== "job_card" && data.company.payment_details) {
+            doc.font("Helvetica-Bold").fontSize(7.5).fillColor(primaryColor).text("PAYMENT INSTRUCTIONS:", 50, curY);
+            doc.font("Helvetica").fontSize(7).fillColor(darkColor).text(data.company.payment_details, 50, curY + 9, { width: 500 });
             curY += 20;
           }
+          if (data.type !== "job_card" && data.payment_link) {
+            doc.font("Helvetica-Bold").fontSize(7.5).fillColor(primaryColor).text("PAY ONLINE LINK:", 50, curY);
+            doc.font("Helvetica").fontSize(7).fillColor("#2563eb").text(data.payment_link, 50, curY + 9, { width: 500 });
+            curY += 16;
+          }
           if (data.notes) {
-            doc.font("Helvetica").fontSize(7.5).fillColor(subtleColor).text(`Notes: ${data.notes}`, 50, curY, { width: 500 });
+            doc.font("Helvetica-Bold").fontSize(7.5).fillColor(darkColor).text(`Notes / Terms: `, 50, curY, { continued: true });
+            doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(data.notes, { width: 490 });
           }
         }
 
         // Terms Footer
-        const footerY = 740;
+        const footerY = 745;
         doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, footerY).lineTo(555, footerY).stroke();
         if (data.company.terms) {
-          doc.font("Helvetica").fontSize(6.5).fillColor(subtleColor).text(data.company.terms, 40, footerY + 8, { width: 515, align: "center" });
+          doc.font("Helvetica").fontSize(6.5).fillColor(subtleColor).text(data.company.terms, 40, footerY + 6, { width: 515, align: "center" });
         }
-        doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(`Generated by ${data.company.name} • Thank you for your business!`, 40, footerY + 30, { width: 515, align: "center" });
+        doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(`Generated by ${data.company.name} • Thank you for choosing us!`, 40, footerY + 20, { width: 515, align: "center" });
 
         doc.end();
       } catch (e) {
@@ -290,6 +314,7 @@ export class PDFKitGenerator {
 
         // Header Title
         const docTitle = data.title || (
+          data.type === "job_card" ? "REPAIR JOB CARD" :
           data.type === "invoice" ? "INVOICE" :
           data.type === "receipt" ? "OFFICIAL RECEIPT" :
           data.type === "packing_slip" ? "PACKING LIST" :
@@ -308,42 +333,72 @@ export class PDFKitGenerator {
         doc.font(fontRegular).fontSize(9).text(`Reference: ${data.display_id}`, 350, 68, { align: "right" });
         doc.text(`Date: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 80, { align: "right" });
 
+        // QR Code if provided
+        if (data.qr_url) {
+          try {
+            const qrBuf = await QRCode.toBuffer(data.qr_url, { width: 50, margin: 0 });
+            doc.image(qrBuf, 505, 95, { width: 50, height: 50 });
+          } catch (e) {}
+        }
+
         // Double Box Bill To
-        doc.rect(40, 110, 515, 60).strokeColor("#000000").lineWidth(0.5).stroke();
-        doc.font(fontHeader).fontSize(9).text("CLIENT INFORMATION:", 48, 116);
+        doc.rect(40, 110, 455, 65).strokeColor("#000000").lineWidth(0.5).stroke();
+        const clientLabel = data.type === "job_card" ? "CUSTOMER & INTAKE INFORMATION:" : "CLIENT INFORMATION:";
+        doc.font(fontHeader).fontSize(9).text(clientLabel, 48, 116);
         doc.font(fontHeader).fontSize(10).text(data.customer.name, 48, 128);
         doc.font(fontRegular).fontSize(8.5).text(`Email: ${data.customer.email || "N/A"}  |  Phone: ${data.customer.phone || "N/A"}`, 48, 142);
         if (data.customer.address) doc.text(`Address: ${data.customer.address}`, 48, 154);
 
+        // Custom fields / Device info for Classic
         let tableStartY = 190;
+        if (data.custom_fields && Object.keys(data.custom_fields).length > 0) {
+          doc.rect(40, tableStartY, 515, 38).fillAndStroke("#f8fafc", "#000000");
+          let cfX = 48;
+          let cfY = tableStartY + 6;
+          doc.font(fontHeader).fontSize(8).fillColor("#000000").text("DEVICE & WORKSHOP DETAILS:", cfX, cfY);
+          cfY += 12;
+          const entries = Object.entries(data.custom_fields);
+          for (let i = 0; i < Math.min(entries.length, 4); i++) {
+            const [k, v] = entries[i];
+            doc.font(fontHeader).fontSize(7.5).text(`${k}: `, cfX, cfY, { continued: true });
+            doc.font(fontRegular).text(v, { continued: false });
+            cfX += 120;
+          }
+          tableStartY += 48;
+        }
+
         if (data.body_text) {
-          doc.rect(40, tableStartY, 515, 50).stroke();
+          doc.rect(40, tableStartY, 515, 45).stroke();
           doc.font(fontRegular).fontSize(8.5).text(data.body_text, 48, tableStartY + 8, { width: 500 });
-          tableStartY += 65;
+          tableStartY += 55;
         }
 
         // Table Grid
-        const showPricing = data.type !== "packing_slip";
+        const showPricing = data.type !== "packing_slip" && data.type !== "job_card";
         doc.rect(40, tableStartY, 515, 20).fillAndStroke("#f1f5f9", "#000000");
         doc.font(fontHeader).fontSize(8.5).fillColor("#000000");
-        doc.text("DESCRIPTION", 50, tableStartY + 6);
-        doc.text("QTY", 340, tableStartY + 6, { width: 40, align: "center" });
+        doc.text(data.type === "job_card" ? "DIAGNOSTIC / REPAIR SERVICE TASK" : "DESCRIPTION", 50, tableStartY + 6);
+        doc.text(data.type === "job_card" ? "CHECK" : "QTY", 340, tableStartY + 6, { width: 40, align: "center" });
         if (showPricing) {
           doc.text("UNIT PRICE", 400, tableStartY + 6, { width: 60, align: "right" });
           doc.text("AMOUNT", 480, tableStartY + 6, { width: 65, align: "right" });
+        } else if (data.type === "job_card") {
+          doc.text("STATUS", 480, tableStartY + 6, { width: 65, align: "right" });
         }
 
         let rowY = tableStartY + 24;
         for (const item of data.items || []) {
-          doc.font(fontHeader).fontSize(8.5).text(item.title, 50, rowY);
+          doc.font(fontHeader).fontSize(8.5).text(data.type === "job_card" ? `[  ]  ${item.title}` : item.title, 50, rowY);
           if (item.description) {
             doc.font(fontRegular).fontSize(7.5).text(item.description, 50, rowY + 10, { width: 280 });
           }
-          doc.font(fontRegular).fontSize(8.5).text(String(item.quantity), 340, rowY, { width: 40, align: "center" });
+          doc.font(fontRegular).fontSize(8.5).text(data.type === "job_card" ? `[  ]` : String(item.quantity), 340, rowY, { width: 40, align: "center" });
           if (showPricing) {
             doc.text(this.formatCurrency(item.unit_price, data.currency_code), 400, rowY, { width: 60, align: "right" });
             const itemTotal = item.total != null ? item.total : item.quantity * item.unit_price;
             doc.text(this.formatCurrency(itemTotal, data.currency_code), 480, rowY, { width: 65, align: "right" });
+          } else if (data.type === "job_card") {
+            doc.text("PENDING", 480, rowY, { width: 65, align: "right" });
           }
           const rowHeight = item.description ? 24 : 18;
           doc.strokeColor("#cccccc").lineWidth(0.5).moveTo(40, rowY + rowHeight).lineTo(555, rowY + rowHeight).stroke();
@@ -356,6 +411,19 @@ export class PDFKitGenerator {
           doc.rect(350, tY, 205, 24).strokeColor("#000000").lineWidth(1).stroke();
           doc.font(fontHeader).fontSize(9.5).text("TOTAL PAYABLE:", 358, tY + 7);
           doc.font(fontHeader).fontSize(9.5).text(this.formatCurrency(data.total, data.currency_code), 460, tY + 7, { width: 90, align: "right" });
+          rowY = tY + 30;
+        }
+
+        // Job Card Signatures Block in Classic
+        if (data.type === "job_card") {
+          const sigY = Math.min(Math.max(rowY + 25, 620), 660);
+          doc.strokeColor("#000000").lineWidth(1).moveTo(40, sigY).lineTo(240, sigY).stroke();
+          doc.font(fontHeader).fontSize(8).fillColor("#000000").text("CUSTOMER SIGNATURE", 40, sigY + 5);
+          doc.font(fontRegular).fontSize(7).text("Terms accepted & diagnostic approved.", 40, sigY + 16);
+
+          doc.strokeColor("#000000").lineWidth(1).moveTo(355, sigY).lineTo(555, sigY).stroke();
+          doc.font(fontHeader).fontSize(8).fillColor("#000000").text("TECHNICIAN SIGNATURE", 355, sigY + 5);
+          doc.font(fontRegular).fontSize(7).text("Intake inspected & registered.", 355, sigY + 16);
         }
 
         doc.end();
@@ -381,7 +449,7 @@ export class PDFKitGenerator {
         doc.font("Courier").fontSize(8).fillColor("#666666");
         doc.text(`${data.company.email || ""} // ${data.company.website || ""}`, 40, 62);
 
-        const docTitle = (data.title || data.type).toUpperCase();
+        const docTitle = data.type === "job_card" ? "JOB CARD" : (data.title || data.type).toUpperCase();
         doc.font("Courier-Bold").fontSize(14).fillColor("#000000").text(`[${docTitle}]`, 350, 40, { align: "right" });
         doc.font("Courier").fontSize(9).text(`REF: ${data.display_id}`, 350, 58, { align: "right" });
         doc.text(`DATE: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 70, { align: "right" });
@@ -397,23 +465,27 @@ export class PDFKitGenerator {
           tableY += 40;
         }
 
-        const showPricing = data.type !== "packing_slip";
-        doc.font("Courier-Bold").fontSize(8).text("ITEM", 40, tableY);
-        doc.text("QTY", 340, tableY, { width: 40, align: "center" });
+        const showPricing = data.type !== "packing_slip" && data.type !== "job_card";
+        doc.font("Courier-Bold").fontSize(8).text(data.type === "job_card" ? "TASK / SERVICE" : "ITEM", 40, tableY);
+        doc.text(data.type === "job_card" ? "CHECK" : "QTY", 340, tableY, { width: 40, align: "center" });
         if (showPricing) {
           doc.text("RATE", 400, tableY, { width: 60, align: "right" });
           doc.text("TOTAL", 480, tableY, { width: 65, align: "right" });
+        } else if (data.type === "job_card") {
+          doc.text("STATUS", 480, tableY, { width: 65, align: "right" });
         }
         doc.strokeColor("#000000").lineWidth(0.5).moveTo(40, tableY + 12).lineTo(555, tableY + 12).stroke();
 
         let rY = tableY + 20;
         for (const item of data.items || []) {
-          doc.font("Courier").fontSize(8).text(item.title, 40, rY);
-          doc.text(String(item.quantity), 340, rY, { width: 40, align: "center" });
+          doc.font("Courier").fontSize(8).text(data.type === "job_card" ? `[ ] ${item.title}` : item.title, 40, rY);
+          doc.text(data.type === "job_card" ? "[ ]" : String(item.quantity), 340, rY, { width: 40, align: "center" });
           if (showPricing) {
             doc.text(this.formatCurrency(item.unit_price, data.currency_code), 400, rY, { width: 60, align: "right" });
             const itemTotal = item.total != null ? item.total : item.quantity * item.unit_price;
             doc.text(this.formatCurrency(itemTotal, data.currency_code), 480, rY, { width: 65, align: "right" });
+          } else if (data.type === "job_card") {
+            doc.text("PENDING", 480, rY, { width: 65, align: "right" });
           }
           rY += 16;
         }
@@ -422,6 +494,16 @@ export class PDFKitGenerator {
           doc.strokeColor("#000000").lineWidth(0.5).moveTo(340, rY + 8).lineTo(555, rY + 8).stroke();
           doc.font("Courier-Bold").fontSize(10).text("TOTAL:", 340, rY + 14);
           doc.text(this.formatCurrency(data.total, data.currency_code), 460, rY + 14, { width: 85, align: "right" });
+          rY += 30;
+        }
+
+        if (data.type === "job_card") {
+          const sigY = Math.min(Math.max(rY + 25, 620), 660);
+          doc.strokeColor("#000000").lineWidth(1).moveTo(40, sigY).lineTo(240, sigY).stroke();
+          doc.font("Courier-Bold").fontSize(8).text("CUSTOMER SIGNATURE", 40, sigY + 5);
+
+          doc.strokeColor("#000000").lineWidth(1).moveTo(355, sigY).lineTo(555, sigY).stroke();
+          doc.font("Courier-Bold").fontSize(8).text("TECHNICIAN SIGNATURE", 355, sigY + 5);
         }
 
         doc.end();

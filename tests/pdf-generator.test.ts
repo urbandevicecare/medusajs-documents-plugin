@@ -65,4 +65,31 @@ test("PDFKitGenerator generates valid PDF for all templates and types", async ()
   const customBuf = await PDFKitGenerator.generate(customData, "modern");
   assert.ok(customBuf.length > 1000, "Custom document PDF must not be empty");
   assert.strictEqual(customBuf.subarray(0, 4).toString(), "%PDF", "Must have valid %PDF header");
+
+  // 5. Job Card Document Type across all styles
+  const jobCardData: DocumentData = {
+    ...sampleData,
+    display_id: "JOB-RT-1002",
+    title: "Repair Job Card",
+    type: "job_card",
+    custom_fields: {
+      "Device Model": "iPhone 14 Pro Max",
+      "Serial / IMEI": "358762091234567",
+      "Condition": "Cracked screen, scuffs on back",
+      "Accessories": "Original box, charging cable",
+      "Technician": "Alex",
+      "Issue": "Display touch unresponsive",
+    },
+  };
+  const jobCardModern = await PDFKitGenerator.generate(jobCardData, "modern");
+  assert.ok(jobCardModern.length > 1000, "Job card modern PDF must not be empty");
+  assert.strictEqual(jobCardModern.subarray(0, 4).toString(), "%PDF");
+
+  const jobCardClassic = await PDFKitGenerator.generate(jobCardData, "classic");
+  assert.ok(jobCardClassic.length > 1000, "Job card classic PDF must not be empty");
+  assert.strictEqual(jobCardClassic.subarray(0, 4).toString(), "%PDF");
+
+  const jobCardMinimal = await PDFKitGenerator.generate(jobCardData, "minimal");
+  assert.ok(jobCardMinimal.length > 1000, "Job card minimal PDF must not be empty");
+  assert.strictEqual(jobCardMinimal.subarray(0, 4).toString(), "%PDF");
 });
