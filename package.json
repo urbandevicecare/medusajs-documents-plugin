@@ -2,10 +2,24 @@
   "name": "medusajs-documents-plugin",
   "version": "1.0.0",
   "description": "Comprehensive document generation and management module for Medusa v2 with Zoho Books integration, PDFKit fallback, QR codes, shortlinks, multi-channel notifications and unified admin hub.",
-  "author": "Medusa",
+  "author": "Urban Device Care <info@urbandevicecare.co.uk>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/urbandevicecare/medusajs-documents-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/urbandevicecare/medusajs-documents-plugin/issues"
+  },
+  "homepage": "https://github.com/urbandevicecare/medusajs-documents-plugin#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    ".medusa/server"
+    ".medusa/server",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "main": "./.medusa/server/src/index.js",
   "exports": {
@@ -34,7 +48,8 @@
   "scripts": {
     "build": "medusa plugin:build",
     "dev": "medusa plugin:dev",
-    "test": "npx tsx --test tests/run-all-tests.ts"
+    "test": "npx tsx --test tests/run-all-tests.ts",
+    "prepack": "medusa plugin:build"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",

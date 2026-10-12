@@ -1,0 +1,133 @@
+name: Release & Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump strategy (auto, patch, minor, major, none)'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+          - none
+
+jobs:
+  release:
+    name: Build, Package & Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+          cache: 'yarn'
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run Test Suite
+        run: yarn test
+
+      - name: Build Plugin
+        run: yarn build
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine & Bump Version
+        id: versioning
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          BUMP_STRATEGY="${{ github.event.inputs.bump || 'auto' }}"
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "Bump strategy: $BUMP_STRATEGY"
+
+          if [ "$BUMP_STRATEGY" = "patch" ] || [ "$BUMP_STRATEGY" = "minor" ] || [ "$BUMP_STRATEGY" = "major" ]; then
+            npm version "$BUMP_STRATEGY" -m "chore: bump version to %s [skip ci]"
+            TARGET_VERSION=$(node -p "require('./package.json').version")
+            git push origin main --follow-tags
+          elif [ "$BUMP_STRATEGY" = "none" ]; then
+            TARGET_VERSION="$CURRENT_VERSION"
+            if ! git rev-parse "v$TARGET_VERSION" >/dev/null 2>&1; then
+              git tag "v$TARGET_VERSION"
+              git push origin "v$TARGET_VERSION"
+            fi
+          else
+            # Auto mode: if tag already exists on git, bump patch; otherwise tag and release current version
+            if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
+              echo "Tag v$CURRENT_VERSION already exists. Bumping patch version..."
+              npm version patch -m "chore: bump version to %s [skip ci]"
+              TARGET_VERSION=$(node -p "require('./package.json').version")
+              git push origin main --follow-tags
+            else
+              echo "Tag v$CURRENT_VERSION does not exist yet. Using current version $CURRENT_VERSION..."
+              TARGET_VERSION="$CURRENT_VERSION"
+              git tag "v$TARGET_VERSION"
+              git push origin "v$TARGET_VERSION"
+            fi
+          fi
+
+          echo "VERSION=$TARGET_VERSION" >> $GITHUB_ENV
+          echo "Release target version: $TARGET_VERSION"
+
+      - name: Extract Release Notes from CHANGELOG
+        run: |
+          node scripts/extract-changelog.js ${{ env.VERSION }} release_notes.md
+          cat release_notes.md
+
+      - name: Package Release Assets (ZIP & TGZ)
+        run: |
+          mkdir -p assets
+          # 1. Package npm tarball
+          npm pack --pack-destination assets/
+          mv assets/medusajs-documents-plugin-*.tgz assets/medusajs-documents-plugin-v${{ env.VERSION }}.tgz
+          # 2. Package compressed zipfile of plugin distribution
+          zip -r assets/medusajs-documents-plugin-v${{ env.VERSION }}.zip .medusa/server package.json README.md CHANGELOG.md LICENSE
+          ls -lh assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ env.VERSION }}
+          tag_name: v${{ env.VERSION }}
+          body_path: release_notes.md
+          files: |
+            assets/medusajs-documents-plugin-v${{ env.VERSION }}.zip
+            assets/medusajs-documents-plugin-v${{ env.VERSION }}.tgz
+
+      - name: Publish to npm
+        run: |
+          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+            npm publish --access public
+            echo "Successfully published medusajs-documents-plugin@${{ env.VERSION }} to npm!"
+          else
+            echo "::warning ::NPM_TOKEN secret is not configured in repository secrets. Skipped npm publish."
+            echo "To publish automatically to npm, add your npm automation token as NPM_TOKEN in repository Settings -> Secrets and variables -> Actions."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

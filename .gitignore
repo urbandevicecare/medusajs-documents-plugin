@@ -11,3 +11,7 @@ lerna-debug.log*
 .DS_Store
 coverage/
 *.tsbuildinfo
+*.tgz
+*.zip
+assets/
+release_notes.md

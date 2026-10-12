@@ -180,5 +180,23 @@ Runs the 6 unit and integration test suites:
 
 ---
 
+## Automated Releases & NPM Publishing
+
+This repository includes a fully automated GitHub Actions pipeline (`.github/workflows/release.yml`):
+- **Automated Versioning**: Automatically detects existing release tags, tags the version, and bumps `patch` on pushes to `main`.
+- **Changelog Extraction**: Extracts the corresponding version section from `CHANGELOG.md` to format the GitHub Release notes / release readme.
+- **Compressed Release Assets**: Builds and packages:
+  - 📦 `medusajs-documents-plugin-vX.Y.Z.zip` (compressed distribution zipfile)
+  - 📦 `medusajs-documents-plugin-vX.Y.Z.tgz` (npm tarball)
+- **NPM Publishing**: Publishes to [npm](https://www.npmjs.com/package/medusajs-documents-plugin) using `NODE_AUTH_TOKEN`.
+
+### Setting Up NPM Publishing
+To enable automated publishing to npm:
+1. Generate an Automation or Publish token on [npmjs.com](https://www.npmjs.com) (`Access Tokens -> Generate New Token -> Automation`).
+2. In your GitHub repository: Go to **Settings** > **Secrets and variables** > **Actions** > **New repository secret**.
+3. Name: `NPM_TOKEN`, Value: `<your_npm_token>`.
+
+---
+
 ## License
-MIT
+MIT © [Urban Device Care](https://urbandevicecare.co.uk)
