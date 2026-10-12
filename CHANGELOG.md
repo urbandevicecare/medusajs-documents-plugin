@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-10-12
+
+### Minor Release: Repair Job Card Intake & Automated Release Pipeline
+
+#### ✨ What's New in v1.1.0
+
+- **First-Class Repair Job Card Generation (`type: "job_card"`)**:
+  - Automatically triggered upon repair intake (`repair.created`).
+  - Device specifications: Brand, Model, Serial Number, and IMEI.
+  - Workshop physical intake condition, accessories left, and customer reported fault.
+  - Workshop technician diagnostic checklist `[ ]`.
+  - Dual physical sign-off lines: **Customer Signature** & **Workshop Technician Signature**.
+  - Dynamic QR code directing straight to customer online repair tracking portal.
+
+- **Repair Event Subscribers & Delegation**:
+  - Event listeners for `repair.created` and `repair.payment_received`.
+  - Automatic Query Graph hydration of repair ticket details for document rendering.
+  - Seamless delegation from `Meduajs-repair-plugin` with fallback protection.
+
+- **Automated CI/CD & Distribution Pipeline**:
+  - GitHub Actions release pipeline with automated version tagging.
+  - Dynamic changelog extraction as release notes.
+  - Release asset bundling with compressed `.zip` distribution archive and `.tgz` npm package.
+  - Automated public publishing to the npm registry with authentication tokens.
+
+---
+
 ## [1.0.0] - 2026-10-12
 
 ### Initial Release: Medusa v2 Documents & Accounting Plugin

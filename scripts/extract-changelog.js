@@ -47,6 +47,8 @@ if (changelogContent) {
     } else {
       releaseNotes = remaining.trim();
     }
+    // Remove trailing horizontal rule if present
+    releaseNotes = releaseNotes.replace(/[\r\n\s]*---[\r\n\s]*$/, "").trim();
   }
 }
 
