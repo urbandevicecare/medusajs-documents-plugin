@@ -109,7 +109,7 @@ export default async function repairDocumentsSubscriber({
       });
     }
 
-    const isPaid = ticket.payment_status === "captured" || ticket.payment_status === "paid";
+    const isPaid = ticket.payment_status === "captured" || ticket.payment_status === "paid" || eventName === "repair.payment_received";
     const isAwaitingApproval = ticket.status === "awaiting_approval";
 
     const docType = isPaid ? "receipt" : (isAwaitingApproval ? "estimate" : "invoice");
