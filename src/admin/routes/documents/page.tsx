@@ -22,7 +22,100 @@ import {
   Envelope,
   CogSixTooth,
   Sparkles,
+  Trash,
 } from "@medusajs/icons";
+
+interface CustomDocPreset {
+  id: string;
+  name: string;
+  icon: string;
+  badge: string;
+  title: string;
+  subject: string;
+  body_text: string;
+  items: Array<{ title: string; description: string; quantity: number; unit_price: number }>;
+}
+
+const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
+  {
+    id: "warranty",
+    name: "Warranty Certificate",
+    icon: "🛡️",
+    badge: "90-Day Coverage",
+    title: "Warranty Certificate",
+    subject: "Your Official Warranty Certificate - Urban Device Care",
+    body_text: `This certificate verifies that your device has undergone professional repairs with genuine OEM-specification components and has passed our multi-point quality assurance inspection.\n\nAll hardware replacements and associated workshop labor are covered under our comprehensive 90-day warranty against defects in parts and workmanship. Please retain this document for warranty verification.`,
+    items: [
+      { title: "OEM Component & Hardware Warranty", description: "90-Day Coverage from Date of Collection", quantity: 1, unit_price: 0 },
+      { title: "Workshop Diagnostic & Quality Clearance", description: "Multi-Point Hardware & Bench Testing", quantity: 1, unit_price: 0 },
+    ],
+  },
+  {
+    id: "diagnostic",
+    name: "Diagnostic & Inspection Report",
+    icon: "🔍",
+    badge: "Hardware Findings",
+    title: "Diagnostic & Hardware Inspection Report",
+    subject: "Device Diagnostic & Inspection Findings",
+    body_text: `Our certified repair specialists have completed a hardware and firmware inspection of your equipment. Below are the confirmed technical findings, component test measurements, and technician notes regarding the state of your device.`,
+    items: [
+      { title: "Logic Board & Power Rail Inspection", description: "Voltage drop and circuit continuity tested", quantity: 1, unit_price: 0 },
+      { title: "Display & Touch Digitizer Diagnostic", description: "Digitizer touch grid, TrueTone, and Ambient Sensor test", quantity: 1, unit_price: 0 },
+      { title: "Battery Health & Thermal Profiling", description: "Cycle count, capacity retention, and charge testing", quantity: 1, unit_price: 0 },
+    ],
+  },
+  {
+    id: "service_completion",
+    name: "Service Completion Certificate",
+    icon: "📜",
+    badge: "QC Cleared",
+    title: "Certificate of Service Completion",
+    subject: "Service Completion & Quality Assurance Sign-off",
+    body_text: `This document certifies that the requested overhaul, maintenance, and repair services have been executed in full accordance with industry service standards. The device has cleared bench testing and is ready for customer collection.`,
+    items: [
+      { title: "Hardware Servicing & Component Replacement", description: "Executed per work order specifications", quantity: 1, unit_price: 0 },
+      { title: "Final Bench Testing & Quality Control", description: "Passed 100% functional test criteria", quantity: 1, unit_price: 0 },
+    ],
+  },
+  {
+    id: "handover",
+    name: "Equipment Handover & Release",
+    icon: "🤝",
+    badge: "Custody Form",
+    title: "Equipment Handover & Custody Release Agreement",
+    subject: "Equipment Handover & Custody Release Form",
+    body_text: `This handover document certifies the return and physical custody release of customer equipment and associated accessories from Urban Device Care. The customer acknowledges receipt of equipment in verified working order.`,
+    items: [
+      { title: "Device Handover & Physical Release", description: "Customer custody confirmed", quantity: 1, unit_price: 0 },
+      { title: "Accessories Handover", description: "Chargers, cases, and cables returned in verified condition", quantity: 1, unit_price: 0 },
+    ],
+  },
+  {
+    id: "proforma",
+    name: "Commercial Quotation / Proforma",
+    icon: "💼",
+    badge: "Cost Estimate",
+    title: "Commercial Quotation (Proforma)",
+    subject: "Commercial Quotation & Scope of Work",
+    body_text: `Thank you for choosing Urban Device Care. Below is an itemized breakdown of estimated hardware parts, workshop labor, and turnaround schedule for your project. This quote is valid for 14 calendar days.`,
+    items: [
+      { title: "OEM Replacement Hardware Assembly", description: "Brand new replacement module", quantity: 1, unit_price: 150 },
+      { title: "Workshop Labor & Clean-Room Installation", description: "Certified technician installation & calibration", quantity: 1, unit_price: 45 },
+    ],
+  },
+  {
+    id: "blank",
+    name: "Blank Custom Document",
+    icon: "📝",
+    badge: "Custom",
+    title: "Official Document",
+    subject: "Official Document from Urban Device Care",
+    body_text: "",
+    items: [
+      { title: "", description: "", quantity: 1, unit_price: 0 },
+    ],
+  },
+];
 
 interface DocumentRecord {
   id: string;
@@ -111,6 +204,10 @@ export const DocumentsPage = () => {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
+  const [isGeneratingManual, setIsGeneratingManual] = useState(false);
+  const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
 
   // Manual Invoice Form
   const [manualForm, setManualForm] = useState({
@@ -129,15 +226,33 @@ export const DocumentsPage = () => {
 
   // Custom Document Form
   const [customDocForm, setCustomDocForm] = useState({
+    preset_id: "warranty",
     title: "Warranty Certificate",
     customer_name: "",
     customer_email: "",
     customer_phone: "",
-    body_text: "This document certifies that the repair/device services rendered include standard warranty coverage.",
-    items: [{ title: "Service Coverage", description: "Standard 90-Day Hardware Warranty", quantity: 1, unit_price: 0 }],
+    body_text: "This certificate verifies that your device has undergone professional repairs with genuine OEM-specification components and has passed our multi-point quality assurance inspection.\n\nAll hardware replacements and associated workshop labor are covered under our comprehensive 90-day warranty against defects in parts and workmanship. Please retain this document for warranty verification.",
+    items: [
+      { title: "OEM Component & Hardware Warranty", description: "90-Day Coverage from Date of Collection", quantity: 1, unit_price: 0 },
+      { title: "Workshop Diagnostic & Quality Clearance", description: "Multi-Point Hardware & Bench Testing", quantity: 1, unit_price: 0 },
+    ],
+    currency_code: "usd",
     send_email_now: true,
-    email_subject: "Your Official Certificate / Document",
+    email_subject: "Your Official Warranty Certificate - Urban Device Care",
   });
+
+  const selectCustomDocPreset = (presetId: string) => {
+    const preset = CUSTOM_DOC_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setCustomDocForm((prev) => ({
+      ...prev,
+      preset_id: preset.id,
+      title: preset.title,
+      email_subject: preset.subject,
+      body_text: preset.body_text,
+      items: preset.items.map((it) => ({ ...it })),
+    }));
+  };
 
   // Send Notification Form
   const [sendForm, setSendForm] = useState({
@@ -188,6 +303,7 @@ export const DocumentsPage = () => {
 
   const saveSettings = async () => {
     setIsSaving(true);
+    setSaveSuccessMsg(null);
     try {
       const res = await fetch("/admin/documents/settings", {
         method: "POST",
@@ -195,14 +311,17 @@ export const DocumentsPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setSaveSuccessMsg("Preferences saved successfully!");
+        setTimeout(() => setSaveSuccessMsg(null), 4000);
         alert("Settings saved successfully!");
       } else {
-        alert("Failed to save settings.");
+        alert(`Failed to save settings: ${data.message || res.statusText || "Unknown error"}`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Error saving settings.");
+      alert(`Error saving settings: ${e.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -214,6 +333,17 @@ export const DocumentsPage = () => {
 
   // Submit Manual Document
   const handleCreateManual = async () => {
+    if (!manualForm.customer_name?.trim()) {
+      alert("Please provide a Customer Name.");
+      return;
+    }
+    const validItems = manualForm.items.filter((it) => it.title.trim() !== "");
+    if (validItems.length === 0) {
+      alert("Please add at least one line item with a title.");
+      return;
+    }
+
+    setIsGeneratingManual(true);
     try {
       const res = await fetch("/admin/documents/manual", {
         method: "POST",
@@ -228,27 +358,53 @@ export const DocumentsPage = () => {
             phone: manualForm.customer_phone,
             address: manualForm.customer_address,
           },
-          items: manualForm.items,
+          items: validItems,
           currency_code: manualForm.currency_code,
           notes: manualForm.notes,
           force_source: manualForm.force_source === "auto" ? undefined : manualForm.force_source,
           auto_send: manualForm.auto_send,
         }),
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         alert("Document created successfully!");
         setManualModalOpen(false);
+        setManualForm({
+          title: "Tax Invoice",
+          type: "invoice",
+          customer_name: "",
+          customer_email: "",
+          customer_phone: "",
+          customer_address: "",
+          items: [{ title: "", description: "", quantity: 1, unit_price: 0 }],
+          currency_code: "usd",
+          notes: "",
+          force_source: "auto",
+          auto_send: false,
+        });
         loadDocuments();
       } else {
-        alert("Failed to create document.");
+        alert(`Failed to create document: ${data.message || res.statusText}`);
       }
-    } catch (e) {
-      alert("Error creating document.");
+    } catch (e: any) {
+      alert(`Error creating document: ${e.message}`);
+    } finally {
+      setIsGeneratingManual(false);
     }
   };
 
   // Submit Custom Document
   const handleCreateCustomDoc = async () => {
+    if (!customDocForm.title?.trim()) {
+      alert("Please provide a Document Title.");
+      return;
+    }
+    if (!customDocForm.customer_name?.trim()) {
+      alert("Please provide a Customer / Recipient Name.");
+      return;
+    }
+
+    setIsGeneratingCustom(true);
     try {
       const res = await fetch("/admin/documents/custom", {
         method: "POST",
@@ -262,21 +418,71 @@ export const DocumentsPage = () => {
             phone: customDocForm.customer_phone,
           },
           body_text: customDocForm.body_text,
-          items: customDocForm.items,
+          items: customDocForm.items.filter((it) => it.title.trim() !== ""),
+          currency_code: customDocForm.currency_code,
           send_email_now: customDocForm.send_email_now,
           email_subject: customDocForm.email_subject,
           custom_email_message: customDocForm.body_text,
         }),
       });
-      if (res.ok) {
-        alert("Custom document generated & emailed successfully!");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        alert(
+          customDocForm.send_email_now
+            ? "Custom document generated & emailed successfully!"
+            : "Custom document generated and saved to Documents Hub!"
+        );
         setCustomDocModalOpen(false);
         loadDocuments();
       } else {
-        alert("Failed to generate custom document.");
+        alert(`Failed to generate custom document: ${data.message || res.statusText}`);
       }
-    } catch (e) {
-      alert("Error generating custom document.");
+    } catch (e: any) {
+      alert(`Error generating custom document: ${e.message}`);
+    } finally {
+      setIsGeneratingCustom(false);
+    }
+  };
+
+  // Template Preview Action (Direct blob view in new window)
+  const handlePreviewTemplate = async (style: string, type: string) => {
+    const key = `${style}-${type}`;
+    setPreviewLoading(key);
+    try {
+      const res = await fetch(`/admin/documents/templates/preview?style=${style}&type=${type}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        alert(`Preview failed: ${errText || res.statusText}`);
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+    } catch (e: any) {
+      alert(`Error previewing template: ${e.message}`);
+    } finally {
+      setPreviewLoading(null);
+    }
+  };
+
+  // View Document PDF
+  const handleViewDocument = async (id: string, displayId: string) => {
+    try {
+      const res = await fetch(`/admin/documents/${id}/document`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        alert(`Failed to open PDF for ${displayId}: ${errText || res.statusText}`);
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+    } catch (e: any) {
+      alert(`Error opening document: ${e.message}`);
     }
   };
 
@@ -501,14 +707,13 @@ export const DocumentsPage = () => {
                   return (
                     <Table.Row key={doc.id} className="hover:bg-ui-bg-subtle-hover transition-colors">
                       <Table.Cell>
-                        <a
-                          href={`/api/admin/documents/${doc.id}/document`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium text-ui-fg-interactive hover:underline"
+                        <button
+                          type="button"
+                          onClick={() => handleViewDocument(doc.id, doc.display_id)}
+                          className="font-medium text-ui-fg-interactive hover:underline text-left cursor-pointer bg-transparent border-0 p-0"
                         >
                           {doc.display_id}
-                        </a>
+                        </button>
                       </Table.Cell>
                       <Table.Cell>
                         <span className="text-xs font-medium text-ui-fg-base">{doc.title}</span>
@@ -544,15 +749,14 @@ export const DocumentsPage = () => {
                       </Table.Cell>
                       <Table.Cell className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <a
-                            href={`/api/admin/documents/${doc.id}/document`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base"
+                          <button
+                            type="button"
+                            onClick={() => handleViewDocument(doc.id, doc.display_id)}
+                            className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base cursor-pointer"
                             title="View / Download PDF"
                           >
                             <ArrowDownTray className="w-4 h-4" />
-                          </a>
+                          </button>
                           <button
                             onClick={() => {
                               setSelectedDoc(doc);
@@ -665,14 +869,14 @@ export const DocumentsPage = () => {
                 </Select>
               </div>
               <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
-                <a
-                  href={`/api/admin/documents/templates/preview?style=${settings.invoice_template || "modern"}&type=invoice`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-semibold text-ui-fg-interactive hover:underline inline-flex items-center gap-1"
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.invoice_template || "modern", "invoice")}
+                  isLoading={previewLoading === `${settings.invoice_template || "modern"}-invoice`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5" /> Preview Invoice Template
-                </a>
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Invoice Template
+                </Button>
               </div>
             </div>
 
@@ -696,14 +900,14 @@ export const DocumentsPage = () => {
                 </Select>
               </div>
               <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
-                <a
-                  href={`/api/admin/documents/templates/preview?style=${settings.packing_slip_template || "modern"}&type=packing_slip`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-semibold text-ui-fg-interactive hover:underline inline-flex items-center gap-1"
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.packing_slip_template || "modern", "packing_slip")}
+                  isLoading={previewLoading === `${settings.packing_slip_template || "modern"}-packing_slip`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5" /> Preview Packing Slip Template
-                </a>
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Packing Slip Template
+                </Button>
               </div>
             </div>
 
@@ -727,14 +931,14 @@ export const DocumentsPage = () => {
                 </Select>
               </div>
               <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
-                <a
-                  href={`/api/admin/documents/templates/preview?style=${settings.receipt_template || "modern"}&type=receipt`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-semibold text-ui-fg-interactive hover:underline inline-flex items-center gap-1"
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.receipt_template || "modern", "receipt")}
+                  isLoading={previewLoading === `${settings.receipt_template || "modern"}-receipt`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5" /> Preview Receipt Template
-                </a>
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Receipt Template
+                </Button>
               </div>
             </div>
 
@@ -758,14 +962,14 @@ export const DocumentsPage = () => {
                 </Select>
               </div>
               <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
-                <a
-                  href={`/api/admin/documents/templates/preview?style=${settings.custom_doc_template || "modern"}&type=custom`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-semibold text-ui-fg-interactive hover:underline inline-flex items-center gap-1"
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5" /> Preview Custom Doc Template
-                </a>
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Custom Doc Template
+                </Button>
               </div>
             </div>
 
@@ -789,19 +993,22 @@ export const DocumentsPage = () => {
                 </Select>
               </div>
               <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
-                <a
-                  href={`/api/admin/documents/templates/preview?style=${settings.job_card_template || "modern"}&type=job_card`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-semibold text-ui-fg-interactive hover:underline inline-flex items-center gap-1"
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.job_card_template || "modern", "job_card")}
+                  isLoading={previewLoading === `${settings.job_card_template || "modern"}-job_card`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5" /> Preview Job Card Template
-                </a>
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Job Card Template
+                </Button>
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end mt-4">
+          <div className="flex items-center justify-end gap-3 mt-4">
+            {saveSuccessMsg && (
+              <span className="text-xs text-ui-fg-interactive font-medium">✓ {saveSuccessMsg}</span>
+            )}
             <Button variant="primary" onClick={saveSettings} isLoading={isSaving}>
               Save Template Preferences
             </Button>
@@ -950,7 +1157,10 @@ export const DocumentsPage = () => {
             </div>
           </div>
 
-          <div className="flex justify-end mt-4">
+          <div className="flex items-center justify-end gap-3 mt-4">
+            {saveSuccessMsg && (
+              <span className="text-xs text-ui-fg-interactive font-medium">✓ {saveSuccessMsg}</span>
+            )}
             <Button variant="primary" onClick={saveSettings} isLoading={isSaving}>
               Save Automations
             </Button>
@@ -1260,7 +1470,10 @@ export const DocumentsPage = () => {
             )}
           </div>
 
-          <div className="flex justify-end mt-4">
+          <div className="flex items-center justify-end gap-3 mt-4">
+            {saveSuccessMsg && (
+              <span className="text-xs text-ui-fg-interactive font-medium">✓ {saveSuccessMsg}</span>
+            )}
             <Button variant="primary" onClick={saveSettings} isLoading={isSaving}>
               Save All Settings
             </Button>
@@ -1344,58 +1557,175 @@ export const DocumentsPage = () => {
               </div>
 
               {/* Line Items */}
-              <div>
-                <Label className="text-xs font-semibold">Line Items</Label>
-                {manualForm.items.map((item, idx) => (
-                  <div key={idx} className="flex gap-2 items-center mt-2">
-                    <Input
-                      placeholder="Item Title"
-                      value={item.title}
-                      onChange={(e) => {
-                        const updated = [...manualForm.items];
-                        updated[idx].title = e.target.value;
-                        setManualForm({ ...manualForm, items: updated });
-                      }}
-                      size="small"
-                      className="flex-1"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Qty"
-                      value={item.quantity}
-                      onChange={(e) => {
-                        const updated = [...manualForm.items];
-                        updated[idx].quantity = Number(e.target.value);
-                        setManualForm({ ...manualForm, items: updated });
-                      }}
-                      size="small"
-                      className="w-20"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Rate"
-                      value={item.unit_price}
-                      onChange={(e) => {
-                        const updated = [...manualForm.items];
-                        updated[idx].unit_price = Number(e.target.value);
-                        setManualForm({ ...manualForm, items: updated });
-                      }}
-                      size="small"
-                      className="w-24"
-                    />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Itemized Line Items</Label>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-ui-fg-subtle">Currency:</Label>
+                    <Select
+                      value={manualForm.currency_code}
+                      onValueChange={(v) => setManualForm({ ...manualForm, currency_code: v })}
+                    >
+                      <Select.Trigger size="small" className="w-24">
+                        <Select.Value />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value="usd">USD ($)</Select.Item>
+                        <Select.Item value="gbp">GBP (£)</Select.Item>
+                        <Select.Item value="eur">EUR (€)</Select.Item>
+                        <Select.Item value="kes">KES (KSh)</Select.Item>
+                        <Select.Item value="cad">CAD ($)</Select.Item>
+                        <Select.Item value="aud">AUD ($)</Select.Item>
+                      </Select.Content>
+                    </Select>
                   </div>
-                ))}
-                <Button
-                  variant="transparent"
-                  size="small"
-                  className="mt-2 text-xs"
-                  onClick={() => setManualForm({
-                    ...manualForm,
-                    items: [...manualForm.items, { title: "", description: "", quantity: 1, unit_price: 0 }],
-                  })}
-                >
-                  + Add Line Item
-                </Button>
+                </div>
+
+                {/* Table Header / Column Labels */}
+                <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-ui-bg-subtle rounded border border-ui-border-base text-[11px] font-semibold text-ui-fg-muted uppercase tracking-wider">
+                  <div className="col-span-6">Description / Item Details</div>
+                  <div className="col-span-2 text-center">Qty</div>
+                  <div className="col-span-2 text-right">Unit Price</div>
+                  <div className="col-span-2 text-right">Total</div>
+                </div>
+
+                {/* Line Item Rows */}
+                {manualForm.items.map((item, idx) => {
+                  const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col gap-2 relative group hover:border-ui-border-interactive transition-colors"
+                    >
+                      <div className="grid grid-cols-12 gap-2 items-start">
+                        {/* Title & Description */}
+                        <div className="col-span-6 flex flex-col gap-1.5">
+                          <div>
+                            <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Item Name / Service Title *</Label>
+                            <Input
+                              placeholder="e.g. Screen Replacement / Diagnostic"
+                              value={item.title}
+                              onChange={(e) => {
+                                const updated = [...manualForm.items];
+                                updated[idx].title = e.target.value;
+                                setManualForm({ ...manualForm, items: updated });
+                              }}
+                              size="small"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Specifications / Details (Optional)</Label>
+                            <Input
+                              placeholder="e.g. OEM grade component, includes installation"
+                              value={item.description || ""}
+                              onChange={(e) => {
+                                const updated = [...manualForm.items];
+                                updated[idx].description = e.target.value;
+                                setManualForm({ ...manualForm, items: updated });
+                              }}
+                              size="small"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="col-span-2 flex flex-col">
+                          <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Quantity</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const updated = [...manualForm.items];
+                              updated[idx].quantity = Math.max(1, Number(e.target.value) || 1);
+                              setManualForm({ ...manualForm, items: updated });
+                            }}
+                            size="small"
+                            className="text-center font-medium"
+                          />
+                        </div>
+
+                        {/* Unit Price */}
+                        <div className="col-span-2 flex flex-col">
+                          <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Unit Price</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unit_price}
+                            onChange={(e) => {
+                              const updated = [...manualForm.items];
+                              updated[idx].unit_price = Number(e.target.value);
+                              setManualForm({ ...manualForm, items: updated });
+                            }}
+                            size="small"
+                            className="text-right font-medium"
+                          />
+                        </div>
+
+                        {/* Line Total & Remove */}
+                        <div className="col-span-2 flex flex-col items-end justify-between self-stretch">
+                          <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Row Total</Label>
+                          <span className="text-xs font-semibold text-ui-fg-base py-1">
+                            {new Intl.NumberFormat("en-US", {
+                              style: "currency",
+                              currency: (manualForm.currency_code || "usd").toUpperCase(),
+                            }).format(lineTotal)}
+                          </span>
+                          {manualForm.items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = manualForm.items.filter((_, i) => i !== idx);
+                                setManualForm({ ...manualForm, items: updated });
+                              }}
+                              className="text-ui-fg-muted hover:text-red-500 p-1 rounded hover:bg-ui-bg-subtle transition-colors cursor-pointer"
+                              title="Delete Item"
+                            >
+                              <Trash className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center justify-between mt-1">
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    className="text-xs"
+                    onClick={() =>
+                      setManualForm({
+                        ...manualForm,
+                        items: [
+                          ...manualForm.items,
+                          { title: "", description: "", quantity: 1, unit_price: 0 },
+                        ],
+                      })
+                    }
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add Line Item
+                  </Button>
+
+                  {/* Summary Subtotal Box */}
+                  <div className="flex items-center gap-3 bg-ui-bg-subtle px-4 py-2 rounded border border-ui-border-base">
+                    <span className="text-xs text-ui-fg-subtle font-medium">Document Total:</span>
+                    <span className="text-sm font-bold text-ui-fg-base">
+                      {new Intl.NumberFormat("en-US", {
+                        style: "currency",
+                        currency: (manualForm.currency_code || "usd").toUpperCase(),
+                      }).format(
+                        manualForm.items.reduce(
+                          (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),
+                          0
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -1421,7 +1751,9 @@ export const DocumentsPage = () => {
 
               <div className="flex justify-end gap-2 mt-4">
                 <Button variant="secondary" onClick={() => setManualModalOpen(false)}>Cancel</Button>
-                <Button variant="primary" onClick={handleCreateManual}>Generate Document</Button>
+                <Button variant="primary" onClick={handleCreateManual} isLoading={isGeneratingManual}>
+                  Generate Document
+                </Button>
               </div>
             </FocusModal.Body>
           </FocusModal.Content>
@@ -1439,8 +1771,43 @@ export const DocumentsPage = () => {
             </FocusModal.Header>
             <FocusModal.Body className="p-6 flex flex-col gap-6 max-w-2xl mx-auto overflow-y-auto max-h-[80vh]">
               <Text className="text-xs text-ui-fg-subtle">
-                Create a customized document (e.g. Warranty Certificate, Service Contract, Proforma Invoice) and directly dispatch via email.
+                Create a customized document (e.g. Warranty Certificate, Inspection Report, Service Clearance) and directly dispatch via email.
               </Text>
+
+              {/* Optional Preset Templates Selector */}
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-semibold">Select a Document Preset (Optional)</Label>
+                <Text className="text-[11px] text-ui-fg-subtle">
+                  Pick a pre-configured template below to automatically populate title, certificate text, and itemized points.
+                </Text>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-1">
+                  {CUSTOM_DOC_PRESETS.map((preset) => {
+                    const isSelected = customDocForm.preset_id === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => selectCustomDocPreset(preset.id)}
+                        className={`p-3 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                          isSelected
+                            ? "border-ui-border-interactive bg-ui-bg-interactive-subtle shadow-sm ring-1 ring-ui-border-interactive"
+                            : "border-ui-border-base bg-ui-bg-base hover:border-ui-border-strong hover:bg-ui-bg-subtle"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xl">{preset.icon}</span>
+                          <Badge size="small" color={isSelected ? "blue" : "grey"}>
+                            {preset.badge}
+                          </Badge>
+                        </div>
+                        <div className="text-xs font-semibold text-ui-fg-base leading-snug">
+                          {preset.name}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -1448,12 +1815,12 @@ export const DocumentsPage = () => {
                   <Input
                     value={customDocForm.title}
                     onChange={(e) => setCustomDocForm({ ...customDocForm, title: e.target.value })}
-                    placeholder="e.g. Warranty Certificate / Work Order"
+                    placeholder="e.g. Warranty Certificate / Diagnostic Report"
                     size="small"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Customer Name</Label>
+                  <Label className="text-xs">Customer Name *</Label>
                   <Input
                     value={customDocForm.customer_name}
                     onChange={(e) => setCustomDocForm({ ...customDocForm, customer_name: e.target.value })}
@@ -1470,6 +1837,15 @@ export const DocumentsPage = () => {
                     size="small"
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Customer Phone (Optional)</Label>
+                  <Input
+                    value={customDocForm.customer_phone}
+                    onChange={(e) => setCustomDocForm({ ...customDocForm, customer_phone: e.target.value })}
+                    placeholder="+44 7911 123456"
+                    size="small"
+                  />
+                </div>
               </div>
 
               <div>
@@ -1480,6 +1856,178 @@ export const DocumentsPage = () => {
                   placeholder="Enter the main body text or terms to appear on this document..."
                   rows={4}
                 />
+              </div>
+
+              {/* Line Items for Custom Doc */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Included Items / Service Specifications (Optional)</Label>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-ui-fg-subtle">Currency:</Label>
+                    <Select
+                      value={customDocForm.currency_code}
+                      onValueChange={(v) => setCustomDocForm({ ...customDocForm, currency_code: v })}
+                    >
+                      <Select.Trigger size="small" className="w-24">
+                        <Select.Value />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value="usd">USD ($)</Select.Item>
+                        <Select.Item value="gbp">GBP (£)</Select.Item>
+                        <Select.Item value="eur">EUR (€)</Select.Item>
+                        <Select.Item value="kes">KES (KSh)</Select.Item>
+                        <Select.Item value="cad">CAD ($)</Select.Item>
+                        <Select.Item value="aud">AUD ($)</Select.Item>
+                      </Select.Content>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Table Header / Column Labels */}
+                <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-ui-bg-subtle rounded border border-ui-border-base text-[11px] font-semibold text-ui-fg-muted uppercase tracking-wider">
+                  <div className="col-span-6">Description / Item Details</div>
+                  <div className="col-span-2 text-center">Qty</div>
+                  <div className="col-span-2 text-right">Unit Price</div>
+                  <div className="col-span-2 text-right">Total</div>
+                </div>
+
+                {/* Line Item Rows */}
+                {customDocForm.items.map((item, idx) => {
+                  const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col gap-2 relative group hover:border-ui-border-interactive transition-colors"
+                    >
+                      <div className="grid grid-cols-12 gap-2 items-start">
+                        {/* Title & Description */}
+                        <div className="col-span-6 flex flex-col gap-1.5">
+                          <div>
+                            <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Item Name / Service Title</Label>
+                            <Input
+                              placeholder="e.g. Diagnostic / Inspection Finding"
+                              value={item.title}
+                              onChange={(e) => {
+                                const updated = [...customDocForm.items];
+                                updated[idx].title = e.target.value;
+                                setCustomDocForm({ ...customDocForm, items: updated });
+                              }}
+                              size="small"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Details / Specifications (Optional)</Label>
+                            <Input
+                              placeholder="e.g. Coverage terms, diagnostic measurement"
+                              value={item.description || ""}
+                              onChange={(e) => {
+                                const updated = [...customDocForm.items];
+                                updated[idx].description = e.target.value;
+                                setCustomDocForm({ ...customDocForm, items: updated });
+                              }}
+                              size="small"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="col-span-2 flex flex-col">
+                          <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Quantity</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const updated = [...customDocForm.items];
+                              updated[idx].quantity = Math.max(1, Number(e.target.value) || 1);
+                              setCustomDocForm({ ...customDocForm, items: updated });
+                            }}
+                            size="small"
+                            className="text-center font-medium"
+                          />
+                        </div>
+
+                        {/* Unit Price */}
+                        <div className="col-span-2 flex flex-col">
+                          <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Unit Price</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unit_price}
+                            onChange={(e) => {
+                              const updated = [...customDocForm.items];
+                              updated[idx].unit_price = Number(e.target.value);
+                              setCustomDocForm({ ...customDocForm, items: updated });
+                            }}
+                            size="small"
+                            className="text-right font-medium"
+                          />
+                        </div>
+
+                        {/* Line Total & Remove */}
+                        <div className="col-span-2 flex flex-col items-end justify-between self-stretch">
+                          <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Row Total</Label>
+                          <span className="text-xs font-semibold text-ui-fg-base py-1">
+                            {new Intl.NumberFormat("en-US", {
+                              style: "currency",
+                              currency: (customDocForm.currency_code || "usd").toUpperCase(),
+                            }).format(lineTotal)}
+                          </span>
+                          {customDocForm.items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = customDocForm.items.filter((_, i) => i !== idx);
+                                setCustomDocForm({ ...customDocForm, items: updated });
+                              }}
+                              className="text-ui-fg-muted hover:text-red-500 p-1 rounded hover:bg-ui-bg-subtle transition-colors cursor-pointer"
+                              title="Delete Item"
+                            >
+                              <Trash className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center justify-between mt-1">
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    className="text-xs"
+                    onClick={() =>
+                      setCustomDocForm({
+                        ...customDocForm,
+                        items: [
+                          ...customDocForm.items,
+                          { title: "", description: "", quantity: 1, unit_price: 0 },
+                        ],
+                      })
+                    }
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add Line Item
+                  </Button>
+
+                  {/* Summary Subtotal Box */}
+                  <div className="flex items-center gap-3 bg-ui-bg-subtle px-4 py-2 rounded border border-ui-border-base">
+                    <span className="text-xs text-ui-fg-subtle font-medium">Document Total:</span>
+                    <span className="text-sm font-bold text-ui-fg-base">
+                      {new Intl.NumberFormat("en-US", {
+                        style: "currency",
+                        currency: (customDocForm.currency_code || "usd").toUpperCase(),
+                      }).format(
+                        customDocForm.items.reduce(
+                          (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),
+                          0
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -1505,7 +2053,9 @@ export const DocumentsPage = () => {
 
               <div className="flex justify-end gap-2 mt-4">
                 <Button variant="secondary" onClick={() => setCustomDocModalOpen(false)}>Cancel</Button>
-                <Button variant="primary" onClick={handleCreateCustomDoc}>Generate & Deliver</Button>
+                <Button variant="primary" onClick={handleCreateCustomDoc} isLoading={isGeneratingCustom}>
+                  Generate & Deliver
+                </Button>
               </div>
             </FocusModal.Body>
           </FocusModal.Content>
