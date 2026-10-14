@@ -55,6 +55,12 @@ export const DocumentSettings = model.define("document_settings", {
   estimate_template: model.text().default("modern"),
   job_card_template: model.text().default("modern"),
   custom_doc_template: model.text().default("modern"),
+
+  // Customizable Notification Body & Subject Templates
+  email_subject_template: model.text().nullable(),
+  email_body_template: model.text().nullable(),
+  sms_body_template: model.text().nullable(),
+  whatsapp_body_template: model.text().nullable(),
 });
 
 export default DocumentSettings;

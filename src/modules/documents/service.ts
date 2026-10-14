@@ -60,7 +60,12 @@ export class DocumentModuleService extends MedusaService({
       packing_slip_template: "modern",
       receipt_template: "modern",
       estimate_template: "modern",
+      job_card_template: "modern",
       custom_doc_template: "modern",
+      email_subject_template: null,
+      email_body_template: null,
+      sms_body_template: null,
+      whatsapp_body_template: null,
     });
   }
 
@@ -463,6 +468,7 @@ export class DocumentModuleService extends MedusaService({
     if (record.type === "packing_slip") templateName = settings.packing_slip_template || "modern";
     else if (record.type === "receipt") templateName = settings.receipt_template || "modern";
     else if (record.type === "estimate") templateName = settings.estimate_template || "modern";
+    else if (record.type === "job_card") templateName = settings.job_card_template || "modern";
     else if (record.type === "custom") templateName = settings.custom_doc_template || "modern";
 
     const meta = (record.metadata || {}) as any;

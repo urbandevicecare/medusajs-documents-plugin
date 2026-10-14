@@ -93,3 +93,34 @@ test("PDFKitGenerator generates valid PDF for all templates and types", async ()
   assert.ok(jobCardMinimal.length > 1000, "Job card minimal PDF must not be empty");
   assert.strictEqual(jobCardMinimal.subarray(0, 4).toString(), "%PDF");
 });
+
+test("PDFKitGenerator produces valid PDFs for all 18 combinations of styles and types", async () => {
+  const styles = ["modern", "classic", "minimal"] as const;
+  const types = ["invoice", "receipt", "packing_slip", "estimate", "custom", "job_card"] as const;
+
+  for (const style of styles) {
+    for (const type of types) {
+      const isJob = type === "job_card";
+      const data: DocumentData = {
+        display_id: isJob ? "JOB-500" : "DOC-500",
+        type: type,
+        title: `Test ${type}`,
+        customer: { name: "Test Client", email: "client@test.com" },
+        company: { name: "Test Company", address: "1 High St" },
+        items: [{ title: "Service Item", quantity: 1, unit_price: 50, total: 50 }],
+        subtotal: 50,
+        total: 50,
+        currency_code: "usd",
+        notes: "Some notes",
+        body_text: type === "custom" ? "Custom body declaration" : undefined,
+        custom_fields: isJob ? { "Device": "iPad Pro" } : undefined,
+        qr_url: "https://example.com/qr",
+      };
+
+      const buf = await PDFKitGenerator.generate(data, style);
+      assert.ok(buf instanceof Buffer, `Buffer required for style=${style}, type=${type}`);
+      assert.ok(buf.length > 800, `PDF should be non-trivial for style=${style}, type=${type}`);
+      assert.strictEqual(buf.subarray(0, 4).toString(), "%PDF", `Header should be %PDF for style=${style}, type=${type}`);
+    }
+  }
+});

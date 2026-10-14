@@ -200,12 +200,24 @@ export const DocumentsPage = () => {
     packing_slip_template: "modern",
     receipt_template: "modern",
     estimate_template: "modern",
+    job_card_template: "modern",
     custom_doc_template: "modern",
+
+    // Customizable Notification Templates
+    email_subject_template: "",
+    email_body_template: "",
+    sms_body_template: "",
+    whatsapp_body_template: "",
   });
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewStyle, setPreviewStyle] = useState("modern");
+  const [previewType, setPreviewType] = useState("invoice");
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+  const [isPreviewModalLoading, setIsPreviewModalLoading] = useState(false);
   const [isGeneratingManual, setIsGeneratingManual] = useState(false);
   const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
 
@@ -444,10 +456,9 @@ export const DocumentsPage = () => {
     }
   };
 
-  // Template Preview Action (Direct blob view in new window)
-  const handlePreviewTemplate = async (style: string, type: string) => {
-    const key = `${style}-${type}`;
-    setPreviewLoading(key);
+  // Template Preview Logic (Live In-App Modal + Controls)
+  const loadPreviewBlob = async (style: string, type: string) => {
+    setIsPreviewModalLoading(true);
     try {
       const res = await fetch(`/admin/documents/templates/preview?style=${style}&type=${type}`, {
         credentials: "include",
@@ -459,31 +470,50 @@ export const DocumentsPage = () => {
       }
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank");
+      setPreviewBlobUrl((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return blobUrl;
+      });
     } catch (e: any) {
       alert(`Error previewing template: ${e.message}`);
     } finally {
+      setIsPreviewModalLoading(false);
       setPreviewLoading(null);
     }
   };
 
-  // View Document PDF
-  const handleViewDocument = async (id: string, displayId: string) => {
-    try {
-      const res = await fetch(`/admin/documents/${id}/document`, {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        alert(`Failed to open PDF for ${displayId}: ${errText || res.statusText}`);
-        return;
-      }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank");
-    } catch (e: any) {
-      alert(`Error opening document: ${e.message}`);
-    }
+  const handlePreviewTemplate = async (style: string, type: string) => {
+    const key = `${style}-${type}`;
+    setPreviewLoading(key);
+    setPreviewStyle(style);
+    setPreviewType(type);
+    setPreviewModalOpen(true);
+    await loadPreviewBlob(style, type);
+  };
+
+  const switchPreview = async (style: string, type: string) => {
+    setPreviewStyle(style);
+    setPreviewType(type);
+    await loadPreviewBlob(style, type);
+  };
+
+  const handleOpenPreviewNewTab = () => {
+    window.open(`/admin/documents/templates/preview?style=${previewStyle}&type=${previewType}`, "_blank");
+  };
+
+  const handleDownloadPreview = () => {
+    if (!previewBlobUrl) return;
+    const a = document.createElement("a");
+    a.href = previewBlobUrl;
+    a.download = `preview-${previewStyle}-${previewType}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // View Document PDF (Direct native browser stream without popup blocker restriction)
+  const handleViewDocument = (id: string, displayId: string) => {
+    window.open(`/admin/documents/${id}/document`, "_blank");
   };
 
   // Submit Notification Send
@@ -942,6 +972,37 @@ export const DocumentsPage = () => {
               </div>
             </div>
 
+            {/* Estimate / Quotation Template */}
+            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
+              <div>
+                <Label className="font-semibold text-sm">Estimate / Quotation Template</Label>
+                <Text className="text-xs text-ui-fg-subtle mb-3">Issued for customer repair quotations, diagnostics, and price estimates.</Text>
+                <Select
+                  value={settings.estimate_template || "modern"}
+                  onValueChange={(v) => updateSettingField("estimate_template", v)}
+                >
+                  <Select.Trigger size="small">
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="modern">Modern Minimalist</Select.Item>
+                    <Select.Item value="classic">Classic Corporate</Select.Item>
+                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                  </Select.Content>
+                </Select>
+              </div>
+              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.estimate_template || "modern", "estimate")}
+                  isLoading={previewLoading === `${settings.estimate_template || "modern"}-estimate`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Estimate Template
+                </Button>
+              </div>
+            </div>
+
             {/* Custom Document Template */}
             <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
               <div>
@@ -1299,6 +1360,210 @@ export const DocumentsPage = () => {
                   checked={settings.whatsapp_notifications_enabled}
                   onCheckedChange={(v) => updateSettingField("whatsapp_notifications_enabled", v)}
                 />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-ui-border-base" />
+
+          {/* Customizable Notification Message Templates */}
+          <div className="flex flex-col gap-5">
+            <div>
+              <Heading level="h2" className="text-base font-semibold">Customizable Notification Message Templates</Heading>
+              <Text className="text-xs text-ui-fg-subtle">
+                Customize the exact message format and body text dispatched across Email, SMS, and WhatsApp.
+                Click on any tag below each editor to insert dynamic placeholders.
+              </Text>
+            </div>
+
+            {/* Email Template Card */}
+            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="font-semibold text-sm flex items-center gap-2">
+                    <Envelope className="w-4 h-4 text-ui-fg-interactive" />
+                    Email Notification Customizer
+                  </Label>
+                  <Text className="text-xs text-ui-fg-subtle">Customize email subject line and HTML/text message body.</Text>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    updateSettingField("email_subject_template", "");
+                    updateSettingField("email_body_template", "");
+                  }}
+                >
+                  Reset to Default
+                </Button>
+              </div>
+
+              <div>
+                <Label className="text-xs font-medium">Email Subject Template</Label>
+                <Input
+                  value={settings.email_subject_template || ""}
+                  onChange={(e) => updateSettingField("email_subject_template", e.target.value)}
+                  placeholder="{company_name}: {document_title} #{display_id}"
+                  size="small"
+                  className="mt-1 font-mono text-xs"
+                />
+                <Text className="text-[11px] text-ui-fg-muted mt-1">
+                  Default: <code>&#123;company_name&#125;: &#123;document_title&#125; #&#123;display_id&#125;</code>
+                </Text>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs font-medium">Email Body Template (HTML / Text)</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      "{customer_name}",
+                      "{document_title}",
+                      "{display_id}",
+                      "{total_amount}",
+                      "{company_name}",
+                      "{payment_link}",
+                      "{document_link}",
+                      "{payment_button}",
+                      "{download_button}",
+                    ].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          const cur = settings.email_body_template || "";
+                          updateSettingField("email_body_template", cur + (cur ? " " : "") + tag);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-ui-bg-subtle hover:bg-ui-bg-subtle-hover text-ui-fg-subtle border border-ui-border-base font-mono cursor-pointer transition-colors"
+                      >
+                        +{tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Textarea
+                  value={settings.email_body_template || ""}
+                  onChange={(e) => updateSettingField("email_body_template", e.target.value)}
+                  placeholder={`<p>Hello <strong>{customer_name}</strong>,</p>\n<p>Your {document_title} <strong>#{display_id}</strong> is ready.</p>\n{payment_button}\n{download_button}\n<p>Thank you for choosing {company_name}.</p>`}
+                  rows={5}
+                  className="font-mono text-xs"
+                />
+                <Text className="text-[11px] text-ui-fg-muted mt-1">
+                  Leave blank to use default responsive layout with company banner, payment button, and PDF download button.
+                </Text>
+              </div>
+            </div>
+
+            {/* SMS Template Card */}
+            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="font-semibold text-sm">SMS Message Body Template</Label>
+                  <Text className="text-xs text-ui-fg-subtle">Concise text message dispatched via your SMS provider.</Text>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => updateSettingField("sms_body_template", "")}
+                >
+                  Reset to Default
+                </Button>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      "{company_name}",
+                      "{customer_name}",
+                      "{document_title}",
+                      "{display_id}",
+                      "{total_amount}",
+                      "{payment_link}",
+                      "{document_link}",
+                    ].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          const cur = settings.sms_body_template || "";
+                          updateSettingField("sms_body_template", cur + (cur ? " " : "") + tag);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-ui-bg-subtle hover:bg-ui-bg-subtle-hover text-ui-fg-subtle border border-ui-border-base font-mono cursor-pointer transition-colors"
+                      >
+                        +{tag}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-ui-fg-muted font-mono">
+                    {(settings.sms_body_template || "").length} chars
+                  </span>
+                </div>
+                <Textarea
+                  value={settings.sms_body_template || ""}
+                  onChange={(e) => updateSettingField("sms_body_template", e.target.value)}
+                  placeholder="[{company_name}] Hi {customer_name}, your {document_title} #{display_id} is ready. Total: {total_amount}. Pay: {payment_link} View: {document_link}"
+                  rows={3}
+                  className="font-mono text-xs"
+                />
+                <Text className="text-[11px] text-ui-fg-muted mt-1">
+                  Default: <code>[&#123;company_name&#125;] Hi &#123;customer_name&#125;, your &#123;document_title&#125; #&#123;display_id&#125; is ready. Total: &#123;total_amount&#125;. Pay: &#123;payment_link&#125; View: &#123;document_link&#125;</code>
+                </Text>
+              </div>
+            </div>
+
+            {/* WhatsApp Template Card */}
+            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="font-semibold text-sm">WhatsApp Message Body Template</Label>
+                  <Text className="text-xs text-ui-fg-subtle">Formatted message supporting WhatsApp formatting (*bold*, _italics_).</Text>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => updateSettingField("whatsapp_body_template", "")}
+                >
+                  Reset to Default
+                </Button>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      "{company_name}",
+                      "{customer_name}",
+                      "{document_title}",
+                      "{display_id}",
+                      "{total_amount}",
+                      "{payment_link}",
+                      "{document_link}",
+                    ].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          const cur = settings.whatsapp_body_template || "";
+                          updateSettingField("whatsapp_body_template", cur + (cur ? " " : "") + tag);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-ui-bg-subtle hover:bg-ui-bg-subtle-hover text-ui-fg-subtle border border-ui-border-base font-mono cursor-pointer transition-colors"
+                      >
+                        +{tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Textarea
+                  value={settings.whatsapp_body_template || ""}
+                  onChange={(e) => updateSettingField("whatsapp_body_template", e.target.value)}
+                  placeholder={`*{company_name}*\nHello *{customer_name}*,\nYour *{document_title} #{display_id}* has been generated.\n*Amount:* {total_amount}\n*Pay Online:* {payment_link}\n*Download PDF:* {document_link}`}
+                  rows={4}
+                  className="font-mono text-xs"
+                />
+                <Text className="text-[11px] text-ui-fg-muted mt-1">
+                  Default: <code>*&#123;company_name&#125;*\nHello *&#123;customer_name&#125;*,\nYour *&#123;document_title&#125; #&#123;display_id&#125;* has been generated.\n*Amount:* &#123;total_amount&#125;\n*Pay Online:* &#123;payment_link&#125;\n*Download PDF:* &#123;document_link&#125;</code>
+                </Text>
               </div>
             </div>
           </div>
@@ -2137,6 +2402,123 @@ export const DocumentsPage = () => {
               <div className="flex justify-end gap-2 mt-4">
                 <Button variant="secondary" onClick={() => setSendModalOpen(false)}>Cancel</Button>
                 <Button variant="primary" onClick={handleSendNotification}>Dispatch Now</Button>
+              </div>
+            </FocusModal.Body>
+          </FocusModal.Content>
+        </FocusModal>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 4: TEMPLATE LIVE PREVIEW MODAL                      */}
+      {/* ========================================================= */}
+      {previewModalOpen && (
+        <FocusModal open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
+          <FocusModal.Content>
+            <FocusModal.Header className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-3">
+                <Heading level="h2" className="text-base font-semibold">
+                  Template Live Preview
+                </Heading>
+                <Badge color="blue" size="small">
+                  {previewStyle.toUpperCase()}
+                </Badge>
+                <Badge color="grey" size="small">
+                  {previewType.toUpperCase()}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={handleOpenPreviewNewTab}
+                >
+                  Open in New Window
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={handleDownloadPreview}
+                  disabled={!previewBlobUrl}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" />
+                  Download PDF
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => setPreviewModalOpen(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </FocusModal.Header>
+            <FocusModal.Body className="p-6 flex flex-col gap-4 max-w-5xl mx-auto h-[82vh]">
+              {/* Quick style and document type switcher toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-4 p-3 bg-ui-bg-subtle border border-ui-border-base rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs font-medium">Style:</Label>
+                  <Select value={previewStyle} onValueChange={(v) => switchPreview(v, previewType)}>
+                    <Select.Trigger size="small" className="w-[180px]">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs font-medium">Document Type:</Label>
+                  <Select value={previewType} onValueChange={(v) => switchPreview(previewStyle, v)}>
+                    <Select.Trigger size="small" className="w-[190px]">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="invoice">Tax Invoice</Select.Item>
+                      <Select.Item value="receipt">Payment Receipt</Select.Item>
+                      <Select.Item value="packing_slip">Packing Slip</Select.Item>
+                      <Select.Item value="estimate">Estimate / Quote</Select.Item>
+                      <Select.Item value="custom">Custom Document</Select.Item>
+                      <Select.Item value="job_card">Repair Job Card</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => switchPreview(previewStyle, previewType)}
+                  isLoading={isPreviewModalLoading}
+                >
+                  <ArrowPath className="w-3.5 h-3.5 mr-1" /> Refresh Preview
+                </Button>
+              </div>
+
+              {/* PDF Viewer Iframe */}
+              <div className="flex-1 w-full bg-ui-bg-subtle border border-ui-border-base rounded-lg overflow-hidden flex items-center justify-center relative min-h-[500px]">
+                {isPreviewModalLoading ? (
+                  <div className="flex flex-col items-center gap-3 text-ui-fg-subtle">
+                    <ArrowPath className="w-6 h-6 animate-spin text-ui-fg-interactive" />
+                    <Text className="text-xs">Rendering live template preview...</Text>
+                  </div>
+                ) : previewBlobUrl ? (
+                  <iframe
+                    src={previewBlobUrl}
+                    className="w-full h-full border-0 rounded-lg"
+                    title="Live Template Preview"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-ui-fg-error">
+                    <Text className="text-xs font-medium">Failed to generate PDF preview.</Text>
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={() => switchPreview(previewStyle, previewType)}
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                )}
               </div>
             </FocusModal.Body>
           </FocusModal.Content>

@@ -454,6 +454,14 @@ export class PDFKitGenerator {
         doc.font("Courier").fontSize(9).text(`REF: ${data.display_id}`, 350, 58, { align: "right" });
         doc.text(`DATE: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 70, { align: "right" });
 
+        // QR Code if provided
+        if (data.qr_url) {
+          try {
+            const qrBuf = await QRCode.toBuffer(data.qr_url, { width: 45, margin: 0 });
+            doc.image(qrBuf, 510, 42, { width: 45, height: 45 });
+          } catch (e) {}
+        }
+
         doc.strokeColor("#000000").lineWidth(1).moveTo(40, 95).lineTo(555, 95).stroke();
 
         doc.font("Courier-Bold").fontSize(9).text("CLIENT:", 40, 110);
