@@ -74,7 +74,7 @@ jobs:
             echo "Bump strategy: $BUMP_STRATEGY"
 
             if [ "$BUMP_STRATEGY" = "patch" ] || [ "$BUMP_STRATEGY" = "minor" ] || [ "$BUMP_STRATEGY" = "major" ]; then
-              npm version "$BUMP_STRATEGY" -m "chore: bump version to %s [skip ci]"
+              npm version "$BUMP_STRATEGY" --force -m "chore: bump version to %s [skip ci]"
               TARGET_VERSION=$(node -p "require('./package.json').version")
               git push origin main --follow-tags
             elif [ "$BUMP_STRATEGY" = "none" ]; then
@@ -92,7 +92,7 @@ jobs:
                 git push origin "v$TARGET_VERSION"
               else
                 echo "Tag v$CURRENT_VERSION already exists. Bumping patch version..."
-                npm version patch -m "chore: bump version to %s [skip ci]"
+                npm version patch --force -m "chore: bump version to %s [skip ci]"
                 TARGET_VERSION=$(node -p "require('./package.json').version")
                 git push origin main --follow-tags
               fi

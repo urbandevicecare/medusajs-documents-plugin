@@ -15,3 +15,7 @@ coverage/
 *.zip
 assets/
 release_notes.md
+.yarn/install-state.gz
+.yarn/cache/
+.pnp.*
+
