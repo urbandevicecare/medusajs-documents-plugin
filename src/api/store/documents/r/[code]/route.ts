@@ -10,7 +10,13 @@ export async function GET(req: MedusaRequest<{ code: string }>, res: MedusaRespo
   const links = await documentService.listDocumentLinks({ shortcode: code });
 
   if (links && links.length > 0) {
-    res.setHeader("Location", links[0].url);
+    let targetUrl = links[0].url;
+    if (targetUrl.startsWith("/")) {
+      const host = req.get("host") || "localhost:9000";
+      const protocol = req.protocol || "http";
+      targetUrl = `${protocol}://${host}${targetUrl}`;
+    }
+    res.setHeader("Location", targetUrl);
     return res.status(302).send("Redirecting...");
   }
 
