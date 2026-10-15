@@ -46,53 +46,91 @@ export class DocumentModuleService extends MedusaService({
   /**
    * Retrieves or initializes default plugin settings
    */
-  async getSettings(): Promise<any> {
-    const [settings] = await this.listDocumentSettings({});
-    if (settings) {
-      return settings;
+  /**
+   * Retrieves or initializes default plugin settings
+   */
+  async getSettings(sharedContext?: any, container?: any): Promise<any> {
+    try {
+      const [settings] = await this.listDocumentSettings({}, {}, sharedContext);
+      if (settings) {
+        return settings;
+      }
+      return await this.createDocumentSettings({
+        company_name: "Store",
+        email_notifications_enabled: true,
+        sms_notifications_enabled: true,
+        whatsapp_notifications_enabled: true,
+        event_order_placed_enabled: true,
+        event_order_completed_enabled: true,
+        event_payment_captured_enabled: true,
+        event_order_fulfillment_enabled: true,
+        event_order_canceled_enabled: true,
+        event_repair_status_changed_enabled: true,
+        event_repair_compliance_enabled: true,
+        event_repair_created_enabled: true,
+        event_repair_completed_enabled: true,
+        event_repair_reminder_enabled: true,
+        invoice_template: "modern",
+        packing_slip_template: "modern",
+        receipt_template: "modern",
+        estimate_template: "modern",
+        job_card_template: "modern",
+        custom_doc_template: "modern",
+        email_subject_template: null,
+        email_body_template: null,
+        sms_body_template: null,
+        whatsapp_body_template: null,
+        order_placed_email_subject: null,
+        order_placed_email_template: null,
+        order_placed_sms_template: null,
+        order_placed_whatsapp_template: null,
+        order_payment_email_subject: null,
+        order_payment_email_template: null,
+        order_payment_sms_template: null,
+        order_payment_whatsapp_template: null,
+        order_fulfillment_email_subject: null,
+        order_fulfillment_email_template: null,
+        order_fulfillment_sms_template: null,
+        order_fulfillment_whatsapp_template: null,
+        order_canceled_email_subject: null,
+        order_canceled_email_template: null,
+        order_canceled_sms_template: null,
+        order_canceled_whatsapp_template: null,
+      }, sharedContext);
+    } catch (err: any) {
+      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
+                   (this as any).__container__?.["pg_connection"];
+      if (conn) {
+        let row = await conn("document_settings").first();
+        if (row) return row;
+        const [created] = await conn("document_settings").insert({
+          company_name: "Store",
+          email_notifications_enabled: true,
+          sms_notifications_enabled: true,
+          whatsapp_notifications_enabled: true,
+          event_order_placed_enabled: true,
+          event_order_completed_enabled: true,
+          event_payment_captured_enabled: true,
+          event_order_fulfillment_enabled: true,
+          event_order_canceled_enabled: true,
+          event_repair_status_changed_enabled: true,
+          event_repair_compliance_enabled: true,
+          event_repair_created_enabled: true,
+          event_repair_completed_enabled: true,
+          event_repair_reminder_enabled: true,
+          invoice_template: "modern",
+          packing_slip_template: "modern",
+          receipt_template: "modern",
+          estimate_template: "modern",
+          job_card_template: "modern",
+          custom_doc_template: "modern",
+          created_at: new Date(),
+          updated_at: new Date(),
+        }).returning("*");
+        return created;
+      }
+      throw err;
     }
-    return await this.createDocumentSettings({
-      company_name: "Store",
-      email_notifications_enabled: true,
-      sms_notifications_enabled: true,
-      whatsapp_notifications_enabled: true,
-      event_order_placed_enabled: true,
-      event_order_completed_enabled: true,
-      event_payment_captured_enabled: true,
-      event_order_fulfillment_enabled: true,
-      event_order_canceled_enabled: true,
-      event_repair_status_changed_enabled: true,
-      event_repair_compliance_enabled: true,
-      event_repair_created_enabled: true,
-      event_repair_completed_enabled: true,
-      event_repair_reminder_enabled: true,
-      invoice_template: "modern",
-      packing_slip_template: "modern",
-      receipt_template: "modern",
-      estimate_template: "modern",
-      job_card_template: "modern",
-      custom_doc_template: "modern",
-      email_subject_template: null,
-      email_body_template: null,
-      sms_body_template: null,
-      whatsapp_body_template: null,
-      order_placed_email_subject: null,
-      order_placed_email_template: null,
-      order_placed_sms_template: null,
-      order_placed_whatsapp_template: null,
-      order_payment_email_subject: null,
-      order_payment_email_template: null,
-      order_payment_sms_template: null,
-      order_payment_whatsapp_template: null,
-      order_fulfillment_email_subject: null,
-      order_fulfillment_email_template: null,
-      order_fulfillment_sms_template: null,
-      order_fulfillment_whatsapp_template: null,
-      order_canceled_email_subject: null,
-      order_canceled_email_template: null,
-      order_canceled_sms_template: null,
-      order_canceled_whatsapp_template: null,
-    });
   }
 
   /**
@@ -484,47 +522,105 @@ export class DocumentModuleService extends MedusaService({
 
     // Save Record to Database
     const initialPdfUrl = `${storeUrl}/api/admin/documents/temp/document`;
-    const record = await this.createDocumentRecords({
-      display_id: displayId,
-      title: input.title || (
-        input.type === "invoice" ? "Tax Invoice" :
-        input.type === "receipt" ? "Payment Receipt" :
-        input.type === "packing_slip" ? "Packing Slip" :
-        input.type === "estimate" ? "Quotation" : "Document"
-      ),
-      type: input.type,
-      source: source,
-      status: input.payment_status === "paid" ? "paid" : "sent",
-      customer_name: input.customer.name,
-      customer_email: input.customer.email,
-      customer_phone: input.customer.phone,
-      order_id: input.order_id,
-      repair_ticket_id: input.repair_ticket_id,
-      zoho_document_id: zohoDocumentId,
-      total_amount: input.total,
-      currency_code: input.currency_code,
-      payment_status: input.payment_status || "unpaid",
-      payment_link: input.payment_link,
-      short_payment_link: shortPaymentLink,
-      pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
-      metadata: {
-        items: input.items,
-        notes: input.notes,
-        body_text: input.body_text,
-        custom_fields: input.custom_fields,
-      },
-    });
+    const manager = container?.resolve?.("manager", { allowUnregistered: true });
+    const sharedContext = manager ? { manager } : {};
+
+    let record: any = null;
+    try {
+      record = await this.createDocumentRecords({
+        display_id: displayId,
+        title: input.title || (
+          input.type === "invoice" ? "Tax Invoice" :
+          input.type === "receipt" ? "Payment Receipt" :
+          input.type === "packing_slip" ? "Packing Slip" :
+          input.type === "estimate" ? "Quotation" : "Document"
+        ),
+        type: input.type,
+        source: source,
+        status: input.payment_status === "paid" ? "paid" : "sent",
+        customer_name: input.customer.name,
+        customer_email: input.customer.email,
+        customer_phone: input.customer.phone,
+        order_id: input.order_id,
+        repair_ticket_id: input.repair_ticket_id,
+        zoho_document_id: zohoDocumentId,
+        total_amount: input.total,
+        currency_code: input.currency_code,
+        payment_status: input.payment_status || "unpaid",
+        payment_link: input.payment_link,
+        short_payment_link: shortPaymentLink,
+        pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
+        metadata: {
+          items: input.items,
+          notes: input.notes,
+          body_text: input.body_text,
+          custom_fields: input.custom_fields,
+        },
+      }, sharedContext);
+    } catch (err: any) {
+      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
+                   (this as any).__container__?.["pg_connection"];
+      if (conn) {
+        const [inserted] = await conn("document_records").insert({
+          display_id: displayId,
+          title: input.title || (
+            input.type === "invoice" ? "Tax Invoice" :
+            input.type === "receipt" ? "Payment Receipt" :
+            input.type === "packing_slip" ? "Packing Slip" :
+            input.type === "estimate" ? "Quotation" : "Document"
+          ),
+          type: input.type,
+          source: source,
+          status: input.payment_status === "paid" ? "paid" : "sent",
+          customer_name: input.customer.name,
+          customer_email: input.customer.email,
+          customer_phone: input.customer.phone,
+          order_id: input.order_id,
+          repair_ticket_id: input.repair_ticket_id,
+          zoho_document_id: zohoDocumentId,
+          total_amount: input.total,
+          currency_code: input.currency_code,
+          payment_status: input.payment_status || "unpaid",
+          payment_link: input.payment_link,
+          short_payment_link: shortPaymentLink,
+          pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
+          metadata: JSON.stringify({
+            items: input.items,
+            notes: input.notes,
+            body_text: input.body_text,
+            custom_fields: input.custom_fields,
+          }),
+          created_at: new Date(),
+          updated_at: new Date(),
+        }).returning("*");
+        record = inserted;
+      } else {
+        throw err;
+      }
+    }
 
     // Update with real public URL and short URL for document
     const backendUrl = (process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "");
     const realPdfUrl = `${backendUrl}/documents/${record.id}/document`;
     const shortPdfLink = await this.getOrGenerateShortUrl(realPdfUrl, storeUrl);
 
-    await this.updateDocumentRecords({
-      id: record.id,
-      pdf_url: realPdfUrl,
-      short_pdf_link: shortPdfLink,
-    });
+    try {
+      await this.updateDocumentRecords({
+        id: record.id,
+        pdf_url: realPdfUrl,
+        short_pdf_link: shortPdfLink,
+      }, sharedContext);
+    } catch (err: any) {
+      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
+                   (this as any).__container__?.["pg_connection"];
+      if (conn) {
+        await conn("document_records").where({ id: record.id }).update({
+          pdf_url: realPdfUrl,
+          short_pdf_link: shortPdfLink,
+          updated_at: new Date(),
+        });
+      }
+    }
     record.pdf_url = realPdfUrl;
     record.short_pdf_link = shortPdfLink;
 
@@ -563,9 +659,19 @@ export class DocumentModuleService extends MedusaService({
   /**
    * Fetches or regenerates the PDF buffer for an existing DocumentRecord
    */
-  async getPdfForRecord(recordId: string, container?: any): Promise<Buffer> {
-    const record = await this.retrieveDocumentRecord(recordId);
-    const settings = await this.getSettings();
+  async getPdfForRecord(recordId: string, container?: any, sharedContext?: any): Promise<Buffer> {
+    let record: any = null;
+    try {
+      record = await this.retrieveDocumentRecord(recordId, {}, sharedContext);
+    } catch (e) {
+      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
+                   (this as any).__container__?.["pg_connection"];
+      if (conn) {
+        record = await conn("document_records").where({ id: recordId }).orWhere({ display_id: recordId }).first();
+      }
+      if (!record) throw e;
+    }
+    const settings = await this.getSettings(sharedContext, container);
 
     // If source is Zoho and zoho_document_id exists, fetch from Zoho API
     if (

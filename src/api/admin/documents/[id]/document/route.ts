@@ -5,17 +5,26 @@ import DocumentModuleService from "../../../../../modules/documents/service";
 // GET /admin/documents/:id/document
 export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
   const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
+  const manager = req.scope.resolve("manager", { allowUnregistered: true });
+  const sharedContext = manager ? { manager } : {};
   const id = req.params.id;
 
   try {
     let record: any = null;
     // Check by ID or display_id
     try {
-      record = await documentService.retrieveDocumentRecord(id);
+      record = await documentService.retrieveDocumentRecord(id, {}, sharedContext);
     } catch (e) {
-      const records = await documentService.listDocumentRecords({ display_id: id });
-      if (records && records.length > 0) {
-        record = records[0];
+      try {
+        const records = await documentService.listDocumentRecords({ display_id: id }, {}, sharedContext);
+        if (records && records.length > 0) {
+          record = records[0];
+        }
+      } catch (err2) {
+        const pg: any = req.scope.resolve("pg_connection", { allowUnregistered: true });
+        if (pg) {
+          record = await pg("document_records").where({ id }).orWhere({ display_id: id }).first();
+        }
       }
     }
 
@@ -23,7 +32,7 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
       return res.status(404).send("Document not found");
     }
 
-    const pdfBuffer = await documentService.getPdfForRecord(record.id, req.scope);
+    const pdfBuffer = await documentService.getPdfForRecord(record.id, req.scope, sharedContext);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${record.display_id}.pdf"`);

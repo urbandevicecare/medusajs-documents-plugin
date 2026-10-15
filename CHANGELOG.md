@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.4] - 2026-10-16
+
+### Patch Release: Dual Transaction Context Injection & Direct Knex Fallback for Settings & Documents
+
+- **Resolved `reading 'fork'` Exception**: Fixed runtime `TypeError: Cannot read properties of undefined (reading 'fork')` encountered when loading or saving plugin settings (`GET/POST /admin/documents/settings`) and viewing documents (`GET /admin/documents`).
+- **Transaction Context Resolution**: Injected `sharedContext` with the resolved MikroORM `manager` from `req.scope` into all generated `MedusaService` operations.
+- **Fail-Safe PostgreSQL/Knex Fallbacks**: Added direct Knex fallback queries (`pg_connection`) for retrieving and persisting settings (`document_settings`) and document records (`document_records`), ensuring zero runtime crashes even in non-standard plugin loading or standalone module environments.
+- **Resilient PDF Streaming**: Updated admin and public PDF retrieval routes to pass transaction context and fallback to Knex if module repository manager is uninitialized.
+
+---
+
 ## [1.1.1] - 2026-10-15
 
 ### Patch Release: Public Stream Endpoints, Shortlink Normalization & Repair Handover

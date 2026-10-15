@@ -7,24 +7,38 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
   const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
   const cleanId = (req.params.id || "").replace(/\.pdf$/i, "");
 
+  const manager = req.scope.resolve("manager", { allowUnregistered: true });
+  const sharedContext = manager ? { manager } : {};
+
   try {
     let record: any = null;
     // Check by primary ID or human display_id (e.g. INV-1092, JOB-101, RCPT-101)
     try {
-      record = await documentService.retrieveDocumentRecord(cleanId);
+      record = await documentService.retrieveDocumentRecord(cleanId, {}, sharedContext);
     } catch (e) {}
 
     if (!record) {
-      const records = await documentService.listDocumentRecords({ display_id: cleanId }).catch(() => []);
+      const records = await documentService.listDocumentRecords({ display_id: cleanId }, {}, sharedContext).catch(() => []);
       if (records && records.length > 0) {
         record = records[0];
       }
     }
 
     if (!record) {
-      const records = await documentService.listDocumentRecords({ repair_ticket_id: cleanId }).catch(() => []);
+      const records = await documentService.listDocumentRecords({ repair_ticket_id: cleanId }, {}, sharedContext).catch(() => []);
       if (records && records.length > 0) {
         record = records[0];
+      }
+    }
+
+    if (!record) {
+      const pg: any = req.scope.resolve("pg_connection", { allowUnregistered: true });
+      if (pg) {
+        record = await pg("document_records")
+          .where({ id: cleanId })
+          .orWhere({ display_id: cleanId })
+          .orWhere({ repair_ticket_id: cleanId })
+          .first();
       }
     }
 
@@ -52,7 +66,7 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
       return res.status(404).send("Document not found");
     }
 
-    const pdfBuffer = await documentService.getPdfForRecord(record.id, req.scope);
+    const pdfBuffer = await documentService.getPdfForRecord(record.id, req.scope, sharedContext);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${record.display_id}.pdf"`);
