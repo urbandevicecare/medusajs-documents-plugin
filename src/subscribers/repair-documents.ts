@@ -183,13 +183,11 @@ export default async function repairDocumentsSubscriber({
     const trackingUrl = ticket.approval_token ? `${storeUrl}/repairs/track?token=${ticket.approval_token}` : undefined;
     const paymentOrTrackingLink = docType === "job_card" ? (trackingUrl || paymentInfo.paymentLink) : paymentInfo.paymentLink;
 
-    // Fix 1: Stop duplicate notifications on repair status changes.
-    // The repair subscriber already notifies the customer on repair status changes.
-    // Auto-send is kept false for status updates and job cards; receipts and customer reminders auto-send.
-    const autoSend =
-      eventName === "repair.payment_received" || eventName === "repair.customer_reminder";
+    // Documents plugin solely creates documents and hands them over to repair plugin.
+    // All customer notifications are handled exclusively by Meduajs-repair-plugin alone.
+    const autoSend = false;
 
-    await documentService.generateDocument(
+    const genResult = await documentService.generateDocument(
       {
         display_id: displayId,
         title: docTitle,
@@ -223,6 +221,31 @@ export default async function repairDocumentsSubscriber({
       },
       container
     );
+
+    // Hand over the generated document link and record to Meduajs-repair-plugin
+    if (genResult?.record) {
+      try {
+        const repairModule: any = container.resolve("repair", { allowUnregistered: true });
+        if (repairModule) {
+          const existingTicket = await repairModule.retrieveRepairTicket(ticket.id).catch(() => null);
+          const currentMeta = existingTicket?.metadata || ticket.metadata || {};
+          await repairModule.updateRepairTickets({
+            id: ticket.id,
+            metadata: {
+              ...currentMeta,
+              document_id: genResult.record.id,
+              pdf_url: genResult.record.pdf_url,
+              short_pdf_link: genResult.record.short_pdf_link || genResult.record.pdf_url,
+              last_document_type: docType,
+              last_document_title: genResult.record.title,
+            },
+          });
+          logger.info(`[Documents-Subscriber] Successfully handed over document link (${genResult.record.short_pdf_link || genResult.record.pdf_url}) to repair ticket #${ticket.ticket_number}`);
+        }
+      } catch (handoverErr: any) {
+        logger.warn(`[Documents-Subscriber] Could not update repair ticket with handed over document: ${handoverErr.message}`);
+      }
+    }
   } catch (error: any) {
     logger.error(`[Documents-Subscriber] Failed processing repair event '${eventName}': ${error.message}`);
   }

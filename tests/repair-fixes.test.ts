@@ -381,10 +381,79 @@ test("Fix 1 Edge Case: repair.customer_reminder auto-sends document to notify cu
   assert.ok(capturedDocInput, "generateDocument should be invoked");
   assert.strictEqual(
     capturedDocInput.auto_send,
-    true,
-    "repair.customer_reminder MUST have auto_send: true to actually deliver reminder"
+    false,
+    "repair.customer_reminder MUST have auto_send: false as repair plugin handles customer notifications"
   );
   assert.strictEqual(capturedDocInput.type, "estimate");
+});
+
+test("Fix 1 Handover: repair subscriber hands over generated document link and metadata to repair ticket", async () => {
+  let updatedTicketId: string | null = null;
+  let updatedTicketMetadata: any = null;
+
+  const mockDocService = {
+    getSettings: async () => ({
+      event_repair_status_changed_enabled: true,
+      event_repair_completed_enabled: true,
+    }),
+    generateDocument: async () => {
+      return {
+        record: {
+          id: "doc_rec_123",
+          title: "Repair Invoice",
+          pdf_url: "http://localhost:3000/api/admin/documents/doc_rec_123/document",
+          short_pdf_link: "http://localhost:3000/r/xyz123",
+        },
+      };
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_handover_01",
+          ticket_number: 999,
+          status: "ready",
+          customer_id: null,
+          device: { model_name: "MacBook Air" },
+          metadata: { initial_field: "value" },
+        },
+      ],
+    }),
+  };
+
+  const mockRepairModule = {
+    retrieveRepairTicket: async (id: string) => ({
+      id,
+      metadata: { initial_field: "value" },
+    }),
+    updateRepairTickets: async (payload: any) => {
+      updatedTicketId = payload.id;
+      updatedTicketMetadata = payload.metadata;
+    },
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      if (key === "repair") return mockRepairModule;
+      return null;
+    },
+  };
+
+  await repairDocumentsSubscriber({
+    event: { name: "repair.status_changed", data: { id: "rep_handover_01", status: "ready" } },
+    container: mockContainer,
+  } as any);
+
+  assert.strictEqual(updatedTicketId, "rep_handover_01");
+  assert.strictEqual(updatedTicketMetadata.document_id, "doc_rec_123");
+  assert.strictEqual(updatedTicketMetadata.pdf_url, "http://localhost:3000/api/admin/documents/doc_rec_123/document");
+  assert.strictEqual(updatedTicketMetadata.short_pdf_link, "http://localhost:3000/r/xyz123");
+  assert.strictEqual(updatedTicketMetadata.initial_field, "value");
 });
 
 test("Fix 4 Enhancement: variant title preserves product title when variant is Default Variant or option name", async () => {
