@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.4] - 2026-10-16
+## [1.1.5] - 2026-10-16
 
 ### Patch Release: Dual Transaction Context Injection & Direct Knex Fallback for Settings & Documents
 
