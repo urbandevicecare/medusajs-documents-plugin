@@ -166,6 +166,7 @@ export const DocumentsPage = () => {
     event_order_completed_enabled: true,
     event_payment_captured_enabled: true,
     event_order_fulfillment_enabled: true,
+    event_order_canceled_enabled: true,
     event_repair_status_changed_enabled: true,
     event_repair_compliance_enabled: true,
     event_repair_created_enabled: true,
@@ -1133,16 +1134,29 @@ export const DocumentsPage = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-between py-2">
+              <div className="flex items-center justify-between py-2 border-b border-ui-border-base">
                 <div>
                   <Label className="font-semibold text-sm">Fulfillment Created (`order.fulfillment_created`)</Label>
                   <Text className="text-xs text-ui-fg-subtle">
-                    Autogenerates Packing Slip for fulfillment staff and warehouse tracking.
+                    Autogenerates Packing Slip and sends shipment tracking notification.
                   </Text>
                 </div>
                 <Switch
                   checked={settings.event_order_fulfillment_enabled}
                   onCheckedChange={(v) => updateSettingField("event_order_fulfillment_enabled", v)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <Label className="font-semibold text-sm">Order Canceled (`order.canceled`)</Label>
+                  <Text className="text-xs text-ui-fg-subtle">
+                    Sends cancellation notice with refund information and support details.
+                  </Text>
+                </div>
+                <Switch
+                  checked={settings.event_order_canceled_enabled}
+                  onCheckedChange={(v) => updateSettingField("event_order_canceled_enabled", v)}
                 />
               </div>
             </div>

@@ -13,6 +13,7 @@ export const DocumentSettings = model.define("document_settings", {
   event_order_completed_enabled: model.boolean().default(true),
   event_payment_captured_enabled: model.boolean().default(true),
   event_order_fulfillment_enabled: model.boolean().default(true),
+  event_order_canceled_enabled: model.boolean().default(true),
   event_repair_status_changed_enabled: model.boolean().default(true),
   event_repair_compliance_enabled: model.boolean().default(true),
   event_repair_created_enabled: model.boolean().default(true),
@@ -56,11 +57,32 @@ export const DocumentSettings = model.define("document_settings", {
   job_card_template: model.text().default("modern"),
   custom_doc_template: model.text().default("modern"),
 
-  // Customizable Notification Body & Subject Templates
+  // Customizable Notification Body & Subject Templates (Global / Document-level)
   email_subject_template: model.text().nullable(),
   email_body_template: model.text().nullable(),
   sms_body_template: model.text().nullable(),
   whatsapp_body_template: model.text().nullable(),
+
+  // Dedicated Store Order Notification Templates
+  order_placed_email_subject: model.text().nullable(),
+  order_placed_email_template: model.text().nullable(),
+  order_placed_sms_template: model.text().nullable(),
+  order_placed_whatsapp_template: model.text().nullable(),
+
+  order_payment_email_subject: model.text().nullable(),
+  order_payment_email_template: model.text().nullable(),
+  order_payment_sms_template: model.text().nullable(),
+  order_payment_whatsapp_template: model.text().nullable(),
+
+  order_fulfillment_email_subject: model.text().nullable(),
+  order_fulfillment_email_template: model.text().nullable(),
+  order_fulfillment_sms_template: model.text().nullable(),
+  order_fulfillment_whatsapp_template: model.text().nullable(),
+
+  order_canceled_email_subject: model.text().nullable(),
+  order_canceled_email_template: model.text().nullable(),
+  order_canceled_sms_template: model.text().nullable(),
+  order_canceled_whatsapp_template: model.text().nullable(),
 });
 
 export default DocumentSettings;

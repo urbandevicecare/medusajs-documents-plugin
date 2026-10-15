@@ -56,6 +56,16 @@ export class DocumentModuleService extends MedusaService({
       email_notifications_enabled: true,
       sms_notifications_enabled: true,
       whatsapp_notifications_enabled: true,
+      event_order_placed_enabled: true,
+      event_order_completed_enabled: true,
+      event_payment_captured_enabled: true,
+      event_order_fulfillment_enabled: true,
+      event_order_canceled_enabled: true,
+      event_repair_status_changed_enabled: true,
+      event_repair_compliance_enabled: true,
+      event_repair_created_enabled: true,
+      event_repair_completed_enabled: true,
+      event_repair_reminder_enabled: true,
       invoice_template: "modern",
       packing_slip_template: "modern",
       receipt_template: "modern",
@@ -66,6 +76,22 @@ export class DocumentModuleService extends MedusaService({
       email_body_template: null,
       sms_body_template: null,
       whatsapp_body_template: null,
+      order_placed_email_subject: null,
+      order_placed_email_template: null,
+      order_placed_sms_template: null,
+      order_placed_whatsapp_template: null,
+      order_payment_email_subject: null,
+      order_payment_email_template: null,
+      order_payment_sms_template: null,
+      order_payment_whatsapp_template: null,
+      order_fulfillment_email_subject: null,
+      order_fulfillment_email_template: null,
+      order_fulfillment_sms_template: null,
+      order_fulfillment_whatsapp_template: null,
+      order_canceled_email_subject: null,
+      order_canceled_email_template: null,
+      order_canceled_sms_template: null,
+      order_canceled_whatsapp_template: null,
     });
   }
 
@@ -112,7 +138,13 @@ export class DocumentModuleService extends MedusaService({
         if (query) {
           const { data: tickets } = await query.graph({
             entity: "repair_ticket",
-            fields: ["*", "device.*", "product_variants.*"],
+            fields: [
+              "*",
+              "device.*",
+              "product_variants.*",
+              "product_variants.prices.*",
+              "product_variants.product.*",
+            ],
             filters: { id: input.repair_ticket_id },
           });
           if (tickets && tickets.length > 0) {
@@ -142,23 +174,68 @@ export class DocumentModuleService extends MedusaService({
             }
             if (!input.items || input.items.length === 0) {
               input.items = [];
+              // Fix 4: Map inventory parts from product_variants (SKU, title, unit price, quantity)
               if (ticket.product_variants) {
                 for (const pv of ticket.product_variants) {
+                  const qty = Number(pv.quantity || (pv as any).pivot?.quantity || 1);
+                  const unitPrice = Number(pv.unit_price ?? pv.price ?? pv.prices?.[0]?.amount ?? 0);
+                  const partTitle = pv.product?.title
+                    ? `${pv.product.title}${pv.title && pv.title !== "Default Variant" ? ` (${pv.title})` : ""}`
+                    : pv.title || pv.product?.title || "Inventory Part";
                   input.items.push({
-                    title: pv.title || "Replacement Part",
-                    description: pv.sku ? `SKU: ${pv.sku}` : "",
-                    quantity: 1,
-                    unit_price: 0,
+                    title: partTitle,
+                    description: pv.sku ? `SKU: ${pv.sku}` : (pv.product?.title ? `${pv.title || ""}`.trim() : ""),
+                    quantity: qty,
+                    unit_price: unitPrice,
+                    total: qty * unitPrice,
                   });
                 }
               }
+              // Map parts from device.parts_used
+              if (ticket.device?.parts_used) {
+                for (const part of ticket.device.parts_used) {
+                  const qty = Number(part.quantity || 1);
+                  const unitPrice = Number(part.price || part.unit_price || 0);
+                  input.items.push({
+                    title: part.name || part.title || "Replacement Part",
+                    description: part.sku ? `SKU: ${part.sku}` : "",
+                    quantity: qty,
+                    unit_price: unitPrice,
+                    total: qty * unitPrice,
+                  });
+                }
+              }
+              // Map custom parts
+              if (ticket.custom_parts) {
+                for (const cp of ticket.custom_parts) {
+                  const qty = Number(cp.quantity || 1);
+                  const unitPrice = Number(cp.price || cp.unit_price || 0);
+                  input.items.push({
+                    title: cp.name || cp.title || "Custom Service / Part",
+                    description: cp.description || (cp.sku ? `SKU: ${cp.sku}` : ""),
+                    quantity: qty,
+                    unit_price: unitPrice,
+                    total: qty * unitPrice,
+                  });
+                }
+              }
+              // Labor estimate
+              if (Number(ticket.labor_estimate || 0) > 0) {
+                input.items.push({
+                  title: "Labor Charge",
+                  quantity: 1,
+                  unit_price: Number(ticket.labor_estimate),
+                  total: Number(ticket.labor_estimate),
+                });
+              }
               if (input.items.length === 0) {
+                const tot = Number(ticket.total_actual && ticket.total_actual > 0 ? ticket.total_actual : ticket.total_estimate || 0);
                 input.items.push({
                   title: `Diagnostic / Repair Inspection (#${ticket.ticket_number})`,
                   description: ticket.issue_description || "Standard device repair service",
                   quantity: 1,
-                  unit_price: Number(ticket.total_estimate || 0),
-                  total: Number(ticket.total_estimate || 0),
+                  unit_price: tot,
+                  total: tot,
                 });
               }
             }
@@ -283,6 +360,61 @@ export class DocumentModuleService extends MedusaService({
           zohoDocumentId = res.estimate_id;
           source = "zoho";
           const rawBuffer = await zoho.getDocumentPdf(res.estimate_id, "estimate");
+          pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
+            qrUrl: shortPaymentLink || input.payment_link,
+            obscureZohoFooter: true,
+          });
+        } else if (input.type === "receipt") {
+          // Fix 2: Implement Zoho Books payment registration in service.ts for input.type === "receipt" using zoho.registerPayment
+          let targetInvoiceId: string | null = null;
+
+          if (input.order_id) {
+            const existingDocs = await this.listDocumentRecords({
+              order_id: input.order_id,
+              type: "invoice",
+            });
+            const inv = existingDocs.find((d: any) => d.zoho_document_id);
+            if (inv) {
+              targetInvoiceId = inv.zoho_document_id;
+            }
+          } else if (input.repair_ticket_id) {
+            const existingDocs = await this.listDocumentRecords({
+              repair_ticket_id: input.repair_ticket_id,
+              type: "invoice",
+            });
+            const inv = existingDocs.find((d: any) => d.zoho_document_id);
+            if (inv) {
+              targetInvoiceId = inv.zoho_document_id;
+            }
+          }
+
+          // If no invoice was previously synchronized to Zoho, create one to attach the payment
+          if (!targetInvoiceId) {
+            const invRes = await zoho.createInvoice(contactId, {
+              reference_number: displayId,
+              line_items: zohoLineItems,
+              notes: zohoNotes,
+              terms: zohoTerms,
+              payment_terms: 0,
+              is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+              custom_fields: customFields,
+            });
+            targetInvoiceId = invRes.invoice_id;
+          }
+
+          const paymentAmount = Number(input.total || 0);
+          const paymentId = await zoho.registerPayment(
+            targetInvoiceId,
+            paymentAmount,
+            contactId,
+            "Online",
+            displayId
+          );
+
+          zohoDocumentId = paymentId;
+          source = "zoho";
+
+          const rawBuffer = await zoho.getPaymentReceiptPdf(paymentId);
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
             qrUrl: shortPaymentLink || input.payment_link,
             obscureZohoFooter: true,
@@ -416,6 +548,8 @@ export class DocumentModuleService extends MedusaService({
           short_pdf_link: record.short_pdf_link,
           custom_message: input.custom_email_message,
           subject: input.email_subject,
+          order_id: record.order_id,
+          repair_ticket_id: record.repair_ticket_id,
         },
         channels: input.notification_channels,
         settings,
@@ -452,8 +586,14 @@ export class DocumentModuleService extends MedusaService({
           logger
         );
 
-        const docType = record.type === "estimate" ? "estimate" : "invoice";
-        const rawBuf = await zoho.getDocumentPdf(record.zoho_document_id, docType);
+        let rawBuf: ArrayBuffer;
+        if (record.type === "receipt") {
+          rawBuf = await zoho.getPaymentReceiptPdf(record.zoho_document_id);
+        } else {
+          const docType = record.type === "estimate" ? "estimate" : "invoice";
+          rawBuf = await zoho.getDocumentPdf(record.zoho_document_id, docType);
+        }
+
         return await postProcessPdf(Buffer.from(rawBuf), {
           qrUrl: record.short_payment_link || record.payment_link,
           obscureZohoFooter: true,
