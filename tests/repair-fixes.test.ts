@@ -519,3 +519,393 @@ test("Fix 4 Enhancement: variant title preserves product title when variant is D
   // Option name should be nicely appended
   assert.strictEqual(capturedItems[1].title, "Back Glass Panel (Midnight Black)");
 });
+
+test("Seamless Handover: repair.created generates JOB-xxx job card, sets auto_send: false, and updates ticket metadata", async () => {
+  let capturedDocInput: any = null;
+  let updatedTicketMetadata: any = null;
+
+  const mockDocService = {
+    getSettings: async () => ({
+      event_repair_created_enabled: true,
+    }),
+    generateDocument: async (input: any) => {
+      capturedDocInput = input;
+      return {
+        record: {
+          id: "doc_job_01",
+          title: input.title,
+          pdf_url: "http://localhost:3000/documents/doc_job_01/document",
+          short_pdf_link: "http://localhost:3000/r/job01",
+        },
+      };
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_created_01",
+          ticket_number: 777,
+          status: "received",
+          approval_token: "tok_track_777",
+          device: { model_name: "iPhone 13" },
+        },
+      ],
+    }),
+  };
+
+  const mockRepairModule = {
+    retrieveRepairTicket: async (id: string) => ({ id, metadata: {} }),
+    updateRepairTickets: async (payload: any) => {
+      updatedTicketMetadata = payload.metadata;
+    },
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      if (key === "repair") return mockRepairModule;
+      return null;
+    },
+  };
+
+  await repairDocumentsSubscriber({
+    event: { name: "repair.created", data: { id: "rep_created_01" } },
+    container: mockContainer,
+  } as any);
+
+  assert.ok(capturedDocInput, "generateDocument should have been called");
+  assert.strictEqual(capturedDocInput.type, "job_card");
+  assert.strictEqual(capturedDocInput.display_id, "JOB-777");
+  assert.strictEqual(capturedDocInput.auto_send, false, "auto_send must be false to delegate notifications to repair plugin");
+  assert.ok(capturedDocInput.payment_link.includes("/repairs/track?token=tok_track_777"));
+
+  assert.ok(updatedTicketMetadata, "Repair ticket should be updated with handed over metadata");
+  assert.strictEqual(updatedTicketMetadata.document_id, "doc_job_01");
+  assert.strictEqual(updatedTicketMetadata.last_document_type, "job_card");
+  assert.strictEqual(updatedTicketMetadata.short_pdf_link, "http://localhost:3000/r/job01");
+});
+
+test("Seamless Handover: repair.payment_received generates RCPT-xxx receipt with exact paid amount and hands over to repair ticket", async () => {
+  let capturedDocInput: any = null;
+  let updatedTicketMetadata: any = null;
+
+  const mockDocService = {
+    getSettings: async () => ({}),
+    generateDocument: async (input: any) => {
+      capturedDocInput = input;
+      return {
+        record: {
+          id: "doc_rcpt_01",
+          title: input.title,
+          pdf_url: "http://localhost:3000/documents/doc_rcpt_01/document",
+          short_pdf_link: "http://localhost:3000/r/rcpt01",
+        },
+      };
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_pay_888",
+          ticket_number: 888,
+          status: "in_progress",
+          total_estimate: 500,
+          total_actual: 450,
+          approval_token: "tok_pay_888",
+          device: { model_name: "Dell XPS 15" },
+        },
+      ],
+    }),
+  };
+
+  const mockRepairModule = {
+    retrieveRepairTicket: async (id: string) => ({ id, metadata: { document_id: "doc_prev_job" } }),
+    updateRepairTickets: async (payload: any) => {
+      updatedTicketMetadata = payload.metadata;
+    },
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      if (key === "repair") return mockRepairModule;
+      return null;
+    },
+  };
+
+  await repairDocumentsSubscriber({
+    event: {
+      name: "repair.payment_received",
+      data: {
+        id: "rep_pay_888",
+        repair_ticket_id: "rep_pay_888",
+        amount: 450,
+        order_id: "ord_medusa_checkout_99",
+      },
+    },
+    container: mockContainer,
+  } as any);
+
+  assert.ok(capturedDocInput, "generateDocument should have been called");
+  assert.strictEqual(capturedDocInput.type, "receipt");
+  assert.strictEqual(capturedDocInput.title, "Repair Payment Receipt");
+  assert.strictEqual(capturedDocInput.display_id, "RCPT-888");
+  assert.strictEqual(capturedDocInput.total, 450);
+  assert.strictEqual(capturedDocInput.payment_status, "paid");
+  assert.strictEqual(capturedDocInput.order_id, "ord_medusa_checkout_99");
+  assert.strictEqual(capturedDocInput.auto_send, false, "Receipt notifications must NOT be duplicated by documents plugin");
+
+  assert.ok(updatedTicketMetadata);
+  assert.strictEqual(updatedTicketMetadata.last_document_type, "receipt");
+  assert.strictEqual(updatedTicketMetadata.short_pdf_link, "http://localhost:3000/r/rcpt01");
+});
+
+test("Shortlink Resolution: cross-plugin resolution between documents and repair plugins without 404s", async () => {
+  const { GET: handleRootShortlink } = await import("../src/api/r/[code]/route");
+  const { GET: handleDocShortlink } = await import("../src/api/documents/r/[code]/route");
+
+  // Case 1: Shortlink exists only in repair module, queried via /documents/r/:code
+  let redirectedUrl = "";
+  let statusCode = 0;
+  const mockRes: any = {
+    setHeader: (name: string, val: string) => {
+      if (name === "Location") redirectedUrl = val;
+    },
+    status: (code: number) => {
+      statusCode = code;
+      return { send: () => {} };
+    },
+  };
+
+  const mockReq: any = {
+    params: { code: "rep_short_123" },
+    get: () => "localhost:9000",
+    protocol: "http",
+    scope: {
+      resolve: (key: string) => {
+        if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+        if (key === "documents") {
+          return {
+            listDocumentLinks: async () => [], // not in documents
+          };
+        }
+        if (key === "repair") {
+          return {
+            listRepairLinks: async (filter: any) => {
+              if (filter.shortcode === "rep_short_123") {
+                return [{ shortcode: "rep_short_123", url: "/store/repairs/token/tok_abc/document?type=quote" }];
+              }
+              return [];
+            },
+          };
+        }
+        return null;
+      },
+    },
+  };
+
+  await handleDocShortlink(mockReq, mockRes);
+  assert.strictEqual(statusCode, 302);
+  assert.strictEqual(redirectedUrl, "http://localhost:9000/store/repairs/token/tok_abc/document?type=quote");
+
+  // Case 2: Root shortlink /r/:code resolving a document link
+  let rootRedirectUrl = "";
+  let rootStatusCode = 0;
+  const mockRootRes: any = {
+    setHeader: (name: string, val: string) => {
+      if (name === "Location") rootRedirectUrl = val;
+    },
+    status: (code: number) => {
+      rootStatusCode = code;
+      return { send: () => {} };
+    },
+  };
+
+  const mockRootReq: any = {
+    params: { code: "doc_short_456" },
+    get: () => "localhost:9000",
+    protocol: "http",
+    scope: {
+      resolve: (key: string) => {
+        if (key === "documents") {
+          return {
+            listDocumentLinks: async (filter: any) => {
+              if (filter.shortcode === "doc_short_456") {
+                return [{ shortcode: "doc_short_456", url: "https://example.com/receipt.pdf" }];
+              }
+              return [];
+            },
+          };
+        }
+        return null;
+      },
+    },
+  };
+
+  await handleRootShortlink(mockRootReq, mockRootRes);
+  assert.strictEqual(rootStatusCode, 302);
+  assert.strictEqual(rootRedirectUrl, "https://example.com/receipt.pdf");
+});
+
+test("Shortlink Normalization: Legacy admin URLs are safely rewritten to public backend streaming route", async () => {
+  const { GET: handleRootShortlink } = await import("../src/api/r/[code]/route");
+
+  let redirectedLocation = "";
+  let statusCode = 0;
+  const mockRes: any = {
+    setHeader: (name: string, val: string) => {
+      if (name === "Location") redirectedLocation = val;
+    },
+    status: (code: number) => {
+      statusCode = code;
+      return { send: () => {} };
+    },
+  };
+
+  const mockReq: any = {
+    params: { code: "legacy_01" },
+    get: (header: string) => {
+      if (header === "host") return "backend.example.com";
+      if (header === "x-forwarded-proto") return "https";
+      return "";
+    },
+    protocol: "http",
+    scope: {
+      resolve: (key: string) => {
+        if (key === "documents") {
+          return {
+            listDocumentLinks: async (filter: any) => {
+              if (filter.shortcode === "legacy_01") {
+                return [{ shortcode: "legacy_01", url: "http://localhost:3000/api/admin/documents/doc_test_123/document" }];
+              }
+              return [];
+            },
+          };
+        }
+        return null;
+      },
+    },
+  };
+
+  await handleRootShortlink(mockReq, mockRes);
+  assert.strictEqual(statusCode, 302);
+  assert.strictEqual(redirectedLocation, "https://backend.example.com/documents/doc_test_123/document");
+});
+
+test("Order documents subscriber suppresses fulfillment and shipment events when order is a repair payment", async () => {
+  let docGenerated = false;
+  const mockDocService = {
+    getSettings: async () => ({
+      event_order_fulfillment_enabled: true,
+    }),
+    generateDocument: async () => {
+      docGenerated = true;
+      return { record: { id: "doc_ful" } };
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "ord_ful_repair",
+          metadata: { repair_ticket_id: "rep_999" },
+        },
+      ],
+    }),
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      return null;
+    },
+  };
+
+  await orderDocumentsSubscriber({
+    event: { name: "fulfillment.created", data: { id: "ful_101", order_id: "ord_ful_repair" } },
+    container: mockContainer,
+  } as any);
+
+  assert.strictEqual(docGenerated, false, "Fulfillment notification must be suppressed for repair orders");
+});
+
+test("Repair subscriber creates exact receipt line item for deposit/partial payment", async () => {
+  let capturedDocInput: any = null;
+  const mockDocService = {
+    getSettings: async () => ({}),
+    generateDocument: async (input: any) => {
+      capturedDocInput = input;
+      return {
+        record: {
+          id: "doc_partial",
+          display_id: input.display_id,
+          pdf_url: "http://localhost:9000/documents/doc_partial/document",
+          short_pdf_link: "http://localhost:3000/r/part01",
+        },
+      };
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_partial_1",
+          ticket_number: 404,
+          status: "in_progress",
+          total_estimate: 800,
+          total_actual: 800,
+          approval_token: "tok_part_404",
+          device: { model_name: "iPad Pro" },
+        },
+      ],
+    }),
+  };
+
+  const mockRepairModule = {
+    retrieveRepairTicket: async () => ({ id: "rep_partial_1", metadata: {} }),
+    updateRepairTickets: async () => {},
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      if (key === "repair") return mockRepairModule;
+      return null;
+    },
+  };
+
+  await repairDocumentsSubscriber({
+    event: {
+      name: "repair.payment_received",
+      data: {
+        id: "rep_partial_1",
+        amount: 250, // partial deposit
+        reference: "DEP_REF_99",
+      },
+    },
+    container: mockContainer,
+  } as any);
+
+  assert.ok(capturedDocInput);
+  assert.strictEqual(capturedDocInput.total, 250);
+  assert.strictEqual(capturedDocInput.items.length, 1);
+  assert.strictEqual(capturedDocInput.items[0].total, 250);
+  assert.strictEqual(capturedDocInput.items[0].unit_price, 250);
+  assert.ok(capturedDocInput.items[0].description.includes("DEP_REF_99"));
+});
+
+

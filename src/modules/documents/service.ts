@@ -105,7 +105,7 @@ export class DocumentModuleService extends MedusaService({
       let root = (baseUrl || process.env.STORE_URL || "http://localhost:3000").replace(/\/$/, "");
 
       if (existing && existing.length > 0) {
-        return `${root}/api/store/documents/r/${existing[0].shortcode}`;
+        return `${root}/r/${existing[0].shortcode}`;
       }
 
       const shortcode = Math.random().toString(36).substring(2, 8);
@@ -114,7 +114,7 @@ export class DocumentModuleService extends MedusaService({
         url,
       });
 
-      return `${root}/api/store/documents/r/${shortcode}`;
+      return `${root}/r/${shortcode}`;
     } catch (e) {
       return url;
     }
@@ -506,7 +506,7 @@ export class DocumentModuleService extends MedusaService({
       payment_status: input.payment_status || "unpaid",
       payment_link: input.payment_link,
       short_payment_link: shortPaymentLink,
-      pdf_url: `${storeUrl}/api/admin/documents/${displayId}/document`,
+      pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
       metadata: {
         items: input.items,
         notes: input.notes,
@@ -515,8 +515,9 @@ export class DocumentModuleService extends MedusaService({
       },
     });
 
-    // Update with real short URL for document
-    const realPdfUrl = `${storeUrl}/api/admin/documents/${record.id}/document`;
+    // Update with real public URL and short URL for document
+    const backendUrl = (process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "");
+    const realPdfUrl = `${backendUrl}/documents/${record.id}/document`;
     const shortPdfLink = await this.getOrGenerateShortUrl(realPdfUrl, storeUrl);
 
     await this.updateDocumentRecords({

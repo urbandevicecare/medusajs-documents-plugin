@@ -242,6 +242,23 @@ export default async function orderDocumentsSubscriber({
         );
         return;
       }
+      if (eventName === "order.completed") {
+        logger.info(
+          `[Documents-Subscriber] Order ${order.id} represents a repair payment for ticket #${order.metadata.repair_ticket_id}. Suppressing store order completed notification (handled by repair subscriber).`
+        );
+        return;
+      }
+      if (
+        eventName === "fulfillment.created" ||
+        eventName === "order.fulfillment_created" ||
+        eventName === "shipment.created" ||
+        eventName === "order.shipment_created"
+      ) {
+        logger.info(
+          `[Documents-Subscriber] Order ${order.id} represents a repair payment for ticket #${order.metadata.repair_ticket_id}. Suppressing store fulfillment / shipment notification.`
+        );
+        return;
+      }
     }
 
     const customerName =

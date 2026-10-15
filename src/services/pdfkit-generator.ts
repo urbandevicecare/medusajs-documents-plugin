@@ -236,8 +236,9 @@ export class PDFKitGenerator {
           }
 
           // Total Bar
+          const totalLabel = data.type === "receipt" ? "AMOUNT PAID:" : "TOTAL DUE:";
           doc.rect(totX - 5, totY, 195, 24).fill(primaryColor);
-          doc.font("Helvetica-Bold").fontSize(10).fillColor("#ffffff").text("TOTAL DUE:", totX + 5, totY + 7);
+          doc.font("Helvetica-Bold").fontSize(10).fillColor("#ffffff").text(totalLabel, totX + 5, totY + 7);
           doc.font("Helvetica-Bold").fontSize(10).fillColor("#ffffff").text(this.formatCurrency(data.total, data.currency_code), 450, totY + 7, { width: 90, align: "right" });
 
           rowY = totY + 35;
@@ -408,8 +409,9 @@ export class PDFKitGenerator {
         // Classic Total Box
         if (showPricing) {
           const tY = rowY + 10;
+          const totalLabel = data.type === "receipt" ? "AMOUNT PAID:" : "TOTAL PAYABLE:";
           doc.rect(350, tY, 205, 24).strokeColor("#000000").lineWidth(1).stroke();
-          doc.font(fontHeader).fontSize(9.5).text("TOTAL PAYABLE:", 358, tY + 7);
+          doc.font(fontHeader).fontSize(9.5).text(totalLabel, 358, tY + 7);
           doc.font(fontHeader).fontSize(9.5).text(this.formatCurrency(data.total, data.currency_code), 460, tY + 7, { width: 90, align: "right" });
           rowY = tY + 30;
         }
@@ -499,8 +501,9 @@ export class PDFKitGenerator {
         }
 
         if (showPricing) {
+          const totalLabel = data.type === "receipt" ? "AMOUNT PAID:" : "TOTAL:";
           doc.strokeColor("#000000").lineWidth(0.5).moveTo(340, rY + 8).lineTo(555, rY + 8).stroke();
-          doc.font("Courier-Bold").fontSize(10).text("TOTAL:", 340, rY + 14);
+          doc.font("Courier-Bold").fontSize(10).text(totalLabel, 340, rY + 14);
           doc.text(this.formatCurrency(data.total, data.currency_code), 460, rY + 14, { width: 85, align: "right" });
           rY += 30;
         }

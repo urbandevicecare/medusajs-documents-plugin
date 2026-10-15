@@ -5,18 +5,47 @@ import DocumentModuleService from "../../../../modules/documents/service";
 // GET /documents/:id/document (Public PDF download & view for recipients)
 export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
   const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
-  const id = req.params.id;
+  const cleanId = (req.params.id || "").replace(/\.pdf$/i, "");
 
   try {
     let record: any = null;
-    // Check by primary ID or human display_id (e.g. INV-1092)
+    // Check by primary ID or human display_id (e.g. INV-1092, JOB-101, RCPT-101)
     try {
-      record = await documentService.retrieveDocumentRecord(id);
-    } catch (e) {
-      const records = await documentService.listDocumentRecords({ display_id: id });
+      record = await documentService.retrieveDocumentRecord(cleanId);
+    } catch (e) {}
+
+    if (!record) {
+      const records = await documentService.listDocumentRecords({ display_id: cleanId }).catch(() => []);
       if (records && records.length > 0) {
         record = records[0];
       }
+    }
+
+    if (!record) {
+      const records = await documentService.listDocumentRecords({ repair_ticket_id: cleanId }).catch(() => []);
+      if (records && records.length > 0) {
+        record = records[0];
+      }
+    }
+
+    // Fallback: If not in documents table, check if cleanId is an approval token or ID in repair module
+    if (!record) {
+      try {
+        const repairModule: any = req.scope.resolve("repair", { allowUnregistered: true });
+        if (repairModule) {
+          let tickets = await repairModule.listRepairTickets({ approval_token: cleanId }).catch(() => []);
+          if (!tickets || tickets.length === 0) {
+            tickets = await repairModule.listRepairTickets({ id: cleanId }).catch(() => []);
+          }
+          if (tickets && tickets.length > 0) {
+            const ticket = tickets[0];
+            const metaDocId = (ticket.metadata as any)?.document_id;
+            if (metaDocId) {
+              record = await documentService.retrieveDocumentRecord(metaDocId).catch(() => null);
+            }
+          }
+        }
+      } catch (e) {}
     }
 
     if (!record) {

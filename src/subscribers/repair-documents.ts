@@ -177,8 +177,33 @@ export default async function repairDocumentsSubscriber({
       docTitle = "Repair Job Card";
     }
 
-    const displayId = docType === "job_card" ? `JOB-${ticket.ticket_number}` : `RT-${ticket.ticket_number}`;
-    const totalEstimate = Number(ticket.total_actual && ticket.total_actual > 0 ? ticket.total_actual : ticket.total_estimate || 0);
+    const displayId =
+      docType === "job_card"
+        ? `JOB-${ticket.ticket_number}`
+        : docType === "receipt"
+        ? `RCPT-${ticket.ticket_number}`
+        : docType === "estimate"
+        ? `EST-${ticket.ticket_number}`
+        : `RT-${ticket.ticket_number}`;
+    const totalEstimate =
+      eventName === "repair.payment_received" && data.amount != null && Number(data.amount) > 0
+        ? Number(data.amount)
+        : Number(ticket.total_actual && ticket.total_actual > 0 ? ticket.total_actual : ticket.total_estimate || 0);
+
+    // If this is a payment receipt event with a specific payment amount, ensure receipt line items match payment
+    if (eventName === "repair.payment_received" && data.amount != null && Number(data.amount) > 0) {
+      const lineItemSum = lineItems.reduce((acc, it) => acc + (it.total != null ? Number(it.total) : Number(it.quantity || 1) * Number(it.unit_price || 0)), 0);
+      if (lineItems.length === 0 || Math.abs(lineItemSum - Number(data.amount)) > 0.01) {
+        lineItems.length = 0;
+        lineItems.push({
+          title: `Repair Payment Received (#${ticket.ticket_number})`,
+          description: data.reference ? `Ref: ${data.reference}` : (data.order_id ? `Order: ${data.order_id}` : `Payment for Ticket #${ticket.ticket_number}`),
+          quantity: 1,
+          unit_price: Number(data.amount),
+          total: Number(data.amount),
+        });
+      }
+    }
 
     const trackingUrl = ticket.approval_token ? `${storeUrl}/repairs/track?token=${ticket.approval_token}` : undefined;
     const paymentOrTrackingLink = docType === "job_card" ? (trackingUrl || paymentInfo.paymentLink) : paymentInfo.paymentLink;
@@ -193,6 +218,7 @@ export default async function repairDocumentsSubscriber({
         title: docTitle,
         type: docType,
         repair_ticket_id: ticket.id,
+        order_id: data.order_id || ticket.order_id || (ticket.metadata as any)?.order_id,
         customer: {
           name: customerName,
           email: customerEmail,
