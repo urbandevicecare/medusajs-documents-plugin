@@ -7,24 +7,45 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
   const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
   const manager = req.scope.resolve("manager", { allowUnregistered: true });
   const sharedContext = manager ? { manager } : {};
-  const id = req.params.id;
+  const cleanId = (req.params.id || "").replace(/\.pdf$/i, "");
 
   try {
     let record: any = null;
     // Check by ID or display_id
     try {
-      record = await documentService.retrieveDocumentRecord(id, {}, sharedContext);
-    } catch (e) {
+      record = await documentService.retrieveDocumentRecord(cleanId, {}, sharedContext);
+    } catch (e) {}
+
+    if (!record) {
       try {
-        const records = await documentService.listDocumentRecords({ display_id: id }, {}, sharedContext);
+        const records = await documentService.listDocumentRecords({ display_id: cleanId }, {}, sharedContext);
         if (records && records.length > 0) {
           record = records[0];
         }
-      } catch (err2) {
-        const pg: any = getDatabaseConnection(req.scope);
-        if (pg) {
-          record = await pg("document_record").where({ id }).orWhere({ display_id: id }).first();
+      } catch (_) {}
+    }
+
+    if (!record) {
+      try {
+        const records = await documentService.listDocumentRecords({ repair_ticket_id: cleanId }, {}, sharedContext);
+        if (records && records.length > 0) {
+          record = records[0];
         }
+      } catch (_) {}
+    }
+
+    if (!record) {
+      const pg: any = getDatabaseConnection(req.scope);
+      if (pg) {
+        record = await pg("document_record")
+          .whereNull("deleted_at")
+          .where((builder: any) => {
+            builder
+              .where({ id: cleanId })
+              .orWhere({ display_id: cleanId })
+              .orWhere({ repair_ticket_id: cleanId });
+          })
+          .first();
       }
     }
 
@@ -40,7 +61,9 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     return res.send(pdfBuffer);
   } catch (err: any) {
-    req.scope.resolve("logger")?.error(`[Documents-API] Error streaming PDF: ${err.message}`);
+    try {
+      req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error streaming PDF: ${err.message}`);
+    } catch (_) {}
     return res.status(500).send(`Failed to generate document: ${err.message}`);
   }
 }

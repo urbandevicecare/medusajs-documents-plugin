@@ -35,9 +35,13 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
       const pg: any = getDatabaseConnection(req.scope);
       if (pg) {
         record = await pg("document_record")
-          .where({ id: cleanId })
-          .orWhere({ display_id: cleanId })
-          .orWhere({ repair_ticket_id: cleanId })
+          .whereNull("deleted_at")
+          .where((builder: any) => {
+            builder
+              .where({ id: cleanId })
+              .orWhere({ display_id: cleanId })
+              .orWhere({ repair_ticket_id: cleanId });
+          })
           .first();
       }
     }
@@ -74,7 +78,9 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
     res.setHeader("Cache-Control", "public, max-age=3600");
     return res.send(pdfBuffer);
   } catch (err: any) {
-    req.scope.resolve("logger")?.error(`[Documents-Public] Error streaming PDF: ${err.message}`);
+    try {
+      req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-Public] Error streaming PDF: ${err.message}`);
+    } catch (_) {}
     return res.status(500).send(`Failed to generate document: ${err.message}`);
   }
 }

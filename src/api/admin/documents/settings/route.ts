@@ -1,4 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { generateEntityId } from "@medusajs/framework/utils";
 import { DOCUMENTS_MODULE } from "../../../../modules/documents";
 import DocumentModuleService, { getDatabaseConnection } from "../../../../modules/documents/service";
 
@@ -16,10 +17,11 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       // Fallback: If MikroORM fork error occurs, query pg_connection directly
       const pgConnection: any = getDatabaseConnection(req.scope);
       if (pgConnection) {
-        let settings = await pgConnection("document_settings").first();
+        let settings = await pgConnection("document_settings").whereNull("deleted_at").first();
         if (!settings) {
-          const [created] = await pgConnection("document_settings")
+          const createdResult = await pgConnection("document_settings")
             .insert({
+              id: generateEntityId(undefined, "docset"),
               company_name: "Store",
               email_notifications_enabled: true,
               sms_notifications_enabled: true,
@@ -28,14 +30,16 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
               updated_at: new Date(),
             })
             .returning("*");
-          settings = created;
+          settings = Array.isArray(createdResult) ? createdResult[0] : createdResult;
         }
         return res.json({ settings, success: true });
       }
       throw err;
     }
   } catch (err: any) {
-    req.scope.resolve("logger")?.error(`[Documents-API] Error fetching settings: ${err.message}`);
+    try {
+      req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error fetching settings: ${err.message}`);
+    } catch (_) {}
     return res.status(500).json({ message: err.message, error: true });
   }
 }
@@ -71,25 +75,26 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       // Fallback: If MikroORM fork error occurs, update via pg_connection directly
       const pgConnection: any = getDatabaseConnection(req.scope);
       if (pgConnection) {
-        const existing = await pgConnection("document_settings").first();
+        const existing = await pgConnection("document_settings").whereNull("deleted_at").first();
         if (existing) {
-          const [updated] = await pgConnection("document_settings")
+          const updatedResult = await pgConnection("document_settings")
             .where({ id: existing.id })
             .update({
               ...cleanData,
               updated_at: new Date(),
             })
             .returning("*");
-          settings = updated;
+          settings = Array.isArray(updatedResult) ? updatedResult[0] : updatedResult;
         } else {
-          const [created] = await pgConnection("document_settings")
+          const createdResult = await pgConnection("document_settings")
             .insert({
+              id: generateEntityId(undefined, "docset"),
               ...cleanData,
               created_at: new Date(),
               updated_at: new Date(),
             })
             .returning("*");
-          settings = created;
+          settings = Array.isArray(createdResult) ? createdResult[0] : createdResult;
         }
       } else {
         throw err;
@@ -98,7 +103,9 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
 
     return res.json({ settings, success: true });
   } catch (err: any) {
-    req.scope.resolve("logger")?.error(`[Documents-API] Error updating settings: ${err.message}`);
+    try {
+      req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error updating settings: ${err.message}`);
+    } catch (_) {}
     return res.status(500).json({ message: err.message, error: true });
   }
 }

@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../../../modules/documents";
-import DocumentModuleService from "../../../../../../modules/documents/service";
+import DocumentModuleService, { getDatabaseConnection } from "../../../../../../modules/documents/service";
 
 // GET /api/admin/documents/:id/document (Compatibility endpoint for handed-over URLs)
 export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
@@ -24,6 +24,21 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
       const records = await documentService.listDocumentRecords({ repair_ticket_id: cleanId }).catch(() => []);
       if (records && records.length > 0) {
         record = records[0];
+      }
+    }
+
+    if (!record) {
+      const pg: any = getDatabaseConnection(req.scope);
+      if (pg) {
+        record = await pg("document_record")
+          .whereNull("deleted_at")
+          .where((builder: any) => {
+            builder
+              .where({ id: cleanId })
+              .orWhere({ display_id: cleanId })
+              .orWhere({ repair_ticket_id: cleanId });
+          })
+          .first();
       }
     }
 
@@ -58,7 +73,9 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
     res.setHeader("Cache-Control", "public, max-age=3600");
     return res.send(pdfBuffer);
   } catch (err: any) {
-    req.scope.resolve("logger")?.error?.(`[Documents-API] Error streaming PDF: ${err.message}`);
+    try {
+      req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error streaming PDF: ${err.message}`);
+    } catch (_) {}
     return res.status(500).send(`Failed to generate document: ${err.message}`);
   }
 }

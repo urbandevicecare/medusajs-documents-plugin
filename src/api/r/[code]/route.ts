@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../modules/documents";
-import DocumentModuleService from "../../../modules/documents/service";
+import DocumentModuleService, { getDatabaseConnection } from "../../../modules/documents/service";
 
 // GET /r/:code (Universal public shortlink redirect)
 export async function GET(req: MedusaRequest<{ code: string }>, res: MedusaResponse) {
@@ -23,6 +23,14 @@ export async function GET(req: MedusaRequest<{ code: string }>, res: MedusaRespo
       } catch (e) {}
     }
 
+    if (!links || links.length === 0) {
+      const pg: any = getDatabaseConnection(req.scope);
+      if (pg) {
+        const row = await pg("document_link").whereNull("deleted_at").where({ shortcode: code }).first();
+        if (row) links = [row];
+      }
+    }
+
     if (links && links.length > 0) {
       let targetUrl = links[0].url;
       const host = req.get("host") || "localhost:9000";
@@ -42,7 +50,9 @@ export async function GET(req: MedusaRequest<{ code: string }>, res: MedusaRespo
 
     return res.status(404).send("Link not found or expired.");
   } catch (err: any) {
-    req.scope.resolve("logger")?.error?.(`[Shortlink-Public] Error resolving /r/${code}: ${err.message}`);
+    try {
+      req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Shortlink-Public] Error resolving /r/${code}: ${err.message}`);
+    } catch (_) {}
     return res.status(500).send("Error resolving link");
   }
 }

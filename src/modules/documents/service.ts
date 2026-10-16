@@ -1,4 +1,4 @@
-import { MedusaService, ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { MedusaService, ContainerRegistrationKeys, generateEntityId } from "@medusajs/framework/utils";
 import { DocumentSettings } from "./models/document-settings";
 import { DocumentRecord } from "./models/document-record";
 import { DocumentLink } from "./models/document-link";
@@ -47,6 +47,22 @@ export function getDatabaseConnection(container: any): any {
   if (!container) {
     return undefined;
   }
+
+  // If passed an object containing __container__ (like a service instance), extract it
+  try {
+    if (container.__container__) {
+      const nested = getDatabaseConnection(container.__container__);
+      if (nested) return nested;
+    }
+  } catch (_) {}
+
+  // If passed an object containing scope (like MedusaRequest), extract it
+  try {
+    if (container.scope) {
+      const nested = getDatabaseConnection(container.scope);
+      if (nested) return nested;
+    }
+  } catch (_) {}
 
   // 1. Try resolve method on container / req.scope (guarded by try-catch because cradle proxies throw on unknown property access)
   try {
@@ -169,9 +185,10 @@ export class DocumentModuleService extends MedusaService({
     } catch (err: any) {
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        let row = await conn("document_settings").first();
+        let row = await conn("document_settings").whereNull("deleted_at").first();
         if (row) return row;
-        const [created] = await conn("document_settings").insert({
+        const createdResult = await conn("document_settings").insert({
+          id: generateEntityId(undefined, "docset"),
           company_name: "Store",
           email_notifications_enabled: true,
           sms_notifications_enabled: true,
@@ -195,7 +212,7 @@ export class DocumentModuleService extends MedusaService({
           created_at: new Date(),
           updated_at: new Date(),
         }).returning("*");
-        return created;
+        return Array.isArray(createdResult) ? createdResult[0] : createdResult;
       }
       throw err;
     }
@@ -234,7 +251,9 @@ export class DocumentModuleService extends MedusaService({
     record: any;
     pdfBuffer: Buffer;
   }> {
-    const settings = await this.getSettings();
+    const manager = container?.resolve?.("manager", { allowUnregistered: true });
+    const sharedContext = manager ? { manager } : {};
+    const settings = await this.getSettings(sharedContext, container);
     const storeUrl = (settings.storefront_url || process.env.STORE_URL || "http://localhost:3000").replace(/\/$/, "");
 
     // 0. Auto-hydrate repair ticket data if needed
@@ -590,8 +609,6 @@ export class DocumentModuleService extends MedusaService({
 
     // Save Record to Database
     const initialPdfUrl = `${storeUrl}/api/admin/documents/temp/document`;
-    const manager = container?.resolve?.("manager", { allowUnregistered: true });
-    const sharedContext = manager ? { manager } : {};
 
     let record: any = null;
     try {
@@ -629,6 +646,7 @@ export class DocumentModuleService extends MedusaService({
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
         const [inserted] = await conn("document_record").insert({
+          id: generateEntityId(undefined, "doc"),
           display_id: displayId,
           title: input.title || (
             input.type === "invoice" ? "Tax Invoice" :
@@ -732,7 +750,12 @@ export class DocumentModuleService extends MedusaService({
     } catch (e) {
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        record = await conn("document_record").where({ id: recordId }).orWhere({ display_id: recordId }).first();
+        record = await conn("document_record")
+          .whereNull("deleted_at")
+          .where((builder: any) => {
+            builder.where({ id: recordId }).orWhere({ display_id: recordId });
+          })
+          .first();
       }
       if (!record) throw e;
     }
@@ -746,7 +769,7 @@ export class DocumentModuleService extends MedusaService({
       settings.zoho_client_id
     ) {
       try {
-        const logger = container?.resolve("logger");
+        const logger = container?.resolve?.("logger", { allowUnregistered: true });
         const zoho = new ZohoBooksService(
           {
             client_id: settings.zoho_client_id,
@@ -771,7 +794,9 @@ export class DocumentModuleService extends MedusaService({
           obscureZohoFooter: true,
         });
       } catch (err: any) {
-        container?.resolve("logger")?.warn(`[Documents-Module] Failed to fetch PDF from Zoho (${err.message}). Regenerating via PDFKit.`);
+        try {
+          container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[Documents-Module] Failed to fetch PDF from Zoho (${err.message}). Regenerating via PDFKit.`);
+        } catch (_) {}
       }
     }
 

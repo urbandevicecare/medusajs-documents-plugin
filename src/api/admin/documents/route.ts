@@ -33,23 +33,29 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     count = fetchedCount;
   } catch (err: any) {
     // Fallback: If MikroORM fork error occurs, query pg_connection directly
-    const pgConnection: any = getDatabaseConnection(req.scope);
-    if (pgConnection) {
-      let query = pgConnection("document_record");
-      if (filters.type) query = query.where({ type: filters.type });
-      if (filters.source) query = query.where({ source: filters.source });
-      if (filters.status) query = query.where({ status: filters.status });
+    try {
+      const pgConnection: any = getDatabaseConnection(req.scope);
+      if (pgConnection) {
+        let query = pgConnection("document_record").whereNull("deleted_at");
+        if (filters.type) query = query.where({ type: filters.type });
+        if (filters.source) query = query.where({ source: filters.source });
+        if (filters.status) query = query.where({ status: filters.status });
 
-      const countResult = await query.clone().count("id as count").first();
-      count = Number(countResult?.count || 0);
+        const countResult = await query.clone().count("id as count").first();
+        count = Number(countResult?.count || 0);
 
-      records = await query
-        .orderBy("created_at", "desc")
-        .limit(Number(take))
-        .offset(Number(skip));
-    } else {
-      req.scope.resolve("logger")?.error(`[Documents-API] Error listing documents: ${err.message}`);
-      return res.status(500).json({ message: err.message, error: true });
+        records = await query
+          .orderBy("created_at", "desc")
+          .limit(Number(take))
+          .offset(Number(skip));
+      } else {
+        throw err;
+      }
+    } catch (fallbackErr: any) {
+      try {
+        req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error listing documents: ${fallbackErr.message || err.message}`);
+      } catch (_) {}
+      return res.status(500).json({ message: fallbackErr.message || err.message, error: true });
     }
   }
 
