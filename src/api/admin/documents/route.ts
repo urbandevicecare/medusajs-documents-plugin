@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../modules/documents";
-import DocumentModuleService from "../../../modules/documents/service";
+import DocumentModuleService, { getDatabaseConnection } from "../../../modules/documents/service";
 
 // GET /admin/documents
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -33,9 +33,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     count = fetchedCount;
   } catch (err: any) {
     // Fallback: If MikroORM fork error occurs, query pg_connection directly
-    const pgConnection: any = req.scope.resolve("pg_connection", { allowUnregistered: true });
+    const pgConnection: any = getDatabaseConnection(req.scope);
     if (pgConnection) {
-      let query = pgConnection("document_records");
+      let query = pgConnection("document_record");
       if (filters.type) query = query.where({ type: filters.type });
       if (filters.source) query = query.where({ source: filters.source });
       if (filters.status) query = query.where({ status: filters.status });

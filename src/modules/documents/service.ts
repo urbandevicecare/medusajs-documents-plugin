@@ -38,14 +38,83 @@ export interface GenerateDocumentInput {
   custom_email_message?: string;
 }
 
+/**
+ * Safely resolves the Knex database connection from a Medusa container or scope.
+ * Tries ContainerRegistrationKeys.PG_CONNECTION ("__pg_connection__") and fallback keys.
+ * Never throws AwilixResolutionError.
+ */
+export function getDatabaseConnection(container: any): any {
+  if (!container) {
+    return undefined;
+  }
+
+  // 1. Try resolve method on container / req.scope (guarded by try-catch because cradle proxies throw on unknown property access)
+  try {
+    if (typeof container.resolve === "function") {
+      try {
+        const conn = container.resolve(ContainerRegistrationKeys.PG_CONNECTION, { allowUnregistered: true });
+        if (conn) return conn;
+      } catch (_) {}
+
+      try {
+        const conn = container.resolve("__pg_connection__", { allowUnregistered: true });
+        if (conn) return conn;
+      } catch (_) {}
+
+      try {
+        const conn = container.resolve("pg_connection", { allowUnregistered: true });
+        if (conn) return conn;
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // 2. Try cradle proxy if available (each property access guarded)
+  try {
+    const cradle = container.cradle;
+    if (cradle) {
+      try {
+        if (cradle[ContainerRegistrationKeys.PG_CONNECTION]) {
+          return cradle[ContainerRegistrationKeys.PG_CONNECTION];
+        }
+      } catch (_) {}
+      try {
+        if (cradle["__pg_connection__"]) {
+          return cradle["__pg_connection__"];
+        }
+      } catch (_) {}
+      try {
+        if (cradle["pg_connection"]) {
+          return cradle["pg_connection"];
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // 3. Try direct property index on container (each property access guarded)
+  try {
+    if (container[ContainerRegistrationKeys.PG_CONNECTION]) {
+      return container[ContainerRegistrationKeys.PG_CONNECTION];
+    }
+  } catch (_) {}
+  try {
+    if (container["__pg_connection__"]) {
+      return container["__pg_connection__"];
+    }
+  } catch (_) {}
+  try {
+    if (container["pg_connection"]) {
+      return container["pg_connection"];
+    }
+  } catch (_) {}
+
+  return undefined;
+}
+
 export class DocumentModuleService extends MedusaService({
   DocumentSettings,
   DocumentRecord,
   DocumentLink,
 }) {
-  /**
-   * Retrieves or initializes default plugin settings
-   */
   /**
    * Retrieves or initializes default plugin settings
    */
@@ -98,8 +167,7 @@ export class DocumentModuleService extends MedusaService({
         order_canceled_whatsapp_template: null,
       }, sharedContext);
     } catch (err: any) {
-      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
-                   (this as any).__container__?.["pg_connection"];
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
         let row = await conn("document_settings").first();
         if (row) return row;
@@ -558,10 +626,9 @@ export class DocumentModuleService extends MedusaService({
         },
       }, sharedContext);
     } catch (err: any) {
-      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
-                   (this as any).__container__?.["pg_connection"];
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        const [inserted] = await conn("document_records").insert({
+        const [inserted] = await conn("document_record").insert({
           display_id: displayId,
           title: input.title || (
             input.type === "invoice" ? "Tax Invoice" :
@@ -611,10 +678,9 @@ export class DocumentModuleService extends MedusaService({
         short_pdf_link: shortPdfLink,
       }, sharedContext);
     } catch (err: any) {
-      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
-                   (this as any).__container__?.["pg_connection"];
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        await conn("document_records").where({ id: record.id }).update({
+        await conn("document_record").where({ id: record.id }).update({
           pdf_url: realPdfUrl,
           short_pdf_link: shortPdfLink,
           updated_at: new Date(),
@@ -664,10 +730,9 @@ export class DocumentModuleService extends MedusaService({
     try {
       record = await this.retrieveDocumentRecord(recordId, {}, sharedContext);
     } catch (e) {
-      const conn = container?.resolve?.("pg_connection", { allowUnregistered: true }) ||
-                   (this as any).__container__?.["pg_connection"];
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        record = await conn("document_records").where({ id: recordId }).orWhere({ display_id: recordId }).first();
+        record = await conn("document_record").where({ id: recordId }).orWhere({ display_id: recordId }).first();
       }
       if (!record) throw e;
     }

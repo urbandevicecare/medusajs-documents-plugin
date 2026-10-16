@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../modules/documents";
-import DocumentModuleService from "../../../../modules/documents/service";
+import DocumentModuleService, { getDatabaseConnection } from "../../../../modules/documents/service";
 
 // GET /documents/:id/document (Public PDF download & view for recipients)
 export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
@@ -32,9 +32,9 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
     }
 
     if (!record) {
-      const pg: any = req.scope.resolve("pg_connection", { allowUnregistered: true });
+      const pg: any = getDatabaseConnection(req.scope);
       if (pg) {
-        record = await pg("document_records")
+        record = await pg("document_record")
           .where({ id: cleanId })
           .orWhere({ display_id: cleanId })
           .orWhere({ repair_ticket_id: cleanId })

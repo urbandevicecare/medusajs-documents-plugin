@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.6] - 2026-10-16
+
+### Patch Release: Safe Knex Resolution via `ContainerRegistrationKeys.PG_CONNECTION` & DML Table Name Correction
+
+- **Container DI Registration Key Fix**: Resolved `AwilixResolutionError: Could not resolve 'pg_connection'` by introducing `getDatabaseConnection(container)` helper which queries `ContainerRegistrationKeys.PG_CONNECTION` (`"__pg_connection__"`), `"__pg_connection__"`, and `"pg_connection"` with `{ allowUnregistered: true }` wrapped safely in try/catch blocks.
+- **Awilix Cradle Proxy Safety**: Eliminated raw property lookups against `__container__` proxies which bypass `allowUnregistered` and trigger unhandled errors in Medusa v2.
+- **DML Database Table Alignment**: Fixed table name mismatch where Knex fallback queries were referencing `document_records` (plural) instead of the singular `document_record` table created by Medusa v2 DML (`model.define("document_record", ...)`), preventing `relation "document_records" does not exist` 500 runtime exceptions in document listings and PDF streams.
+- **Backend Dependency Update**: Pointed `admin.urbandevicecare.co.uk` backend dependency to `"medusajs-documents-plugin": "^1.1.6"`.
+
+---
+
 ## [1.1.5] - 2026-10-16
 
 ### Patch Release: Dual Transaction Context Injection & Direct Knex Fallback for Settings & Documents

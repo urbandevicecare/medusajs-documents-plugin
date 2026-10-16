@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../modules/documents";
-import DocumentModuleService from "../../../../modules/documents/service";
+import DocumentModuleService, { getDatabaseConnection } from "../../../../modules/documents/service";
 
 // GET /admin/documents/settings
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -14,7 +14,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       return res.json({ settings, success: true });
     } catch (err: any) {
       // Fallback: If MikroORM fork error occurs, query pg_connection directly
-      const pgConnection: any = req.scope.resolve("pg_connection", { allowUnregistered: true });
+      const pgConnection: any = getDatabaseConnection(req.scope);
       if (pgConnection) {
         let settings = await pgConnection("document_settings").first();
         if (!settings) {
@@ -69,7 +69,7 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       }
     } catch (err: any) {
       // Fallback: If MikroORM fork error occurs, update via pg_connection directly
-      const pgConnection: any = req.scope.resolve("pg_connection", { allowUnregistered: true });
+      const pgConnection: any = getDatabaseConnection(req.scope);
       if (pgConnection) {
         const existing = await pgConnection("document_settings").first();
         if (existing) {

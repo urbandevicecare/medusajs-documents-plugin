@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../../modules/documents";
-import DocumentModuleService from "../../../../../modules/documents/service";
+import DocumentModuleService, { getDatabaseConnection } from "../../../../../modules/documents/service";
 
 // GET /admin/documents/:id/document
 export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
@@ -21,9 +21,9 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
           record = records[0];
         }
       } catch (err2) {
-        const pg: any = req.scope.resolve("pg_connection", { allowUnregistered: true });
+        const pg: any = getDatabaseConnection(req.scope);
         if (pg) {
-          record = await pg("document_records").where({ id }).orWhere({ display_id: id }).first();
+          record = await pg("document_record").where({ id }).orWhere({ display_id: id }).first();
         }
       }
     }
