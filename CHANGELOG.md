@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.10] - 2026-10-16
+
+### Documentation & Registration Safeguards
+
+- **Installation & Setup Documentation Update**:
+  - Corrected `medusa-config.ts` registration snippet in `README.md` to show registration solely within the `plugins: [...]` array.
+  - Added a prominent `[!IMPORTANT]` warning cautioning users never to declare the plugin in both `plugins` and `modules`, explaining how Medusa v2's `mergePluginModules` loader overwrites internal model/migration directory paths, causing skipped migrations (`relation "document_settings" does not exist`) and MikroORM `reading 'fork'` runtime exceptions.
+
+---
+
 ## [1.1.9] - 2026-10-16
 
 ### Patch Release: PostgreSQL 42P01 Missing Table Resilience & Barcode Generation Support

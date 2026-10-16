@@ -102,21 +102,23 @@ module.exports = defineConfig({
   plugins: [
     {
       resolve: "medusajs-documents-plugin",
-      options: {}
+      options: {
+        // Optional plugin configuration
+      }
     },
     // other plugins...
   ],
-  modules: [
-    {
-      key: "documents",
-      resolve: "medusajs-documents-plugin",
-      options: {}
-    }
-  ]
 });
 ```
 
+> [!IMPORTANT]
+> **DO NOT declare `medusajs-documents-plugin` in `modules: [...]`!**
+> In Medusa v2, plugins should **ONLY** be registered in the `plugins: [...]` array. 
+> 
+> Declaring the plugin in both `plugins` and `modules` (e.g. `{ key: "documents", resolve: "medusajs-documents-plugin" }`) causes Medusa's module loader (`mergePluginModules`) to overwrite the auto-discovered module directory. This prevents Medusa from finding the models and migrations, leading to `relation "document_settings" does not exist` and MikroORM `reading 'fork'` runtime exceptions.
+
 ### 2. Run Database Migrations
+Run the migrations to create the required tables (`document_settings`, `document_record`, `document_link`):
 ```bash
 npx medusa db:migrate
 ```
