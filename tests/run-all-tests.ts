@@ -5,3 +5,4 @@ import "./zoho-books.test";
 import "./notification-sender.test";
 import "./order-notifications.test";
 import "./repair-fixes.test";
+import "./table-resilience.test";

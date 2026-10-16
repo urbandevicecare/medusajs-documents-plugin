@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
+import bwipjs from "bwip-js";
 
 export interface LineItem {
   title: string;
@@ -54,6 +55,20 @@ export class PDFKitGenerator {
       currency: currency.toUpperCase(),
       minimumFractionDigits: 2,
     }).format(amount);
+  }
+
+  static async generateBarcode(text: string): Promise<Buffer | null> {
+    try {
+      return await bwipjs.toBuffer({
+        bcid: "code128",
+        text: String(text).trim(),
+        scale: 2,
+        height: 10,
+        includetext: false,
+      });
+    } catch {
+      return null;
+    }
   }
 
   static async generate(data: DocumentData, templateStyle: string = "modern"): Promise<Buffer> {
@@ -128,6 +143,16 @@ export class PDFKitGenerator {
             doc.image(qrBuf, 500, headerY + 62, { width: 55, height: 55 });
             if (data.type === "job_card") {
               doc.fontSize(6).fillColor(subtleColor).text("Scan to Track", 500, headerY + 120, { width: 55, align: "center" });
+            }
+          } catch (e) {}
+        }
+
+        // 1D Barcode (Code 128)
+        if (data.display_id) {
+          try {
+            const barcodeBuf = await PDFKitGenerator.generateBarcode(String(data.display_id));
+            if (barcodeBuf) {
+              doc.image(barcodeBuf, 370, headerY + 62, { width: 110, height: 22 });
             }
           } catch (e) {}
         }
@@ -342,6 +367,16 @@ export class PDFKitGenerator {
           } catch (e) {}
         }
 
+        // 1D Barcode if display_id provided
+        if (data.display_id) {
+          try {
+            const barcodeBuf = await PDFKitGenerator.generateBarcode(String(data.display_id));
+            if (barcodeBuf) {
+              doc.image(barcodeBuf, 385, 88, { width: 110, height: 18 });
+            }
+          } catch (e) {}
+        }
+
         // Double Box Bill To
         doc.rect(40, 110, 455, 65).strokeColor("#000000").lineWidth(0.5).stroke();
         const clientLabel = data.type === "job_card" ? "CUSTOMER & INTAKE INFORMATION:" : "CLIENT INFORMATION:";
@@ -461,6 +496,16 @@ export class PDFKitGenerator {
           try {
             const qrBuf = await QRCode.toBuffer(data.qr_url, { width: 45, margin: 0 });
             doc.image(qrBuf, 510, 42, { width: 45, height: 45 });
+          } catch (e) {}
+        }
+
+        // 1D Barcode if display_id provided
+        if (data.display_id) {
+          try {
+            const barcodeBuf = await PDFKitGenerator.generateBarcode(String(data.display_id));
+            if (barcodeBuf) {
+              doc.image(barcodeBuf, 390, 78, { width: 100, height: 14 });
+            }
           } catch (e) {}
         }
 

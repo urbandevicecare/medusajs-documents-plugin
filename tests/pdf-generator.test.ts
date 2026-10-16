@@ -124,3 +124,13 @@ test("PDFKitGenerator produces valid PDFs for all 18 combinations of styles and 
     }
   }
 });
+
+test("PDFKitGenerator.generateBarcode creates valid Code 128 barcode buffer for part SKUs and tickets", async () => {
+  const barcodeBuf = await PDFKitGenerator.generateBarcode("NP04011448");
+  assert.ok(barcodeBuf instanceof Buffer, "Barcode output must be a Buffer");
+  assert.ok(barcodeBuf.length > 100, "Barcode buffer should not be empty");
+
+  const ticketBarcode = await PDFKitGenerator.generateBarcode("REP-10023");
+  assert.ok(ticketBarcode instanceof Buffer, "Ticket barcode must be a Buffer");
+  assert.ok(ticketBarcode.length > 100, "Ticket barcode buffer should not be empty");
+});

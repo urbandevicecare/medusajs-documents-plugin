@@ -1,7 +1,11 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { generateEntityId } from "@medusajs/framework/utils";
 import { DOCUMENTS_MODULE } from "../../../../modules/documents";
-import DocumentModuleService, { getDatabaseConnection } from "../../../../modules/documents/service";
+import DocumentModuleService, {
+  getDatabaseConnection,
+  isUndefinedTableError,
+  DEFAULT_DOCUMENT_SETTINGS,
+} from "../../../../modules/documents/service";
 
 // GET /admin/documents/settings
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -12,31 +16,61 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     try {
       const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
       const settings = await documentService.getSettings(sharedContext, req.scope);
-      return res.json({ settings, success: true });
+      const isDefault = settings?.id === "default";
+      return res.json({
+        settings,
+        success: true,
+        ...(isDefault ? { warning: "Migrations pending" } : {}),
+      });
     } catch (err: any) {
+      if (isUndefinedTableError(err)) {
+        return res.json({
+          settings: { ...DEFAULT_DOCUMENT_SETTINGS },
+          success: true,
+          warning: "Migrations pending",
+        });
+      }
       // Fallback: If MikroORM fork error occurs, query pg_connection directly
       const pgConnection: any = getDatabaseConnection(req.scope);
       if (pgConnection) {
-        let settings = await pgConnection("document_settings").whereNull("deleted_at").first();
-        if (!settings) {
-          const createdResult = await pgConnection("document_settings")
-            .insert({
-              id: generateEntityId(undefined, "docset"),
-              company_name: "Store",
-              email_notifications_enabled: true,
-              sms_notifications_enabled: true,
-              whatsapp_notifications_enabled: true,
-              created_at: new Date(),
-              updated_at: new Date(),
-            })
-            .returning("*");
-          settings = Array.isArray(createdResult) ? createdResult[0] : createdResult;
+        try {
+          let settings = await pgConnection("document_settings").whereNull("deleted_at").first();
+          if (!settings) {
+            const createdResult = await pgConnection("document_settings")
+              .insert({
+                id: generateEntityId(undefined, "docset"),
+                company_name: "Store",
+                email_notifications_enabled: true,
+                sms_notifications_enabled: true,
+                whatsapp_notifications_enabled: true,
+                created_at: new Date(),
+                updated_at: new Date(),
+              })
+              .returning("*");
+            settings = Array.isArray(createdResult) ? createdResult[0] : createdResult;
+          }
+          return res.json({ settings, success: true });
+        } catch (knexErr: any) {
+          if (isUndefinedTableError(knexErr)) {
+            return res.json({
+              settings: { ...DEFAULT_DOCUMENT_SETTINGS },
+              success: true,
+              warning: "Migrations pending",
+            });
+          }
+          throw knexErr;
         }
-        return res.json({ settings, success: true });
       }
       throw err;
     }
   } catch (err: any) {
+    if (isUndefinedTableError(err)) {
+      return res.json({
+        settings: { ...DEFAULT_DOCUMENT_SETTINGS },
+        success: true,
+        warning: "Migrations pending",
+      });
+    }
     try {
       req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error fetching settings: ${err.message}`);
     } catch (_) {}
@@ -72,29 +106,45 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
         }, sharedContext);
       }
     } catch (err: any) {
+      if (isUndefinedTableError(err)) {
+        return res.status(400).json({
+          message: "Database table document_settings does not exist. Please run npx medusa db:migrate.",
+          error: true,
+        });
+      }
       // Fallback: If MikroORM fork error occurs, update via pg_connection directly
       const pgConnection: any = getDatabaseConnection(req.scope);
       if (pgConnection) {
-        const existing = await pgConnection("document_settings").whereNull("deleted_at").first();
-        if (existing) {
-          const updatedResult = await pgConnection("document_settings")
-            .where({ id: existing.id })
-            .update({
-              ...cleanData,
-              updated_at: new Date(),
-            })
-            .returning("*");
-          settings = Array.isArray(updatedResult) ? updatedResult[0] : updatedResult;
-        } else {
-          const createdResult = await pgConnection("document_settings")
-            .insert({
-              id: generateEntityId(undefined, "docset"),
-              ...cleanData,
-              created_at: new Date(),
-              updated_at: new Date(),
-            })
-            .returning("*");
-          settings = Array.isArray(createdResult) ? createdResult[0] : createdResult;
+        try {
+          const existing = await pgConnection("document_settings").whereNull("deleted_at").first();
+          if (existing) {
+            const updatedResult = await pgConnection("document_settings")
+              .where({ id: existing.id })
+              .update({
+                ...cleanData,
+                updated_at: new Date(),
+              })
+              .returning("*");
+            settings = Array.isArray(updatedResult) ? updatedResult[0] : updatedResult;
+          } else {
+            const createdResult = await pgConnection("document_settings")
+              .insert({
+                id: generateEntityId(undefined, "docset"),
+                ...cleanData,
+                created_at: new Date(),
+                updated_at: new Date(),
+              })
+              .returning("*");
+            settings = Array.isArray(createdResult) ? createdResult[0] : createdResult;
+          }
+        } catch (knexErr: any) {
+          if (isUndefinedTableError(knexErr)) {
+            return res.status(400).json({
+              message: "Database table document_settings does not exist. Please run npx medusa db:migrate.",
+              error: true,
+            });
+          }
+          throw knexErr;
         }
       } else {
         throw err;
@@ -103,6 +153,12 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
 
     return res.json({ settings, success: true });
   } catch (err: any) {
+    if (isUndefinedTableError(err)) {
+      return res.status(400).json({
+        message: "Database table document_settings does not exist. Please run npx medusa db:migrate.",
+        error: true,
+      });
+    }
     try {
       req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error updating settings: ${err.message}`);
     } catch (_) {}

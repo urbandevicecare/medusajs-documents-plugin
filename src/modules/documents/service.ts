@@ -126,6 +126,90 @@ export function getDatabaseConnection(container: any): any {
   return undefined;
 }
 
+/**
+ * Detects whether a database error is PostgreSQL 42P01 (undefined_table)
+ */
+export function isUndefinedTableError(err: any): boolean {
+  if (!err) return false;
+  const code = err.code || err.cause?.code || err.original?.code;
+  if (code === "42P01") return true;
+
+  const msg = String(err.message || err.detail || err.cause?.message || err.original?.message || "");
+  if (msg.includes("42P01")) return true;
+  if (/relation ["'].*?["'] does not exist/i.test(msg)) return true;
+  if (/relation .*? does not exist/i.test(msg)) return true;
+  if (/table .*? does not exist/i.test(msg)) return true;
+  if (err.name === "TableNotFoundException") return true;
+
+  return false;
+}
+
+export const DEFAULT_DOCUMENT_SETTINGS: Record<string, any> = {
+  id: "default",
+  company_name: "Store",
+  email_notifications_enabled: true,
+  sms_notifications_enabled: true,
+  whatsapp_notifications_enabled: true,
+  event_order_placed_enabled: true,
+  event_order_completed_enabled: true,
+  event_payment_captured_enabled: true,
+  event_order_fulfillment_enabled: true,
+  event_order_canceled_enabled: true,
+  event_repair_status_changed_enabled: true,
+  event_repair_compliance_enabled: true,
+  event_repair_created_enabled: true,
+  event_repair_completed_enabled: true,
+  event_repair_reminder_enabled: true,
+  invoice_template: "modern",
+  packing_slip_template: "modern",
+  receipt_template: "modern",
+  estimate_template: "modern",
+  job_card_template: "modern",
+  custom_doc_template: "modern",
+  zoho_books_enabled: false,
+  zoho_client_id: null,
+  zoho_client_secret: null,
+  zoho_refresh_token: null,
+  zoho_organization_id: null,
+  zoho_domain: "com",
+  zoho_invoice_terms: null,
+  zoho_invoice_notes: null,
+  zoho_estimate_terms: null,
+  zoho_payment_terms_days: 0,
+  zoho_tax_inclusive: false,
+  zoho_invoice_prefix: "INV-",
+  zoho_include_payment_qr: true,
+  zoho_custom_field_payment_link: null,
+  storefront_url: null,
+  pdf_logo_url: null,
+  pdf_address: null,
+  pdf_phone: null,
+  pdf_email: null,
+  pdf_website: null,
+  pdf_payment_details: null,
+  pdf_terms: null,
+  email_subject_template: null,
+  email_body_template: null,
+  sms_body_template: null,
+  whatsapp_body_template: null,
+  order_placed_email_subject: null,
+  order_placed_email_template: null,
+  order_placed_sms_template: null,
+  order_placed_whatsapp_template: null,
+  order_payment_email_subject: null,
+  order_payment_email_template: null,
+  order_payment_sms_template: null,
+  order_payment_whatsapp_template: null,
+  order_fulfillment_email_subject: null,
+  order_fulfillment_email_template: null,
+  order_fulfillment_sms_template: null,
+  order_fulfillment_whatsapp_template: null,
+  order_canceled_email_subject: null,
+  order_canceled_email_template: null,
+  order_canceled_sms_template: null,
+  order_canceled_whatsapp_template: null,
+};
+
 export class DocumentModuleService extends MedusaService({
   DocumentSettings,
   DocumentRecord,
@@ -141,78 +225,31 @@ export class DocumentModuleService extends MedusaService({
         return settings;
       }
       return await this.createDocumentSettings({
-        company_name: "Store",
-        email_notifications_enabled: true,
-        sms_notifications_enabled: true,
-        whatsapp_notifications_enabled: true,
-        event_order_placed_enabled: true,
-        event_order_completed_enabled: true,
-        event_payment_captured_enabled: true,
-        event_order_fulfillment_enabled: true,
-        event_order_canceled_enabled: true,
-        event_repair_status_changed_enabled: true,
-        event_repair_compliance_enabled: true,
-        event_repair_created_enabled: true,
-        event_repair_completed_enabled: true,
-        event_repair_reminder_enabled: true,
-        invoice_template: "modern",
-        packing_slip_template: "modern",
-        receipt_template: "modern",
-        estimate_template: "modern",
-        job_card_template: "modern",
-        custom_doc_template: "modern",
-        email_subject_template: null,
-        email_body_template: null,
-        sms_body_template: null,
-        whatsapp_body_template: null,
-        order_placed_email_subject: null,
-        order_placed_email_template: null,
-        order_placed_sms_template: null,
-        order_placed_whatsapp_template: null,
-        order_payment_email_subject: null,
-        order_payment_email_template: null,
-        order_payment_sms_template: null,
-        order_payment_whatsapp_template: null,
-        order_fulfillment_email_subject: null,
-        order_fulfillment_email_template: null,
-        order_fulfillment_sms_template: null,
-        order_fulfillment_whatsapp_template: null,
-        order_canceled_email_subject: null,
-        order_canceled_email_template: null,
-        order_canceled_sms_template: null,
-        order_canceled_whatsapp_template: null,
+        ...DEFAULT_DOCUMENT_SETTINGS,
       }, sharedContext);
     } catch (err: any) {
+      if (isUndefinedTableError(err)) {
+        return { ...DEFAULT_DOCUMENT_SETTINGS };
+      }
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        let row = await conn("document_settings").whereNull("deleted_at").first();
-        if (row) return row;
-        const createdResult = await conn("document_settings").insert({
-          id: generateEntityId(undefined, "docset"),
-          company_name: "Store",
-          email_notifications_enabled: true,
-          sms_notifications_enabled: true,
-          whatsapp_notifications_enabled: true,
-          event_order_placed_enabled: true,
-          event_order_completed_enabled: true,
-          event_payment_captured_enabled: true,
-          event_order_fulfillment_enabled: true,
-          event_order_canceled_enabled: true,
-          event_repair_status_changed_enabled: true,
-          event_repair_compliance_enabled: true,
-          event_repair_created_enabled: true,
-          event_repair_completed_enabled: true,
-          event_repair_reminder_enabled: true,
-          invoice_template: "modern",
-          packing_slip_template: "modern",
-          receipt_template: "modern",
-          estimate_template: "modern",
-          job_card_template: "modern",
-          custom_doc_template: "modern",
-          created_at: new Date(),
-          updated_at: new Date(),
-        }).returning("*");
-        return Array.isArray(createdResult) ? createdResult[0] : createdResult;
+        try {
+          let row = await conn("document_settings").whereNull("deleted_at").first();
+          if (row) return row;
+          const { id: _ignoreId, ...restDefaults } = DEFAULT_DOCUMENT_SETTINGS;
+          const createdResult = await conn("document_settings").insert({
+            ...restDefaults,
+            id: generateEntityId(undefined, "docset"),
+            created_at: new Date(),
+            updated_at: new Date(),
+          }).returning("*");
+          return Array.isArray(createdResult) ? createdResult[0] : createdResult;
+        } catch (knexErr: any) {
+          if (isUndefinedTableError(knexErr)) {
+            return { ...DEFAULT_DOCUMENT_SETTINGS };
+          }
+          throw knexErr;
+        }
       }
       throw err;
     }
@@ -643,42 +680,52 @@ export class DocumentModuleService extends MedusaService({
         },
       }, sharedContext);
     } catch (err: any) {
+      if (isUndefinedTableError(err)) {
+        throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+      }
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        const [inserted] = await conn("document_record").insert({
-          id: generateEntityId(undefined, "doc"),
-          display_id: displayId,
-          title: input.title || (
-            input.type === "invoice" ? "Tax Invoice" :
-            input.type === "receipt" ? "Payment Receipt" :
-            input.type === "packing_slip" ? "Packing Slip" :
-            input.type === "estimate" ? "Quotation" : "Document"
-          ),
-          type: input.type,
-          source: source,
-          status: input.payment_status === "paid" ? "paid" : "sent",
-          customer_name: input.customer.name,
-          customer_email: input.customer.email,
-          customer_phone: input.customer.phone,
-          order_id: input.order_id,
-          repair_ticket_id: input.repair_ticket_id,
-          zoho_document_id: zohoDocumentId,
-          total_amount: input.total,
-          currency_code: input.currency_code,
-          payment_status: input.payment_status || "unpaid",
-          payment_link: input.payment_link,
-          short_payment_link: shortPaymentLink,
-          pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
-          metadata: JSON.stringify({
-            items: input.items,
-            notes: input.notes,
-            body_text: input.body_text,
-            custom_fields: input.custom_fields,
-          }),
-          created_at: new Date(),
-          updated_at: new Date(),
-        }).returning("*");
-        record = inserted;
+        try {
+          const [inserted] = await conn("document_record").insert({
+            id: generateEntityId(undefined, "doc"),
+            display_id: displayId,
+            title: input.title || (
+              input.type === "invoice" ? "Tax Invoice" :
+              input.type === "receipt" ? "Payment Receipt" :
+              input.type === "packing_slip" ? "Packing Slip" :
+              input.type === "estimate" ? "Quotation" : "Document"
+            ),
+            type: input.type,
+            source: source,
+            status: input.payment_status === "paid" ? "paid" : "sent",
+            customer_name: input.customer.name,
+            customer_email: input.customer.email,
+            customer_phone: input.customer.phone,
+            order_id: input.order_id,
+            repair_ticket_id: input.repair_ticket_id,
+            zoho_document_id: zohoDocumentId,
+            total_amount: input.total,
+            currency_code: input.currency_code,
+            payment_status: input.payment_status || "unpaid",
+            payment_link: input.payment_link,
+            short_payment_link: shortPaymentLink,
+            pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
+            metadata: JSON.stringify({
+              items: input.items,
+              notes: input.notes,
+              body_text: input.body_text,
+              custom_fields: input.custom_fields,
+            }),
+            created_at: new Date(),
+            updated_at: new Date(),
+          }).returning("*");
+          record = inserted;
+        } catch (knexErr: any) {
+          if (isUndefinedTableError(knexErr)) {
+            throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+          }
+          throw knexErr;
+        }
       } else {
         throw err;
       }
@@ -696,13 +743,23 @@ export class DocumentModuleService extends MedusaService({
         short_pdf_link: shortPdfLink,
       }, sharedContext);
     } catch (err: any) {
+      if (isUndefinedTableError(err)) {
+        throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+      }
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        await conn("document_record").where({ id: record.id }).update({
-          pdf_url: realPdfUrl,
-          short_pdf_link: shortPdfLink,
-          updated_at: new Date(),
-        });
+        try {
+          await conn("document_record").where({ id: record.id }).update({
+            pdf_url: realPdfUrl,
+            short_pdf_link: shortPdfLink,
+            updated_at: new Date(),
+          });
+        } catch (knexErr: any) {
+          if (isUndefinedTableError(knexErr)) {
+            throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+          }
+          throw knexErr;
+        }
       }
     }
     record.pdf_url = realPdfUrl;
@@ -747,15 +804,25 @@ export class DocumentModuleService extends MedusaService({
     let record: any = null;
     try {
       record = await this.retrieveDocumentRecord(recordId, {}, sharedContext);
-    } catch (e) {
+    } catch (e: any) {
+      if (isUndefinedTableError(e)) {
+        throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+      }
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
-        record = await conn("document_record")
-          .whereNull("deleted_at")
-          .where((builder: any) => {
-            builder.where({ id: recordId }).orWhere({ display_id: recordId });
-          })
-          .first();
+        try {
+          record = await conn("document_record")
+            .whereNull("deleted_at")
+            .where((builder: any) => {
+              builder.where({ id: recordId }).orWhere({ display_id: recordId });
+            })
+            .first();
+        } catch (knexErr: any) {
+          if (isUndefinedTableError(knexErr)) {
+            throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+          }
+          throw knexErr;
+        }
       }
       if (!record) throw e;
     }

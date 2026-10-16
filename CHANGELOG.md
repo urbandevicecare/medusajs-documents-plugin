@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.8] - 2026-10-16
+
+### Patch Release: PostgreSQL 42P01 Missing Table Resilience & Barcode Generation Support
+
+- **PostgreSQL 42P01 (`undefined_table`) Graceful Recovery**:
+  - Added `isUndefinedTableError` to catch PostgreSQL error `42P01` / `relation "..." does not exist` across both MikroORM DML and Knex fallback paths.
+  - Hardened `GET /admin/documents/settings` to return default settings with `{ settings: defaultSettings, success: true, warning: "Migrations pending" }` and HTTP 200 instead of crashing with HTTP 500 when tables are not yet migrated.
+  - Hardened `GET /admin/documents` to return `{ documents: [], count: 0, warning: "Migrations pending" }` and HTTP 200 when `document_record` table has not yet been migrated.
+  - Hardened `POST /admin/documents/settings` to return a clear, actionable error `{ message: "Database table document_settings does not exist. Please run npx medusa db:migrate.", error: true }` with status 400.
+  - Hardened `DocumentModuleService.getSettings` to safely return `DEFAULT_DOCUMENT_SETTINGS` if table `document_settings` does not exist.
+  - Hardened `DocumentModuleService.generateDocument` and `getPdfForRecord` against `42P01` with explicit migration reminder errors.
+- **1D Barcode (Code 128) Generation**:
+  - Integrated `bwip-js` Code 128 barcode rendering on document headers and repair tickets using `display_id`.
+- **Comprehensive Unit Testing**:
+  - Added test suite in `tests/table-resilience.test.ts` verifying error classification, mock missing table recovery, and route resilience across all document endpoints.
+
+---
+
 ## [1.1.6] - 2026-10-16
 
 ### Patch Release: Safe Knex Resolution via `ContainerRegistrationKeys.PG_CONNECTION` & DML Table Name Correction
