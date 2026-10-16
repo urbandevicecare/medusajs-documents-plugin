@@ -14,8 +14,9 @@ import {
   Switch,
   Tooltip,
   IconButton,
+  DropdownMenu,
 } from "@medusajs/ui";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, Fragment } from "react";
 import {
   DocumentText,
   ArrowPath,
@@ -25,7 +26,15 @@ import {
   CogSixTooth,
   Sparkles,
   Trash,
+  ChevronDown,
+  ChevronRight,
 } from "@medusajs/icons";
+import {
+  groupDocuments,
+  DocumentRecord as BaseDocumentRecord,
+  DocumentGroup,
+} from "../../../utils/document-grouper";
+
 
 interface CustomDocPreset {
   id: string;
@@ -119,25 +128,7 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
   },
 ];
 
-interface DocumentRecord {
-  id: string;
-  display_id: string;
-  title: string;
-  type: string;
-  source: string;
-  status: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  total_amount: number;
-  currency_code: string;
-  payment_status: string;
-  payment_link?: string;
-  short_payment_link?: string;
-  pdf_url?: string;
-  short_pdf_link?: string;
-  created_at: string;
-}
+interface DocumentRecord extends BaseDocumentRecord {}
 
 export const DocumentsPage = () => {
   const [activeTab, setActiveTab] = useState<"hub" | "templates" | "automations" | "settings">("hub");
@@ -148,6 +139,18 @@ export const DocumentsPage = () => {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [zohoLiveDocs, setZohoLiveDocs] = useState<any[]>([]);
   const [loadingZoho, setLoadingZoho] = useState(false);
+
+  // Grouping state
+  const [groupByJob, setGroupByJob] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
 
   // Modals
   const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -570,7 +573,7 @@ export const DocumentsPage = () => {
     }
   };
 
-  // Filter documents
+  // Filter documents (flat mode)
   const filteredDocs = documents.filter((doc) => {
     if (typeFilter !== "all" && doc.type !== typeFilter) return false;
     if (sourceFilter !== "all" && doc.source !== sourceFilter) return false;
@@ -585,6 +588,45 @@ export const DocumentsPage = () => {
     }
     return true;
   });
+
+  // Group documents by job / order (packed mode)
+  const documentGroups = useMemo(() => {
+    const allGroups = groupDocuments(documents);
+
+    return allGroups.filter((group) => {
+      // Source filter
+      if (sourceFilter !== "all") {
+        const matchesSource = group.documents.some((d) => d.source === sourceFilter);
+        if (!matchesSource) return false;
+      }
+
+      // Type filter
+      if (typeFilter !== "all") {
+        const matchesType = group.documents.some((d) => d.type === typeFilter);
+        if (!matchesType) return false;
+      }
+
+      // Search filter
+      if (searchTerm) {
+        const q = searchTerm.toLowerCase();
+        const matchesSearch =
+          group.groupKey?.toLowerCase().includes(q) ||
+          group.customerName?.toLowerCase().includes(q) ||
+          group.customerEmail?.toLowerCase().includes(q) ||
+          group.customerPhone?.toLowerCase().includes(q) ||
+          group.documents.some(
+            (d) =>
+              d.display_id?.toLowerCase().includes(q) ||
+              d.title?.toLowerCase().includes(q) ||
+              d.customer_name?.toLowerCase().includes(q)
+          );
+        if (!matchesSearch) return false;
+      }
+
+      return true;
+    });
+  }, [documents, sourceFilter, typeFilter, searchTerm]);
+
 
   return (
     <Container className="p-0">
@@ -731,13 +773,24 @@ export const DocumentsPage = () => {
                   <ArrowPath className={`w-4 h-4 ${loadingZoho ? "animate-spin" : ""}`} />
                 </IconButton>
               </Tooltip>
+
+              <div className="flex items-center gap-2 pl-2 border-l border-ui-border-base">
+                <Switch
+                  id="group-by-job"
+                  checked={groupByJob}
+                  onCheckedChange={setGroupByJob}
+                />
+                <Label htmlFor="group-by-job" className="text-xs cursor-pointer select-none font-medium text-ui-fg-base">
+                  Pack by Job / Order
+                </Label>
+              </div>
             </div>
           </div>
 
           {/* Documents Table */}
           {loading ? (
             <div className="py-12 text-center text-ui-fg-muted text-sm">Loading documents...</div>
-          ) : filteredDocs.length === 0 ? (
+          ) : (groupByJob ? documentGroups.length === 0 : filteredDocs.length === 0) ? (
             <div className="py-12 text-center text-ui-fg-muted border border-dashed border-ui-border-base rounded-lg">
               <Text className="text-sm">No documents found.</Text>
               <Text className="text-xs text-ui-fg-subtle mt-1">
@@ -759,108 +812,456 @@ export const DocumentsPage = () => {
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {filteredDocs.map((doc) => {
-                  const isPaid = doc.payment_status === "paid" || doc.status === "paid";
-                  const isZoho = doc.source === "zoho";
+                {groupByJob ? (
+                  documentGroups.map((group) => {
+                    const isExpanded = !!expandedGroups[group.groupId];
+                    const doc = group.primaryDoc;
+                    const isPaid = doc.payment_status === "paid" || doc.status === "paid";
+                    const isZoho = doc.source === "zoho";
+                    const hasMultiple = group.documents.length > 1;
 
-                  return (
-                    <Table.Row key={doc.id} className="hover:bg-ui-bg-subtle-hover transition-colors">
-                      <Table.Cell>
-                        <button
-                          type="button"
-                          onClick={() => handleViewDocument(doc.id, doc.display_id)}
-                          className="font-medium text-ui-fg-interactive hover:underline text-left cursor-pointer bg-transparent border-0 p-0"
+                    return (
+                      <Fragment key={group.groupId}>
+                        <Table.Row
+                          className={`transition-colors ${
+                            isExpanded ? "bg-ui-bg-subtle" : "hover:bg-ui-bg-subtle-hover"
+                          }`}
                         >
-                          {doc.display_id}
-                        </button>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <span className="text-xs font-medium text-ui-fg-base">{doc.title}</span>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium">{doc.customer_name || "Guest"}</span>
-                          <span className="text-[11px] text-ui-fg-subtle">{doc.customer_email || doc.customer_phone || "-"}</span>
-                        </div>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <span className="text-xs font-semibold">
-                          {new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: (doc.currency_code || "KES").toUpperCase(),
-                          }).format(Number(doc.total_amount || 0))}
-                        </span>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Badge color={isPaid ? "green" : (doc.payment_status === "unpaid" ? "red" : "blue")} size="small">
-                          {doc.payment_status || doc.status}
-                        </Badge>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Badge color={isZoho ? "purple" : "grey"} size="small">
-                          {isZoho ? "Zoho Books" : "PDFKit"}
-                        </Badge>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <span className="text-xs text-ui-fg-subtle">
-                          {new Date(doc.created_at).toLocaleDateString()}
-                        </span>
-                      </Table.Cell>
-                      <Table.Cell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                          <Table.Cell>
+                            <div className="flex items-center gap-1.5">
+                              {hasMultiple ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGroup(group.groupId)}
+                                  className="p-1 rounded hover:bg-ui-bg-base text-ui-fg-subtle hover:text-ui-fg-base cursor-pointer transition-colors"
+                                  title={isExpanded ? "Collapse related documents" : `Expand ${group.documents.length} related documents`}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-purple-600" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-ui-fg-subtle" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="w-5 inline-block" />
+                              )}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewDocument(doc.id, doc.display_id)}
+                                  className="font-medium text-ui-fg-interactive hover:underline text-left cursor-pointer bg-transparent border-0 p-0"
+                                >
+                                  {doc.display_id}
+                                </button>
+                                {hasMultiple && (
+                                  <Badge
+                                    size="2xsmall"
+                                    color="purple"
+                                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                                    onClick={() => toggleGroup(group.groupId)}
+                                  >
+                                    {group.documents.length} docs
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </Table.Cell>
+
+                          <Table.Cell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-semibold text-ui-fg-base">{doc.title}</span>
+                              {hasMultiple && (
+                                <span className="text-[11px] text-ui-fg-subtle truncate max-w-[220px]" title={group.includedTypesSummary}>
+                                  Includes: {group.includedTypesSummary}
+                                </span>
+                              )}
+                            </div>
+                          </Table.Cell>
+
+                          <Table.Cell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{group.customerName || "Guest"}</span>
+                              <span className="text-[11px] text-ui-fg-subtle">{group.customerEmail || group.customerPhone || "-"}</span>
+                            </div>
+                          </Table.Cell>
+
+                          <Table.Cell>
+                            <span className="text-xs font-semibold">
+                              {new Intl.NumberFormat("en-US", {
+                                style: "currency",
+                                currency: (group.currencyCode || "KES").toUpperCase(),
+                              }).format(Number(group.totalAmount || 0))}
+                            </span>
+                          </Table.Cell>
+
+                          <Table.Cell>
+                            <Badge color={isPaid ? "green" : (doc.payment_status === "unpaid" ? "red" : "blue")} size="small">
+                              {doc.payment_status || doc.status}
+                            </Badge>
+                          </Table.Cell>
+
+                          <Table.Cell>
+                            <Badge color={isZoho ? "purple" : "grey"} size="small">
+                              {isZoho ? "Zoho Books" : "PDFKit"}
+                            </Badge>
+                          </Table.Cell>
+
+                          <Table.Cell>
+                            <span className="text-xs text-ui-fg-subtle">
+                              {new Date(group.latestCreatedAt).toLocaleDateString()}
+                            </span>
+                          </Table.Cell>
+
+                          <Table.Cell className="text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {hasMultiple && (
+                                <DropdownMenu>
+                                  <DropdownMenu.Trigger asChild>
+                                    <button
+                                      type="button"
+                                      className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded bg-ui-bg-subtle hover:bg-ui-bg-base border border-ui-border-base text-ui-fg-base transition-colors"
+                                      title="View all related documents for this job/order"
+                                    >
+                                      <DocumentText className="w-3.5 h-3.5 text-purple-600" />
+                                      <span>Docs ({group.documents.length})</span>
+                                      <ChevronDown className="w-3 h-3 text-ui-fg-subtle" />
+                                    </button>
+                                  </DropdownMenu.Trigger>
+                                  <DropdownMenu.Content align="end" className="w-72 p-1.5 z-50">
+                                    <DropdownMenu.Label className="text-xs font-semibold px-2 py-1.5 text-ui-fg-muted">
+                                      Related Documents ({group.documents.length})
+                                    </DropdownMenu.Label>
+                                    <DropdownMenu.Separator />
+                                    {group.documents.map((subDoc) => (
+                                      <DropdownMenu.Item
+                                        key={subDoc.id}
+                                        onClick={() => handleViewDocument(subDoc.id, subDoc.display_id)}
+                                        className="flex items-center justify-between px-2 py-2 cursor-pointer hover:bg-ui-bg-subtle-hover rounded text-xs transition-colors"
+                                      >
+                                        <div className="flex flex-col text-left">
+                                          <span className="font-medium text-ui-fg-base">{subDoc.title}</span>
+                                          <span className="text-[10px] text-ui-fg-subtle">{subDoc.display_id}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[11px] font-semibold text-ui-fg-base">
+                                            {subDoc.total_amount != null && Number(subDoc.total_amount) > 0
+                                              ? new Intl.NumberFormat("en-US", {
+                                                  style: "currency",
+                                                  currency: (subDoc.currency_code || "KES").toUpperCase(),
+                                                }).format(Number(subDoc.total_amount))
+                                              : "—"}
+                                          </span>
+                                          <ArrowDownTray className="w-3.5 h-3.5 text-ui-fg-subtle" />
+                                        </div>
+                                      </DropdownMenu.Item>
+                                    ))}
+                                  </DropdownMenu.Content>
+                                </DropdownMenu>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleViewDocument(doc.id, doc.display_id)}
+                                className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base cursor-pointer"
+                                title="View / Download PDF"
+                              >
+                                <ArrowDownTray className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedDoc(doc);
+                                  setSendForm({
+                                    channels: ["email"],
+                                    custom_message: "",
+                                    subject: `${settings.company_name}: ${doc.title} #${doc.display_id}`,
+                                  });
+                                  setSendModalOpen(true);
+                                }}
+                                className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base"
+                                title="Send via Email / SMS / WhatsApp"
+                              >
+                                <Envelope className="w-4 h-4" />
+                              </button>
+                              {!isZoho && settings.zoho_books_enabled && (doc.type === "invoice" || doc.type === "estimate") && Number(doc.total_amount || 0) > 0 && (
+                                <Button
+                                  variant="transparent"
+                                  size="small"
+                                  onClick={() => handleSyncToZoho(doc.id)}
+                                  className="text-xs text-purple-600 hover:text-purple-700"
+                                >
+                                  Push Zoho
+                                </Button>
+                              )}
+                              {doc.short_payment_link && (
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(doc.short_payment_link!);
+                                    alert("Short payment link copied to clipboard!");
+                                  }}
+                                  className="text-[11px] text-ui-fg-interactive hover:underline px-1.5 py-1"
+                                  title="Copy Short Payment Link"
+                                >
+                                  Copy Link
+                                </button>
+                              )}
+                            </div>
+                          </Table.Cell>
+                        </Table.Row>
+
+                        {/* Expanded Nested Sub-Table Row */}
+                        {isExpanded && hasMultiple && (
+                          <Table.Row className="bg-ui-bg-subtle hover:bg-ui-bg-subtle border-b border-ui-border-base">
+                            <Table.Cell colSpan={8} className="p-0">
+                              <div className="py-3 px-6 bg-ui-bg-subtle/80 border-l-4 border-l-purple-500 my-1 mx-2 rounded-r-md">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <DocumentText className="w-4 h-4 text-purple-600" />
+                                    <span className="text-xs font-semibold text-ui-fg-base">
+                                      Related Documents for this Job / Order ({group.documents.length})
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroup(group.groupId)}
+                                    className="text-[11px] text-ui-fg-interactive hover:underline"
+                                  >
+                                    Collapse
+                                  </button>
+                                </div>
+
+                                <div className="overflow-x-auto rounded border border-ui-border-base bg-ui-bg-base">
+                                  <table className="w-full text-left border-collapse">
+                                    <thead>
+                                      <tr className="border-b border-ui-border-base bg-ui-bg-subtle text-[11px] text-ui-fg-muted font-medium">
+                                        <th className="py-1.5 px-3">Document Type</th>
+                                        <th className="py-1.5 px-3">Reference</th>
+                                        <th className="py-1.5 px-3">Amount</th>
+                                        <th className="py-1.5 px-3">Status</th>
+                                        <th className="py-1.5 px-3">Source</th>
+                                        <th className="py-1.5 px-3">Created Date</th>
+                                        <th className="py-1.5 px-3 text-right">Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-ui-border-base text-xs">
+                                      {group.documents.map((subDoc) => {
+                                        const subIsPaid = subDoc.payment_status === "paid" || subDoc.status === "paid";
+                                        const subIsZoho = subDoc.source === "zoho";
+                                        return (
+                                          <tr key={subDoc.id} className="hover:bg-ui-bg-subtle-hover transition-colors">
+                                            <td className="py-2 px-3">
+                                              <Badge
+                                                size="2xsmall"
+                                                color={
+                                                  subDoc.type === "invoice" ? "green" :
+                                                  subDoc.type === "estimate" ? "blue" :
+                                                  subDoc.type === "job_card" ? "orange" :
+                                                  subDoc.type === "receipt" ? "purple" : "grey"
+                                                }
+                                              >
+                                                {subDoc.title}
+                                              </Badge>
+                                            </td>
+                                            <td className="py-2 px-3 font-medium">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleViewDocument(subDoc.id, subDoc.display_id)}
+                                                className="text-ui-fg-interactive hover:underline text-left cursor-pointer bg-transparent border-0 p-0 font-medium"
+                                              >
+                                                {subDoc.display_id}
+                                              </button>
+                                            </td>
+                                            <td className="py-2 px-3 font-semibold text-ui-fg-base">
+                                              {subDoc.total_amount != null && Number(subDoc.total_amount) > 0
+                                                ? new Intl.NumberFormat("en-US", {
+                                                    style: "currency",
+                                                    currency: (subDoc.currency_code || "KES").toUpperCase(),
+                                                  }).format(Number(subDoc.total_amount))
+                                                : "—"}
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <Badge
+                                                size="2xsmall"
+                                                color={subIsPaid ? "green" : (subDoc.payment_status === "unpaid" ? "red" : "blue")}
+                                              >
+                                                {subDoc.payment_status || subDoc.status}
+                                              </Badge>
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <Badge size="2xsmall" color={subIsZoho ? "purple" : "grey"}>
+                                                {subIsZoho ? "Zoho Books" : "PDFKit"}
+                                              </Badge>
+                                            </td>
+                                            <td className="py-2 px-3 text-ui-fg-subtle text-[11px]">
+                                              {new Date(subDoc.created_at).toLocaleString()}
+                                            </td>
+                                            <td className="py-2 px-3 text-right">
+                                              <div className="flex items-center justify-end gap-1.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleViewDocument(subDoc.id, subDoc.display_id)}
+                                                  className="p-1 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base"
+                                                  title="View / Download PDF"
+                                                >
+                                                  <ArrowDownTray className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setSelectedDoc(subDoc);
+                                                    setSendForm({
+                                                      channels: ["email"],
+                                                      custom_message: "",
+                                                      subject: `${settings.company_name}: ${subDoc.title} #${subDoc.display_id}`,
+                                                    });
+                                                    setSendModalOpen(true);
+                                                  }}
+                                                  className="p-1 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base"
+                                                  title="Send Document"
+                                                >
+                                                  <Envelope className="w-3.5 h-3.5" />
+                                                </button>
+                                                {!subIsZoho && settings.zoho_books_enabled && (subDoc.type === "invoice" || subDoc.type === "estimate") && Number(subDoc.total_amount || 0) > 0 && (
+                                                  <Button
+                                                    variant="transparent"
+                                                    size="small"
+                                                    onClick={() => handleSyncToZoho(subDoc.id)}
+                                                    className="text-[11px] text-purple-600 hover:text-purple-700 py-0.5 px-1.5"
+                                                  >
+                                                    Push Zoho
+                                                  </Button>
+                                                )}
+                                                {subDoc.short_payment_link && (
+                                                  <button
+                                                    onClick={() => {
+                                                      navigator.clipboard.writeText(subDoc.short_payment_link!);
+                                                      alert("Short payment link copied to clipboard!");
+                                                    }}
+                                                    className="text-[10px] text-ui-fg-interactive hover:underline px-1 py-0.5"
+                                                    title="Copy Short Link"
+                                                  >
+                                                    Copy Link
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </Table.Cell>
+                          </Table.Row>
+                        )}
+                      </Fragment>
+                    );
+                  })
+                ) : (
+                  filteredDocs.map((doc) => {
+                    const isPaid = doc.payment_status === "paid" || doc.status === "paid";
+                    const isZoho = doc.source === "zoho";
+
+                    return (
+                      <Table.Row key={doc.id} className="hover:bg-ui-bg-subtle-hover transition-colors">
+                        <Table.Cell>
                           <button
                             type="button"
                             onClick={() => handleViewDocument(doc.id, doc.display_id)}
-                            className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base cursor-pointer"
-                            title="View / Download PDF"
+                            className="font-medium text-ui-fg-interactive hover:underline text-left cursor-pointer bg-transparent border-0 p-0"
                           >
-                            <ArrowDownTray className="w-4 h-4" />
+                            {doc.display_id}
                           </button>
-                          <button
-                            onClick={() => {
-                              setSelectedDoc(doc);
-                              setSendForm({
-                                channels: ["email"],
-                                custom_message: "",
-                                subject: `${settings.company_name}: ${doc.title} #${doc.display_id}`,
-                              });
-                              setSendModalOpen(true);
-                            }}
-                            className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base"
-                            title="Send via Email / SMS / WhatsApp"
-                          >
-                            <Envelope className="w-4 h-4" />
-                          </button>
-                          {!isZoho && settings.zoho_books_enabled && (doc.type === "invoice" || doc.type === "estimate") && Number(doc.total_amount || 0) > 0 && (
-                            <Button
-                              variant="transparent"
-                              size="small"
-                              onClick={() => handleSyncToZoho(doc.id)}
-                              className="text-xs text-purple-600 hover:text-purple-700"
+                        </Table.Cell>
+                        <Table.Cell>
+                          <span className="text-xs font-medium text-ui-fg-base">{doc.title}</span>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium">{doc.customer_name || "Guest"}</span>
+                            <span className="text-[11px] text-ui-fg-subtle">{doc.customer_email || doc.customer_phone || "-"}</span>
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <span className="text-xs font-semibold">
+                            {new Intl.NumberFormat("en-US", {
+                              style: "currency",
+                              currency: (doc.currency_code || "KES").toUpperCase(),
+                            }).format(Number(doc.total_amount || 0))}
+                          </span>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge color={isPaid ? "green" : (doc.payment_status === "unpaid" ? "red" : "blue")} size="small">
+                            {doc.payment_status || doc.status}
+                          </Badge>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge color={isZoho ? "purple" : "grey"} size="small">
+                            {isZoho ? "Zoho Books" : "PDFKit"}
+                          </Badge>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <span className="text-xs text-ui-fg-subtle">
+                            {new Date(doc.created_at).toLocaleDateString()}
+                          </span>
+                        </Table.Cell>
+                        <Table.Cell className="text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleViewDocument(doc.id, doc.display_id)}
+                              className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base cursor-pointer"
+                              title="View / Download PDF"
                             >
-                              Push Zoho
-                            </Button>
-                          )}
-                          {doc.short_payment_link && (
+                              <ArrowDownTray className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => {
-                                navigator.clipboard.writeText(doc.short_payment_link!);
-                                alert("Short payment link copied to clipboard!");
+                                setSelectedDoc(doc);
+                                setSendForm({
+                                  channels: ["email"],
+                                  custom_message: "",
+                                  subject: `${settings.company_name}: ${doc.title} #${doc.display_id}`,
+                                });
+                                setSendModalOpen(true);
                               }}
-                              className="text-[11px] text-ui-fg-interactive hover:underline px-1.5 py-1"
-                              title="Copy Short Payment Link"
+                              className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-ui-fg-base"
+                              title="Send via Email / SMS / WhatsApp"
                             >
-                              Copy Link
+                              <Envelope className="w-4 h-4" />
                             </button>
-                          )}
-                        </div>
-                      </Table.Cell>
-                    </Table.Row>
-                  );
-                })}
+                            {!isZoho && settings.zoho_books_enabled && (doc.type === "invoice" || doc.type === "estimate") && Number(doc.total_amount || 0) > 0 && (
+                              <Button
+                                variant="transparent"
+                                size="small"
+                                onClick={() => handleSyncToZoho(doc.id)}
+                                className="text-xs text-purple-600 hover:text-purple-700"
+                              >
+                                Push Zoho
+                              </Button>
+                            )}
+                            {doc.short_payment_link && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(doc.short_payment_link!);
+                                  alert("Short payment link copied to clipboard!");
+                                }}
+                                className="text-[11px] text-ui-fg-interactive hover:underline px-1.5 py-1"
+                                title="Copy Short Payment Link"
+                              >
+                                Copy Link
+                              </button>
+                            )}
+                          </div>
+                        </Table.Cell>
+                      </Table.Row>
+                    );
+                  })
+                )}
               </Table.Body>
             </Table>
           )}
+
 
           {/* Live Zoho Books Invoices View (Always Visible) */}
           <div className="mt-8 border border-ui-border-base rounded-lg p-4 bg-ui-bg-subtle">

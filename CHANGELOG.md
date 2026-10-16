@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.16] - 2026-10-16
+
+### Group & Pack Related Documents by Job / Order
+
+- **Packed Document Rows by Job / Order**:
+  - Automatically clusters related documents belonging to the same repair or order into a single collapsed master row to dramatically save vertical space.
+  - Multi-tier correlation algorithm (`src/utils/document-grouper.ts`):
+    - Correlates by `repair_ticket_id`
+    - Correlates by `order_id`
+    - Correlates by normalized base reference number suffix (e.g. `1792156525673-SNL9QH` shared between `JOB-`, `RT-`, `EST-`, `RCPT-`, and `1001` shared between `INV-`, `RCPT-`, `PKG-`).
+- **Primary Invoice Priority in Collapsed View**:
+  - If an **Invoice** is present in the pack, the collapsed master row prominently displays the **Invoice** display ID, amount, and payment status.
+  - If an invoice is not yet generated, primary representation gracefully falls back to Quote/Estimate or Job Card.
+  - Reference column features a count badge (e.g. `4 docs`) and an expandable chevron (`▼` / `▶`).
+  - Type column shows a clear summary of included documents: `Includes: Job Card • Quote • Invoice • Receipt`.
+- **Inline Accordion Sub-Table & Quick Dropdown Menu**:
+  - Clicking the chevron or row expands an indented nested sub-table directly below the parent row with distinct color-coded badges for every document in the workflow:
+    - `Job Card` (orange)
+    - `Quote / Estimate` (blue)
+    - `Tax Invoice` (green / purple)
+    - `Payment Receipt` (emerald / purple)
+    - `Packing Slip` (amber / grey)
+  - Every child document includes clickable PDF view/download, status badge, amount, source, created date, and individual actions (View, Send, Push Zoho, Copy shortlink).
+  - Added a "Related Docs" quick-action dropdown menu (`Docs (4) ▼`) directly on the master row for rapid one-click access.
+- **Pack by Job / Order Toolbar Switch**:
+  - Added a toggle switch in the Admin Hub toolbar to easily switch between the packed view (enabled by default) and the flat document list anytime.
+- **Comprehensive Test Suite**:
+  - Added `tests/document-grouping.test.ts` validating base reference extraction, priority scoring, multi-tier clustering, and lifecycle ordering (48/48 unit tests passing).
+
+---
+
 ## [1.1.14] - 2026-10-16
 
 ### Company Name Support, Shortlink 500 Fix, Duplicate Prefix Cleanup & Currency Improvements
