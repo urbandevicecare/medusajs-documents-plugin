@@ -1,6 +1,5 @@
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
-import bwipjs from "bwip-js";
 
 export interface LineItem {
   title: string;
@@ -59,6 +58,14 @@ export class PDFKitGenerator {
 
   static async generateBarcode(text: string): Promise<Buffer | null> {
     try {
+      let bwipjs: any = null;
+      try {
+        bwipjs = require("bwip-js");
+      } catch (_) {
+        return null;
+      }
+      if (!bwipjs || typeof bwipjs.toBuffer !== "function") return null;
+
       return await bwipjs.toBuffer({
         bcid: "code128",
         text: String(text).trim(),

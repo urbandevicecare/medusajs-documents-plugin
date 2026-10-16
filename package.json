@@ -52,6 +52,7 @@
     "prepack": "medusa plugin:build"
   },
   "dependencies": {
+    "bwip-js": "^3.5.4",
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.18.0",
     "qrcode": "^1.5.4"
