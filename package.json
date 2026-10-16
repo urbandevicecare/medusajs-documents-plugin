@@ -1,6 +1,6 @@
 {
   "name": "medusajs-documents-plugin",
-  "version": "1.1.12",
+  "version": "1.1.13",
   "description": "Comprehensive document generation and management module for Medusa v2 with Zoho Books integration, PDFKit fallback, QR codes, shortlinks, multi-channel notifications and unified admin hub.",
   "author": "Urban Device Care <info@urbandevicecare.co.uk>",
   "license": "MIT",
