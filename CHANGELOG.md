@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.17] - 2026-10-16
+
+### Seamless Zoho Books Credentials Inheritance
+- **Auto-Inherit Zoho Credentials**: `DocumentModuleService.getSettings` now automatically inherits Zoho Books OAuth configuration from `repair_settings` if not explicitly populated in `document_settings`. This ensures seamless integration and stops invoices from falling back to PDFKit when Zoho is active.
+
 ## [1.1.16] - 2026-10-16
 
 ### Group & Pack Related Documents by Job / Order

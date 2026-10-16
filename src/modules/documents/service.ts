@@ -223,6 +223,22 @@ export class DocumentModuleService extends MedusaService({
     try {
       const [settings] = await this.listDocumentSettings({}, {}, sharedContext);
       if (settings) {
+        if (!settings.zoho_client_id) {
+          try {
+            const repMod = (container || (this as any).__container__)?.resolve?.("repair", { allowUnregistered: true });
+            if (repMod) {
+              const [repSettings] = await repMod.listRepairSettings({});
+              if (repSettings?.zoho_client_id) {
+                settings.zoho_books_enabled = Boolean(repSettings.zoho_books_enabled);
+                settings.zoho_client_id = repSettings.zoho_client_id;
+                settings.zoho_client_secret = repSettings.zoho_client_secret;
+                settings.zoho_refresh_token = repSettings.zoho_refresh_token;
+                settings.zoho_organization_id = repSettings.zoho_organization_id;
+                settings.zoho_domain = repSettings.zoho_domain || settings.zoho_domain || "com";
+              }
+            }
+          } catch (_) {}
+        }
         return settings;
       }
       return await this.createDocumentSettings({
