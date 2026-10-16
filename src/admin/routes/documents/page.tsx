@@ -142,7 +142,7 @@ export const DocumentsPage = () => {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("invoice");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [zohoLiveDocs, setZohoLiveDocs] = useState<any[]>([]);
   const [loadingZoho, setLoadingZoho] = useState(false);
@@ -296,9 +296,10 @@ export const DocumentsPage = () => {
       .catch((err) => console.error("Error loading settings:", err));
   };
 
-  const loadZohoLiveDocs = () => {
+  const loadZohoLiveDocs = (customType?: string) => {
     setLoadingZoho(true);
-    fetch("/admin/documents/zoho/list", { credentials: "include" })
+    const targetType = customType || (typeFilter === "estimate" ? "estimates" : typeFilter === "payment" ? "payments" : "invoices");
+    fetch(`/admin/documents/zoho/list?type=${targetType}`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         if (data.items) {
@@ -312,6 +313,7 @@ export const DocumentsPage = () => {
   useEffect(() => {
     loadDocuments();
     loadSettings();
+    loadZohoLiveDocs();
   }, []);
 
   const saveSettings = async () => {
@@ -601,8 +603,16 @@ export const DocumentsPage = () => {
           <Button variant="secondary" size="small" onClick={() => setCustomDocModalOpen(true)}>
             <Sparkles className="w-4 h-4 mr-1" /> Custom Document
           </Button>
-          <Button variant="transparent" size="small" onClick={loadDocuments}>
-            <ArrowPath className="w-4 h-4" />
+          <Button
+            variant="transparent"
+            size="small"
+            onClick={() => {
+              loadDocuments();
+              loadZohoLiveDocs();
+            }}
+            title="Refresh documents & live Zoho list"
+          >
+            <ArrowPath className={`w-4 h-4 ${(loading || loadingZoho) ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>
@@ -667,7 +677,17 @@ export const DocumentsPage = () => {
               />
             </div>
             <div className="flex items-center gap-2">
-              <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v)}>
+              <Select
+                value={typeFilter}
+                onValueChange={(v) => {
+                  setTypeFilter(v);
+                  if (v === "estimate") {
+                    loadZohoLiveDocs("estimates");
+                  } else if (v === "invoice" || v === "all") {
+                    loadZohoLiveDocs("invoices");
+                  }
+                }}
+              >
                 <Select.Trigger size="small">
                   <Select.Value placeholder="Document Type" />
                 </Select.Trigger>
@@ -693,16 +713,14 @@ export const DocumentsPage = () => {
                 </Select.Content>
               </Select>
 
-              {settings.zoho_books_enabled && (
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={loadZohoLiveDocs}
-                  isLoading={loadingZoho}
-                >
-                  <ArrowPath className="w-3.5 h-3.5 mr-1" /> View Live Zoho List
-                </Button>
-              )}
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={() => loadZohoLiveDocs()}
+                isLoading={loadingZoho}
+              >
+                <ArrowPath className={`w-3.5 h-3.5 mr-1 ${loadingZoho ? "animate-spin" : ""}`} /> Refresh Live Zoho
+              </Button>
             </div>
           </div>
 
@@ -834,10 +852,38 @@ export const DocumentsPage = () => {
             </Table>
           )}
 
-          {/* Zoho Remote Invoices View if Loaded */}
-          {zohoLiveDocs.length > 0 && (
-            <div className="mt-8 border border-ui-border-base rounded-lg p-4 bg-ui-bg-subtle">
-              <Heading level="h2" className="text-sm font-semibold mb-3">Live Zoho Books Invoices</Heading>
+          {/* Live Zoho Books Invoices View (Always Visible) */}
+          <div className="mt-8 border border-ui-border-base rounded-lg p-4 bg-ui-bg-subtle">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Heading level="h2" className="text-sm font-semibold">
+                  Live Zoho Books Invoices {zohoLiveDocs.length > 0 && `(${zohoLiveDocs.length})`}
+                </Heading>
+                <Badge color="purple" size="small">Live Cloud Sync</Badge>
+              </div>
+              <Button
+                variant="transparent"
+                size="small"
+                onClick={() => loadZohoLiveDocs()}
+                isLoading={loadingZoho}
+                className="text-xs text-ui-fg-muted hover:text-ui-fg-base flex items-center gap-1"
+              >
+                <ArrowPath className={`w-3.5 h-3.5 ${loadingZoho ? "animate-spin" : ""}`} /> Refresh Zoho
+              </Button>
+            </div>
+
+            {loadingZoho && zohoLiveDocs.length === 0 ? (
+              <div className="py-8 text-center text-ui-fg-muted text-sm">
+                Fetching live documents from Zoho Books...
+              </div>
+            ) : zohoLiveDocs.length === 0 ? (
+              <div className="py-8 text-center text-ui-fg-muted text-sm border border-dashed border-ui-border-base rounded-lg">
+                <Text className="text-sm font-medium">No live Zoho documents found</Text>
+                <Text className="text-xs text-ui-fg-subtle mt-1">
+                  Ensure Zoho Books credentials are configured in Settings and click Refresh Zoho.
+                </Text>
+              </div>
+            ) : (
               <Table>
                 <Table.Header>
                   <Table.Row>
@@ -850,20 +896,20 @@ export const DocumentsPage = () => {
                 </Table.Header>
                 <Table.Body>
                   {zohoLiveDocs.map((zi: any) => (
-                    <Table.Row key={zi.invoice_id}>
-                      <Table.Cell className="font-medium">{zi.invoice_number}</Table.Cell>
-                      <Table.Cell>{zi.customer_name}</Table.Cell>
-                      <Table.Cell>{zi.total}</Table.Cell>
+                    <Table.Row key={zi.invoice_id || zi.estimate_id || zi.payment_id || `${zi.invoice_number}-${zi.date}`}>
+                      <Table.Cell className="font-medium">{zi.invoice_number || zi.estimate_number || zi.payment_number || "—"}</Table.Cell>
+                      <Table.Cell>{zi.customer_name || "—"}</Table.Cell>
+                      <Table.Cell>{zi.total != null ? `${zi.currency_symbol || ""}${zi.total}` : (zi.amount != null ? `${zi.currency_symbol || ""}${zi.amount}` : "—")}</Table.Cell>
                       <Table.Cell>
-                        <Badge color={zi.status === "paid" ? "green" : "red"} size="small">{zi.status}</Badge>
+                        <Badge color={zi.status === "paid" ? "green" : (zi.status === "overdue" ? "red" : "blue")} size="small">{zi.status || "draft"}</Badge>
                       </Table.Cell>
-                      <Table.Cell>{zi.date}</Table.Cell>
+                      <Table.Cell>{zi.date || "—"}</Table.Cell>
                     </Table.Row>
                   ))}
                 </Table.Body>
               </Table>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 

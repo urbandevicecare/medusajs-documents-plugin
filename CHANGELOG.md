@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.12] - 2026-10-16
+
+### Admin UI Enhancements: Auto-fetch Live Zoho Documents & Invoices Default Filter
+
+- **Persistent Live Zoho Books Invoices Section**:
+  - The live Zoho Books documents table is now permanently visible on the All Documents tab instead of hiding when unpopulated.
+  - Added dedicated loading state ("Fetching live documents from Zoho Books...") and empty state guidance.
+  - Added localized "Refresh Zoho" action button directly in the section header.
+- **Auto-Fetch on Mount & Global Refresh Integration**:
+  - Automatically fetches live Zoho invoices upon mounting the documents admin route (`useEffect`).
+  - Integrated live Zoho fetching into the global toolbar refresh button to update both local documents and Zoho cloud documents simultaneously with spinning feedback.
+  - Linked document type filter dropdown changes to trigger synchronous live Zoho document category lookups (`invoices` vs `estimates`).
+- **Default Document Filter**:
+  - Initialized default `typeFilter` to `"invoice"` (Invoices) when opening the Documents Hub.
+
+---
+
 ## [1.1.10] - 2026-10-16
 
 ### Documentation & Registration Safeguards
