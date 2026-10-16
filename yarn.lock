@@ -6041,6 +6041,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"bwip-js@npm:^4.11.4":
+  version: 4.11.4
+  resolution: "bwip-js@npm:4.11.4"
+  bin:
+    bwip-js: bin/bwip-js.js
+  checksum: 10c0/084424c9e1dae29bc6218cdd94739c0f51a8f403e2b94f3ef9b246ac5a5b465f3b747943b23331676a3e8b3764db8536c53c1afaff37773896ea4261e1290b50
+  languageName: node
+  linkType: hard
+
 "bytes@npm:3.1.2, bytes@npm:~3.1.2":
   version: 3.1.2
   resolution: "bytes@npm:3.1.2"
@@ -8650,6 +8659,7 @@ __metadata:
     "@types/qrcode": "npm:^1.5.6"
     "@types/react": "npm:^18.3.2"
     "@types/react-dom": "npm:^18.2.25"
+    bwip-js: "npm:^4.11.4"
     pdf-lib: "npm:^1.17.1"
     pdfkit: "npm:^0.18.0"
     qrcode: "npm:^1.5.4"

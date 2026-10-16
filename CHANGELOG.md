@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.8] - 2026-10-16
+## [1.1.9] - 2026-10-16
 
 ### Patch Release: PostgreSQL 42P01 Missing Table Resilience & Barcode Generation Support
 
