@@ -13,7 +13,7 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       type = "invoice",
       customer,
       items = [],
-      currency_code = "usd",
+      currency_code = "kes",
       notes,
       terms,
       force_source,
@@ -31,20 +31,23 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       total += qty * rate;
     }
 
+    const companyName = customer?.company_name || req.body?.company_name;
+
     const result = await documentService.generateDocument(
       {
         display_id,
         title: title || (type === "invoice" ? "Tax Invoice" : "Quotation"),
         type: type as any,
         customer: {
-          name: customer?.name || "Customer",
+          name: companyName || customer?.name || "Customer",
+          company_name: companyName || undefined,
           email: customer?.email,
           phone: customer?.phone,
           address: customer?.address,
         },
         items,
         total,
-        currency_code,
+        currency_code: currency_code || "kes",
         notes,
         force_source,
         auto_send: auto_send || send_email_now,

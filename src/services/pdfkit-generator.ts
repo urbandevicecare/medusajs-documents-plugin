@@ -18,6 +18,7 @@ export interface DocumentData {
   due_date?: string;
   customer: {
     name: string;
+    company_name?: string;
     email?: string;
     phone?: string;
     address?: string;
@@ -48,10 +49,10 @@ export interface DocumentData {
 }
 
 export class PDFKitGenerator {
-  static formatCurrency(amount: number, currency: string = "USD"): string {
+  static formatCurrency(amount: number, currency: string = "KES"): string {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: currency.toUpperCase(),
+      currency: (currency || "KES").toUpperCase(),
       minimumFractionDigits: 2,
     }).format(amount);
   }
@@ -79,14 +80,35 @@ export class PDFKitGenerator {
   }
 
   static async generate(data: DocumentData, templateStyle: string = "modern"): Promise<Buffer> {
+    const normalizedData: DocumentData = {
+      ...data,
+      company: {
+        name: data.company?.name || "Company Store",
+        logo_url: data.company?.logo_url,
+        address: data.company?.address,
+        phone: data.company?.phone,
+        email: data.company?.email,
+        website: data.company?.website,
+        payment_details: data.company?.payment_details,
+        terms: data.company?.terms,
+      },
+      customer: {
+        name: data.customer?.name || "Valued Customer",
+        company_name: data.customer?.company_name,
+        email: data.customer?.email,
+        phone: data.customer?.phone,
+        address: data.customer?.address,
+      },
+    };
+
     switch (templateStyle) {
       case "classic":
-        return await this.generateClassic(data);
+        return await this.generateClassic(normalizedData);
       case "minimal":
-        return await this.generateMinimal(data);
+        return await this.generateMinimal(normalizedData);
       case "modern":
       default:
-        return await this.generateModern(data);
+        return await this.generateModern(normalizedData);
     }
   }
 
@@ -113,15 +135,16 @@ export class PDFKitGenerator {
 
         // Header
         const headerY = 35;
-        doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(22).text(data.company.name, 40, headerY);
+        const compName = data.company?.name || "Company Store";
+        doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(22).text(compName, 40, headerY);
         
         let subY = headerY + 26;
         doc.font("Helvetica").fontSize(8).fillColor(subtleColor);
-        if (data.company.address) {
+        if (data.company?.address) {
           doc.text(data.company.address, 40, subY);
           subY += 12;
         }
-        const contactLine = [data.company.phone, data.company.email, data.company.website].filter(Boolean).join("  •  ");
+        const contactLine = [data.company?.phone, data.company?.email, data.company?.website].filter(Boolean).join("  •  ");
         if (contactLine) {
           doc.text(contactLine, 40, subY);
         }
@@ -171,9 +194,14 @@ export class PDFKitGenerator {
         const billToY = 145;
         const recipientLabel = data.type === "job_card" ? "CUSTOMER INTAKE DETAILS:" : "RECIPIENT / BILLED TO:";
         doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(9).text(recipientLabel, 40, billToY);
-        doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(11).text(data.customer.name, 40, billToY + 14);
+        const customerDisplayName = data.customer.company_name || data.customer.name;
+        doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(11).text(customerDisplayName, 40, billToY + 14);
         
         let cY = billToY + 28;
+        if (data.customer.company_name && data.customer.name && data.customer.name !== data.customer.company_name) {
+          doc.font("Helvetica").fontSize(8.5).fillColor(darkColor).text(`Attn: ${data.customer.name}`, 40, cY);
+          cY += 12;
+        }
         doc.font("Helvetica").fontSize(8).fillColor(subtleColor);
         if (data.customer.email) {
           doc.text(`Email: ${data.customer.email}`, 40, cY);
@@ -354,12 +382,13 @@ export class PDFKitGenerator {
           data.type === "estimate" ? "ESTIMATE" : "DOCUMENT"
         );
 
-        doc.font(fontHeader).fontSize(20).fillColor(primaryColor).text(data.company.name, 40, 48);
+        const compName = data.company?.name || "Company Store";
+        doc.font(fontHeader).fontSize(20).fillColor(primaryColor).text(compName, 40, 48);
         doc.font(fontRegular).fontSize(8.5).fillColor("#333333");
         let subY = 70;
-        if (data.company.address) { doc.text(data.company.address, 40, subY); subY += 12; }
-        if (data.company.phone || data.company.email) {
-          doc.text([data.company.phone, data.company.email].filter(Boolean).join(" | "), 40, subY);
+        if (data.company?.address) { doc.text(data.company.address, 40, subY); subY += 12; }
+        if (data.company?.phone || data.company?.email) {
+          doc.text([data.company?.phone, data.company?.email].filter(Boolean).join(" | "), 40, subY);
         }
 
         doc.font(fontHeader).fontSize(16).text(docTitle, 350, 48, { align: "right" });
@@ -388,9 +417,15 @@ export class PDFKitGenerator {
         doc.rect(40, 110, 455, 65).strokeColor("#000000").lineWidth(0.5).stroke();
         const clientLabel = data.type === "job_card" ? "CUSTOMER & INTAKE INFORMATION:" : "CLIENT INFORMATION:";
         doc.font(fontHeader).fontSize(9).text(clientLabel, 48, 116);
-        doc.font(fontHeader).fontSize(10).text(data.customer.name, 48, 128);
-        doc.font(fontRegular).fontSize(8.5).text(`Email: ${data.customer.email || "N/A"}  |  Phone: ${data.customer.phone || "N/A"}`, 48, 142);
-        if (data.customer.address) doc.text(`Address: ${data.customer.address}`, 48, 154);
+        const customerDisplayName = data.customer.company_name || data.customer.name;
+        doc.font(fontHeader).fontSize(10).text(customerDisplayName, 48, 128);
+        let cY = 142;
+        if (data.customer.company_name && data.customer.name && data.customer.name !== data.customer.company_name) {
+          doc.font(fontRegular).fontSize(8.5).text(`Attn: ${data.customer.name}`, 48, cY);
+          cY += 12;
+        }
+        doc.font(fontRegular).fontSize(8.5).text(`Email: ${data.customer.email || "N/A"}  |  Phone: ${data.customer.phone || "N/A"}`, 48, cY);
+        if (data.customer.address) doc.text(`Address: ${data.customer.address}`, 48, cY + 12);
 
         // Custom fields / Device info for Classic
         let tableStartY = 190;
@@ -489,9 +524,10 @@ export class PDFKitGenerator {
         doc.on("end", () => resolve(Buffer.concat(buffers)));
 
         // Monospace & High Contrast
-        doc.font("Courier-Bold").fontSize(18).fillColor("#000000").text(data.company.name.toUpperCase(), 40, 40);
+        const compName = (data.company?.name || "Company Store").toUpperCase();
+        doc.font("Courier-Bold").fontSize(18).fillColor("#000000").text(compName, 40, 40);
         doc.font("Courier").fontSize(8).fillColor("#666666");
-        doc.text(`${data.company.email || ""} // ${data.company.website || ""}`, 40, 62);
+        doc.text(`${data.company?.email || ""} // ${data.company?.website || ""}`, 40, 62);
 
         const docTitle = data.type === "job_card" ? "JOB CARD" : (data.title || data.type).toUpperCase();
         doc.font("Courier-Bold").fontSize(14).fillColor("#000000").text(`[${docTitle}]`, 350, 40, { align: "right" });
@@ -518,8 +554,12 @@ export class PDFKitGenerator {
 
         doc.strokeColor("#000000").lineWidth(1).moveTo(40, 95).lineTo(555, 95).stroke();
 
+        const customerDisplayName = data.customer.company_name || data.customer.name;
+        const attnInfo = (data.customer.company_name && data.customer.name && data.customer.name !== data.customer.company_name)
+          ? ` (Attn: ${data.customer.name})`
+          : "";
         doc.font("Courier-Bold").fontSize(9).text("CLIENT:", 40, 110);
-        doc.font("Courier").fontSize(8.5).text(`${data.customer.name} <${data.customer.email || "N/A"}>`, 95, 110);
+        doc.font("Courier").fontSize(8.5).text(`${customerDisplayName}${attnInfo} <${data.customer.email || "N/A"}>`, 95, 110);
 
         let tableY = 140;
         if (data.body_text) {

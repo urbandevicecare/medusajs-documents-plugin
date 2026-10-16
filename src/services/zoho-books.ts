@@ -115,9 +115,11 @@ export class ZohoBooksService {
     company_name?: string;
   }): Promise<string> {
     const email = customer.email;
-    const name = customer.first_name
+    const name = customer.company_name
+      ? customer.company_name
+      : customer.first_name
       ? `${customer.first_name} ${customer.last_name || ""}`.trim()
-      : customer.company_name || email || "Guest Customer";
+      : email || "Guest Customer";
 
     // 1. Search by email
     if (email && email.includes("@")) {

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.14] - 2026-10-16
+
+### Company Name Support, Shortlink 500 Fix, Duplicate Prefix Cleanup & Currency Improvements
+
+- **Short Payment Link HTTP 500 Resolution**:
+  - Implemented universal `handleShortlinkRedirect` utility protecting against `TypeError: req.get is not a function` across Medusa v2 / Express / Fastify environments.
+  - Added safe extraction of `host` (`x-forwarded-host` -> `host` -> `req.hostname` -> `localhost:9000`) and `protocol` (`x-forwarded-proto` -> `req.protocol` -> `https`).
+  - Added multi-tier fallback lookup: checks `documents` module, `repair` module, `document_link` table, `repair_link` table, `document_record` table, and `repair_ticket` table.
+  - Safe redirect execution via `res.redirect` with fallback to `Location` header + HTTP 302.
+  - Updated all shortlink routes: `/r/:code`, `/documents/r/:code`, `/store/documents/r/:code`, and `/api/store/documents/r/:code`.
+- **Customer Company Name Priority**:
+  - Prioritized customer `company_name` over personal name across document records, PDFKit generator, and Zoho Books contact synchronization.
+  - Updated Modern, Classic, and Minimal PDFKit templates to render `customerDisplayName = data.customer.company_name || data.customer.name` with `(Attn: ${name})` when personal contact name differs.
+  - Added `company_name` input fields to manual document and custom document modals in Admin UI.
+- **Prevent Pushing Non-Zoho Documents to Zoho Books**:
+  - Disabled and hid the "Push Zoho" action button in Admin UI for non-Zoho document types (`job_card`, `packing_slip`, `custom`) and documents with zero or negative total amounts.
+  - Enforced strict validation in `POST /admin/documents/:id/sync-zoho`, rejecting non-Zoho document types and zero-amount documents with informative HTTP 400 messages.
+- **Eliminate Duplicate `RT-` & `JOB-RT-` Reference Prefixes**:
+  - Normalized repair ticket number prefixes across `repair-documents` subscriber and document generator to prevent duplicate prefixes such as `RT-RT-...` and `JOB-RT-...`.
+  - Output clean formatted reference IDs like `RT-1792156525673-SNL9QH` and `JOB-1792156525673-SNL9QH`.
+- **Live Zoho Books Invoices UI & Hover Tooltip Refresh Button**:
+  - Converted the "Refresh Live Zoho" / "View Live Zoho" button in the filter bar and the Live Zoho table header into dedicated `IconButton` components wrapped with interactive hover tooltips (`<Tooltip content="Refresh Live Zoho Books Invoices">`).
+  - Live Zoho Books invoices table is permanently visible and automatically synchronized on initial mount, tab switches, and on-demand refreshes.
+- **Default Document Types to Invoices**:
+  - Filter bar, preview modal, and manual document creation form now default to `"invoice"` (Tax Invoice / Invoices).
+- **Currency Formatting Defaulted to KES**:
+  - Set default currency to `KES` (Kenya Shillings / `KSh 1,500.00`) across all Admin UI tables, amount summaries, PDFKit templates, and notification dispatches when not explicitly overridden by store region settings.
+
+---
+
+## [1.1.13] - 2026-10-16
+
+### Live Zoho Books Invoices View Enhancements
+
+- Added persistent Live Zoho Books Invoices table to the Documents Hub.
+- Automatically queries Zoho API upon mounting with localized empty states.
+
+---
+
 ## [1.1.12] - 2026-10-16
 
 ### Admin UI Enhancements: Auto-fetch Live Zoho Documents & Invoices Default Filter

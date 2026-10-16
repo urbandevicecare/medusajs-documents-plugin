@@ -66,6 +66,10 @@ export default async function repairDocumentsSubscriber({
     let customerName = "Valued Customer";
     let customerEmail: string | undefined = undefined;
     let customerPhone: string | undefined = undefined;
+    let customerCompanyName: string | undefined =
+      ticket.company_name ||
+      ticket.customer?.company_name ||
+      (ticket.metadata as any)?.company_name;
 
     if (ticket.customer_id) {
       try {
@@ -73,12 +77,18 @@ export default async function repairDocumentsSubscriber({
         if (customerModule) {
           const c = await customerModule.retrieveCustomer(ticket.customer_id);
           if (c) {
-            customerName = c.first_name ? `${c.first_name} ${c.last_name || ""}`.trim() : c.email;
+            customerCompanyName = customerCompanyName || c.company_name || (c.metadata as any)?.company_name;
+            const personalName = c.first_name ? `${c.first_name} ${c.last_name || ""}`.trim() : "";
+            customerName = customerCompanyName || personalName || c.email || customerName;
             customerEmail = c.email || undefined;
             customerPhone = c.phone || undefined;
           }
         }
       } catch (e) {}
+    } else if (ticket.customer_name || customerCompanyName) {
+      customerName = customerCompanyName || ticket.customer_name;
+      customerEmail = ticket.customer_email || undefined;
+      customerPhone = ticket.customer_phone || undefined;
     }
 
     const storeUrl = settings.storefront_url || process.env.STORE_URL || "http://localhost:3000";
@@ -177,14 +187,40 @@ export default async function repairDocumentsSubscriber({
       docTitle = "Repair Job Card";
     }
 
+    const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-)+/i, "");
     const displayId =
       docType === "job_card"
-        ? `JOB-${ticket.ticket_number}`
+        ? `JOB-${cleanTicketNumber}`
         : docType === "receipt"
-        ? `RCPT-${ticket.ticket_number}`
+        ? `RCPT-${cleanTicketNumber}`
         : docType === "estimate"
-        ? `EST-${ticket.ticket_number}`
-        : `RT-${ticket.ticket_number}`;
+        ? `EST-${cleanTicketNumber}`
+        : `RT-${cleanTicketNumber}`;
+
+    let currencyCode = ticket.currency_code || (ticket.metadata as any)?.currency_code;
+    if (!currencyCode) {
+      try {
+        const storeModule = container.resolve("store", { allowUnregistered: true });
+        if (storeModule) {
+          const [store] = await storeModule.listStores();
+          if ((store as any)?.default_currency_code) {
+            currencyCode = (store as any).default_currency_code;
+          }
+        }
+      } catch (e) {}
+    }
+    if (!currencyCode) {
+      try {
+        const regionModule = container.resolve("region", { allowUnregistered: true });
+        if (regionModule) {
+          const [reg] = await regionModule.listRegions();
+          if (reg?.currency_code) {
+            currencyCode = reg.currency_code;
+          }
+        }
+      } catch (e) {}
+    }
+    currencyCode = currencyCode || "kes";
     const totalEstimate =
       eventName === "repair.payment_received" && data.amount != null && Number(data.amount) > 0
         ? Number(data.amount)
@@ -221,12 +257,13 @@ export default async function repairDocumentsSubscriber({
         order_id: data.order_id || ticket.order_id || (ticket.metadata as any)?.order_id,
         customer: {
           name: customerName,
+          company_name: customerCompanyName || undefined,
           email: customerEmail,
           phone: customerPhone,
         },
         items: lineItems,
         total: totalEstimate,
-        currency_code: "usd",
+        currency_code: currencyCode,
         payment_status: isPaid ? "paid" : "unpaid",
         payment_link: paymentOrTrackingLink || undefined,
         auto_send: autoSend,

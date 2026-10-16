@@ -83,10 +83,10 @@ export class NotificationSender {
   /**
    * Formats a monetary amount into a localized currency string
    */
-  private static formatCurrency(amount: number, currencyCode: string = "USD"): string {
+  private static formatCurrency(amount: number, currencyCode: string = "KES"): string {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: currencyCode.toUpperCase(),
+      currency: (currencyCode || "KES").toUpperCase(),
     }).format(amount);
   }
 
@@ -117,7 +117,7 @@ export class NotificationSender {
 
     const companyName = settings?.company_name || "Company Store";
     const customerName = document.customer_name || "Valued Customer";
-    const currency = (document.currency_code || "USD").toUpperCase();
+    const currency = (document.currency_code || "KES").toUpperCase();
     const formattedTotal = this.formatCurrency(Number(document.total_amount || 0), currency);
 
     const docUrl = document.short_pdf_link || document.pdf_url || "";
@@ -412,7 +412,7 @@ export class NotificationSender {
     }
 
     // Financial formatting
-    const currency = (order.currency_code || "usd").toUpperCase();
+    const currency = (order.currency_code || "KES").toUpperCase();
     const orderTotal = Number(order.total || 0);
     const formattedTotal = this.formatCurrency(orderTotal, currency);
     const formattedSubtotal = this.formatCurrency(Number(order.subtotal || 0), currency);

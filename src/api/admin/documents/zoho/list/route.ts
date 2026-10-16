@@ -5,10 +5,19 @@ import { ZohoBooksService } from "../../../../../services/zoho-books";
 
 // GET /admin/documents/zoho/list?type=invoices | estimates | payments
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
-  const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
+  const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE, { allowUnregistered: true });
+  if (!documentService) {
+    return res.json({
+      enabled: false,
+      message: "Documents service unavailable.",
+      items: [],
+    });
+  }
+
   const settings = await documentService.getSettings();
 
-  if (!settings.zoho_books_enabled || !settings.zoho_client_id) {
+  const hasCredentials = Boolean(settings.zoho_client_id && settings.zoho_client_secret);
+  if (!settings.zoho_books_enabled && !hasCredentials) {
     return res.json({
       enabled: false,
       message: "Zoho Books integration is not configured or disabled.",
@@ -25,7 +34,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         organization_id: settings.zoho_organization_id,
         domain: settings.zoho_domain || "com",
       },
-      req.scope.resolve("logger")
+      req.scope.resolve("logger", { allowUnregistered: true })
     );
 
     const type = (req.query.type as string) || "invoices";
@@ -39,14 +48,16 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       items = await zoho.listInvoices();
     }
 
-    res.json({
+    return res.json({
       enabled: true,
       type,
       items,
     });
   } catch (error: any) {
-    req.scope.resolve("logger")?.error(`[Documents-API] Failed to fetch Zoho documents: ${error.message}`);
-    res.status(500).json({
+    try {
+      req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Failed to fetch Zoho documents: ${error.message}`);
+    } catch (_) {}
+    return res.json({
       enabled: true,
       error: error.message,
       items: [],

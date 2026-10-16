@@ -12,6 +12,8 @@ import {
   Textarea,
   Text,
   Switch,
+  Tooltip,
+  IconButton,
 } from "@medusajs/ui";
 import { useEffect, useState } from "react";
 import {
@@ -226,12 +228,13 @@ export const DocumentsPage = () => {
   const [manualForm, setManualForm] = useState({
     title: "Tax Invoice",
     type: "invoice",
+    company_name: "",
     customer_name: "",
     customer_email: "",
     customer_phone: "",
     customer_address: "",
     items: [{ title: "", description: "", quantity: 1, unit_price: 0 }],
-    currency_code: "usd",
+    currency_code: "kes",
     notes: "",
     force_source: "auto",
     auto_send: false,
@@ -241,6 +244,7 @@ export const DocumentsPage = () => {
   const [customDocForm, setCustomDocForm] = useState({
     preset_id: "warranty",
     title: "Warranty Certificate",
+    company_name: "",
     customer_name: "",
     customer_email: "",
     customer_phone: "",
@@ -249,7 +253,7 @@ export const DocumentsPage = () => {
       { title: "OEM Component & Hardware Warranty", description: "90-Day Coverage from Date of Collection", quantity: 1, unit_price: 0 },
       { title: "Workshop Diagnostic & Quality Clearance", description: "Multi-Point Hardware & Bench Testing", quantity: 1, unit_price: 0 },
     ],
-    currency_code: "usd",
+    currency_code: "kes",
     send_email_now: true,
     email_subject: "Your Official Warranty Certificate - Urban Device Care",
   });
@@ -369,6 +373,7 @@ export const DocumentsPage = () => {
           type: manualForm.type,
           customer: {
             name: manualForm.customer_name,
+            company_name: manualForm.company_name || undefined,
             email: manualForm.customer_email,
             phone: manualForm.customer_phone,
             address: manualForm.customer_address,
@@ -387,12 +392,13 @@ export const DocumentsPage = () => {
         setManualForm({
           title: "Tax Invoice",
           type: "invoice",
+          company_name: "",
           customer_name: "",
           customer_email: "",
           customer_phone: "",
           customer_address: "",
           items: [{ title: "", description: "", quantity: 1, unit_price: 0 }],
-          currency_code: "usd",
+          currency_code: "kes",
           notes: "",
           force_source: "auto",
           auto_send: false,
@@ -429,6 +435,7 @@ export const DocumentsPage = () => {
           title: customDocForm.title,
           customer: {
             name: customDocForm.customer_name,
+            company_name: customDocForm.company_name || undefined,
             email: customDocForm.customer_email,
             phone: customDocForm.customer_phone,
           },
@@ -692,8 +699,8 @@ export const DocumentsPage = () => {
                   <Select.Value placeholder="Document Type" />
                 </Select.Trigger>
                 <Select.Content>
+                  <Select.Item value="invoice">Invoices (Default)</Select.Item>
                   <Select.Item value="all">All Types</Select.Item>
-                  <Select.Item value="invoice">Invoices</Select.Item>
                   <Select.Item value="receipt">Receipts</Select.Item>
                   <Select.Item value="estimate">Estimates / Quotes</Select.Item>
                   <Select.Item value="job_card">Job Cards</Select.Item>
@@ -713,14 +720,17 @@ export const DocumentsPage = () => {
                 </Select.Content>
               </Select>
 
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={() => loadZohoLiveDocs()}
-                isLoading={loadingZoho}
-              >
-                <ArrowPath className={`w-3.5 h-3.5 mr-1 ${loadingZoho ? "animate-spin" : ""}`} /> Refresh Live Zoho
-              </Button>
+              <Tooltip content="Refresh Live Zoho Books Invoices">
+                <IconButton
+                  variant="secondary"
+                  size="small"
+                  onClick={() => loadZohoLiveDocs()}
+                  isLoading={loadingZoho}
+                  title="Refresh Live Zoho Books Invoices"
+                >
+                  <ArrowPath className={`w-4 h-4 ${loadingZoho ? "animate-spin" : ""}`} />
+                </IconButton>
+              </Tooltip>
             </div>
           </div>
 
@@ -777,7 +787,7 @@ export const DocumentsPage = () => {
                         <span className="text-xs font-semibold">
                           {new Intl.NumberFormat("en-US", {
                             style: "currency",
-                            currency: (doc.currency_code || "usd").toUpperCase(),
+                            currency: (doc.currency_code || "KES").toUpperCase(),
                           }).format(Number(doc.total_amount || 0))}
                         </span>
                       </Table.Cell>
@@ -821,7 +831,7 @@ export const DocumentsPage = () => {
                           >
                             <Envelope className="w-4 h-4" />
                           </button>
-                          {!isZoho && settings.zoho_books_enabled && (
+                          {!isZoho && settings.zoho_books_enabled && (doc.type === "invoice" || doc.type === "estimate") && Number(doc.total_amount || 0) > 0 && (
                             <Button
                               variant="transparent"
                               size="small"
@@ -861,15 +871,17 @@ export const DocumentsPage = () => {
                 </Heading>
                 <Badge color="purple" size="small">Live Cloud Sync</Badge>
               </div>
-              <Button
-                variant="transparent"
-                size="small"
-                onClick={() => loadZohoLiveDocs()}
-                isLoading={loadingZoho}
-                className="text-xs text-ui-fg-muted hover:text-ui-fg-base flex items-center gap-1"
-              >
-                <ArrowPath className={`w-3.5 h-3.5 ${loadingZoho ? "animate-spin" : ""}`} /> Refresh Zoho
-              </Button>
+              <Tooltip content="Refresh Live Zoho Books Invoices">
+                <IconButton
+                  variant="transparent"
+                  size="small"
+                  onClick={() => loadZohoLiveDocs()}
+                  isLoading={loadingZoho}
+                  title="Refresh Live Zoho Books Invoices"
+                >
+                  <ArrowPath className={`w-4 h-4 ${loadingZoho ? "animate-spin" : ""}`} />
+                </IconButton>
+              </Tooltip>
             </div>
 
             {loadingZoho && zohoLiveDocs.length === 0 ? (
@@ -899,7 +911,7 @@ export const DocumentsPage = () => {
                     <Table.Row key={zi.invoice_id || zi.estimate_id || zi.payment_id || `${zi.invoice_number}-${zi.date}`}>
                       <Table.Cell className="font-medium">{zi.invoice_number || zi.estimate_number || zi.payment_number || "—"}</Table.Cell>
                       <Table.Cell>{zi.customer_name || "—"}</Table.Cell>
-                      <Table.Cell>{zi.total != null ? `${zi.currency_symbol || ""}${zi.total}` : (zi.amount != null ? `${zi.currency_symbol || ""}${zi.amount}` : "—")}</Table.Cell>
+                      <Table.Cell>{zi.total != null ? `${zi.currency_symbol || "KES "}${zi.total}` : (zi.amount != null ? `${zi.currency_symbol || "KES "}${zi.amount}` : "—")}</Table.Cell>
                       <Table.Cell>
                         <Badge color={zi.status === "paid" ? "green" : (zi.status === "overdue" ? "red" : "blue")} size="small">{zi.status || "draft"}</Badge>
                       </Table.Cell>
@@ -1839,6 +1851,15 @@ export const DocumentsPage = () => {
                   />
                 </div>
                 <div>
+                  <Label className="text-xs">Company Name (Optional)</Label>
+                  <Input
+                    value={manualForm.company_name}
+                    onChange={(e) => setManualForm({ ...manualForm, company_name: e.target.value })}
+                    placeholder="Company / Organization Name"
+                    size="small"
+                  />
+                </div>
+                <div>
                   <Label className="text-xs">Customer Name</Label>
                   <Input
                     value={manualForm.customer_name}
@@ -1895,10 +1916,10 @@ export const DocumentsPage = () => {
                         <Select.Value />
                       </Select.Trigger>
                       <Select.Content>
+                        <Select.Item value="kes">KES (KSh)</Select.Item>
                         <Select.Item value="usd">USD ($)</Select.Item>
                         <Select.Item value="gbp">GBP (£)</Select.Item>
                         <Select.Item value="eur">EUR (€)</Select.Item>
-                        <Select.Item value="kes">KES (KSh)</Select.Item>
                         <Select.Item value="cad">CAD ($)</Select.Item>
                         <Select.Item value="aud">AUD ($)</Select.Item>
                       </Select.Content>
@@ -1995,7 +2016,7 @@ export const DocumentsPage = () => {
                           <span className="text-xs font-semibold text-ui-fg-base py-1">
                             {new Intl.NumberFormat("en-US", {
                               style: "currency",
-                              currency: (manualForm.currency_code || "usd").toUpperCase(),
+                              currency: (manualForm.currency_code || "KES").toUpperCase(),
                             }).format(lineTotal)}
                           </span>
                           {manualForm.items.length > 1 && (
@@ -2041,7 +2062,7 @@ export const DocumentsPage = () => {
                     <span className="text-sm font-bold text-ui-fg-base">
                       {new Intl.NumberFormat("en-US", {
                         style: "currency",
-                        currency: (manualForm.currency_code || "usd").toUpperCase(),
+                        currency: (manualForm.currency_code || "KES").toUpperCase(),
                       }).format(
                         manualForm.items.reduce(
                           (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),
@@ -2145,6 +2166,15 @@ export const DocumentsPage = () => {
                   />
                 </div>
                 <div>
+                  <Label className="text-xs">Company Name (Optional)</Label>
+                  <Input
+                    value={customDocForm.company_name}
+                    onChange={(e) => setCustomDocForm({ ...customDocForm, company_name: e.target.value })}
+                    placeholder="Company / Organization Name"
+                    size="small"
+                  />
+                </div>
+                <div>
                   <Label className="text-xs">Customer Name *</Label>
                   <Input
                     value={customDocForm.customer_name}
@@ -2162,7 +2192,7 @@ export const DocumentsPage = () => {
                     size="small"
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
                   <Label className="text-xs">Customer Phone (Optional)</Label>
                   <Input
                     value={customDocForm.customer_phone}
@@ -2197,10 +2227,10 @@ export const DocumentsPage = () => {
                         <Select.Value />
                       </Select.Trigger>
                       <Select.Content>
+                        <Select.Item value="kes">KES (KSh)</Select.Item>
                         <Select.Item value="usd">USD ($)</Select.Item>
                         <Select.Item value="gbp">GBP (£)</Select.Item>
                         <Select.Item value="eur">EUR (€)</Select.Item>
-                        <Select.Item value="kes">KES (KSh)</Select.Item>
                         <Select.Item value="cad">CAD ($)</Select.Item>
                         <Select.Item value="aud">AUD ($)</Select.Item>
                       </Select.Content>
@@ -2297,7 +2327,7 @@ export const DocumentsPage = () => {
                           <span className="text-xs font-semibold text-ui-fg-base py-1">
                             {new Intl.NumberFormat("en-US", {
                               style: "currency",
-                              currency: (customDocForm.currency_code || "usd").toUpperCase(),
+                              currency: (customDocForm.currency_code || "KES").toUpperCase(),
                             }).format(lineTotal)}
                           </span>
                           {customDocForm.items.length > 1 && (
@@ -2343,7 +2373,7 @@ export const DocumentsPage = () => {
                     <span className="text-sm font-bold text-ui-fg-base">
                       {new Intl.NumberFormat("en-US", {
                         style: "currency",
-                        currency: (customDocForm.currency_code || "usd").toUpperCase(),
+                        currency: (customDocForm.currency_code || "KES").toUpperCase(),
                       }).format(
                         customDocForm.items.reduce(
                           (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),

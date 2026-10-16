@@ -13,6 +13,7 @@ export interface GenerateDocumentInput {
   type: "invoice" | "receipt" | "estimate" | "packing_slip" | "custom" | "job_card";
   customer?: {
     name: string;
+    company_name?: string;
     email?: string;
     phone?: string;
     address?: string;
@@ -166,7 +167,7 @@ export const DEFAULT_DOCUMENT_SETTINGS: Record<string, any> = {
   estimate_template: "modern",
   job_card_template: "modern",
   custom_doc_template: "modern",
-  zoho_books_enabled: false,
+  zoho_books_enabled: true,
   zoho_client_id: null,
   zoho_client_secret: null,
   zoho_refresh_token: null,
@@ -311,8 +312,13 @@ export class DocumentModuleService extends MedusaService({
           });
           if (tickets && tickets.length > 0) {
             const ticket = tickets[0];
-            input.display_id = input.display_id || (input.type === "job_card" ? `JOB-${ticket.ticket_number}` : `RT-${ticket.ticket_number}`);
+            const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-)+/i, "");
+            input.display_id = input.display_id || (input.type === "job_card" ? `JOB-${cleanTicketNumber}` : `RT-${cleanTicketNumber}`);
             input.title = input.title || (input.type === "job_card" ? "Repair Job Card" : "Repair Document");
+            let customerCompanyName: string | undefined =
+              ticket.company_name ||
+              ticket.customer?.company_name ||
+              (ticket.metadata as any)?.company_name;
             let customerName = "Valued Customer";
             let customerEmail: string | undefined = undefined;
             let customerPhone: string | undefined = undefined;
@@ -321,15 +327,20 @@ export class DocumentModuleService extends MedusaService({
               if (custMod) {
                 const c = await custMod.retrieveCustomer(ticket.customer_id);
                 if (c) {
-                  customerName = c.first_name ? `${c.first_name} ${c.last_name || ""}`.trim() : c.email || customerName;
+                  customerCompanyName = customerCompanyName || c.company_name || (c.metadata as any)?.company_name;
+                  const personalName = c.first_name ? `${c.first_name} ${c.last_name || ""}`.trim() : "";
+                  customerName = customerCompanyName || personalName || c.email || customerName;
                   customerEmail = c.email || undefined;
                   customerPhone = c.phone || undefined;
                 }
               }
+            } else if (ticket.customer_name || customerCompanyName) {
+              customerName = customerCompanyName || ticket.customer_name;
             }
             if (!input.customer) {
               input.customer = {
                 name: customerName,
+                company_name: customerCompanyName || undefined,
                 email: customerEmail,
                 phone: customerPhone,
               };
@@ -428,7 +439,12 @@ export class DocumentModuleService extends MedusaService({
 
     // Generate unique display ID if not given
     const prefix = input.type === "job_card" ? "JOB-" : (settings.zoho_invoice_prefix || "DOC-");
-    const displayId = input.display_id || `${prefix}${Math.floor(100000 + Math.random() * 900000)}`;
+    let displayId = input.display_id || `${prefix}${Math.floor(100000 + Math.random() * 900000)}`;
+    if (displayId.startsWith("JOB-RT-")) {
+      displayId = displayId.replace(/^JOB-RT-/, "JOB-");
+    } else if (displayId.startsWith("RT-RT-")) {
+      displayId = displayId.replace(/^RT-RT-/, "RT-");
+    }
 
     // Prepare short payment link if payment link is present
     let shortPaymentLink: string | undefined = undefined;
@@ -629,7 +645,7 @@ export class DocumentModuleService extends MedusaService({
         shipping_total: input.shipping_total,
         discount_total: input.discount_total,
         total: input.total != null ? input.total : 0,
-        currency_code: input.currency_code || "usd",
+        currency_code: input.currency_code || "kes",
         payment_status: input.payment_status || "unpaid",
         payment_link: shortPaymentLink || input.payment_link,
         qr_url: shortPaymentLink || input.payment_link,
@@ -898,7 +914,7 @@ export class DocumentModuleService extends MedusaService({
       },
       items: meta.items || [],
       total: record.total_amount || 0,
-      currency_code: record.currency_code || "usd",
+      currency_code: record.currency_code || "kes",
       payment_status: record.payment_status,
       payment_link: record.short_payment_link || record.payment_link,
       qr_url: record.short_payment_link || record.payment_link,

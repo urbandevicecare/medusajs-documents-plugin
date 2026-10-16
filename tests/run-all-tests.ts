@@ -6,3 +6,4 @@ import "./notification-sender.test";
 import "./order-notifications.test";
 import "./repair-fixes.test";
 import "./table-resilience.test";
+import "./release-1.1.14.test";

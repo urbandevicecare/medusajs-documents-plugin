@@ -14,6 +14,23 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
   if (!settings.zoho_books_enabled || !settings.zoho_client_id) {
     return res.status(400).json({
       message: "Zoho Books integration is not enabled or credentials are missing.",
+      success: false,
+    });
+  }
+
+  // Reject non-Zoho document types (e.g. job_card, packing_slip, custom)
+  if (record.type === "job_card" || record.type === "packing_slip" || record.type === "custom") {
+    return res.status(400).json({
+      message: `Cannot push ${record.type} documents to Zoho Books. Only invoice and estimate documents are supported.`,
+      success: false,
+    });
+  }
+
+  // Reject documents with zero or negative total amount
+  if (Number(record.total_amount || 0) <= 0) {
+    return res.status(400).json({
+      message: "Cannot push documents with zero total amount to Zoho Books.",
+      success: false,
     });
   }
 
@@ -25,17 +42,20 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
       organization_id: settings.zoho_organization_id,
       domain: settings.zoho_domain || "com",
     },
-    req.scope.resolve("logger")
+    req.scope.resolve("logger", { allowUnregistered: true })
   );
 
-  // 1. Sync contact
+  const meta = (record.metadata || {}) as any;
+  const companyName = meta.customer_company_name || meta.company_name;
+
+  // 1. Sync contact (prioritize company name)
   const contactId = await zoho.syncContact({
     first_name: record.customer_name || "Customer",
+    company_name: companyName || undefined,
     email: record.customer_email || undefined,
     phone: record.customer_phone || undefined,
   });
 
-  const meta = (record.metadata || {}) as any;
   const items = (meta.items || []).map((it: any) => ({
     name: it.title,
     description: it.description || "",

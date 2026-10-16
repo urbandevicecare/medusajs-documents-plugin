@@ -13,7 +13,7 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       body_text,
       items = [],
       total = 0,
-      currency_code = "usd",
+      currency_code = "kes",
       notes,
       custom_fields,
       send_email_now = true,
@@ -28,19 +28,22 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       }
     }
 
+    const companyName = customer?.company_name || req.body?.company_name;
+
     const result = await documentService.generateDocument(
       {
         title: title,
         type: "custom",
         customer: {
-          name: customer?.name || "Customer",
+          name: companyName || customer?.name || "Customer",
+          company_name: companyName || undefined,
           email: customer?.email,
           phone: customer?.phone,
           address: customer?.address,
         },
         items,
         total: computedTotal,
-        currency_code,
+        currency_code: currency_code || "kes",
         body_text,
         notes,
         custom_fields,

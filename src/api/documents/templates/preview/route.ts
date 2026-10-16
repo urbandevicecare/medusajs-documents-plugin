@@ -120,7 +120,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       tax_total: (isJobCard || isPackingSlip || isCustom) ? undefined : 24.9,
       discount_total: (isJobCard || isPackingSlip || isCustom) ? undefined : 10.0,
       total: (isJobCard || isPackingSlip || isCustom) ? 0 : 263.9,
-      currency_code: "usd",
+      currency_code: "kes",
       payment_status: isReceipt ? "paid" : "unpaid",
       payment_link: (type === "invoice" || isEstimate) ? "https://store.urbandevicecare.co.uk/pay/sample-preview-token" : undefined,
       qr_url: (type === "invoice" || isEstimate || isJobCard) ? "https://store.urbandevicecare.co.uk/track/JOB-1042" : undefined,

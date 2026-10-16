@@ -261,12 +261,23 @@ export default async function orderDocumentsSubscriber({
       }
     }
 
-    const customerName =
+    const customerCompanyName =
+      order.customer?.company_name ||
+      order.shipping_address?.company ||
+      order.billing_address?.company ||
+      (order.customer?.metadata as any)?.company_name ||
+      (order.metadata as any)?.company_name;
+
+    const customerPersonalName =
       order.customer?.first_name
         ? `${order.customer.first_name} ${order.customer.last_name || ""}`.trim()
         : order.shipping_address?.first_name
         ? `${order.shipping_address.first_name} ${order.shipping_address.last_name || ""}`.trim()
-        : order.email || "Valued Customer";
+        : order.billing_address?.first_name
+        ? `${order.billing_address.first_name} ${order.billing_address.last_name || ""}`.trim()
+        : "";
+
+    const customerName = customerCompanyName || customerPersonalName || order.email || "Valued Customer";
     const customerEmail = order.email || order.customer?.email;
     const customerPhone = order.shipping_address?.phone || order.customer?.phone;
 
@@ -305,6 +316,7 @@ export default async function orderDocumentsSubscriber({
             order_id: order.id,
             customer: {
               name: customerName,
+              company_name: customerCompanyName || undefined,
               email: customerEmail,
               phone: customerPhone,
               address: order.shipping_address?.address_1,
@@ -315,7 +327,7 @@ export default async function orderDocumentsSubscriber({
             shipping_total: Number(order.shipping_total || 0),
             discount_total: Number(order.discount_total || 0),
             total: Number(order.total || 0),
-            currency_code: order.currency_code,
+            currency_code: order.currency_code || "kes",
             payment_status: paymentInfo.isUnpaid ? "unpaid" : "paid",
             payment_link: paymentInfo.paymentLink || undefined,
             auto_send: false, // Sent via dedicated NotificationSender.sendOrderNotification below
@@ -355,12 +367,13 @@ export default async function orderDocumentsSubscriber({
           order_id: order.id,
           customer: {
             name: customerName,
+            company_name: customerCompanyName || undefined,
             email: customerEmail,
             phone: customerPhone,
           },
           items: lineItems,
           total: receiptTotal,
-          currency_code: order.currency_code,
+          currency_code: order.currency_code || "kes",
           payment_status: "paid",
           auto_send: false, // Sent via dedicated NotificationSender.sendOrderNotification below
           email_subject: `Payment Receipt for Order #${order.display_id || order.id}`,
@@ -417,13 +430,14 @@ export default async function orderDocumentsSubscriber({
             order_id: order.id,
             customer: {
               name: customerName,
+              company_name: customerCompanyName || undefined,
               email: customerEmail,
               phone: customerPhone,
               address: `${order.shipping_address?.address_1 || ""}, ${order.shipping_address?.city || ""}`.trim(),
             },
             items: lineItems,
             total: 0,
-            currency_code: order.currency_code,
+            currency_code: order.currency_code || "kes",
             payment_status: "not_applicable",
             force_source: "pdfkit",
             auto_send: false,
