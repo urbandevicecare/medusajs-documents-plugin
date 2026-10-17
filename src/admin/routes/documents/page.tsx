@@ -33,6 +33,7 @@ import {
   groupDocuments,
   DocumentRecord as BaseDocumentRecord,
   DocumentGroup,
+  formatCurrency,
 } from "../../../utils/document-grouper";
 
 
@@ -129,6 +130,8 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
 ];
 
 interface DocumentRecord extends BaseDocumentRecord {}
+
+export { formatCurrency };
 
 export const DocumentsPage = () => {
   const [activeTab, setActiveTab] = useState<"hub" | "templates" | "automations" | "settings">("hub");
@@ -887,10 +890,7 @@ export const DocumentsPage = () => {
 
                           <Table.Cell>
                             <span className="text-xs font-semibold">
-                              {new Intl.NumberFormat("en-US", {
-                                style: "currency",
-                                currency: (group.currencyCode || "KES").toUpperCase(),
-                              }).format(Number(group.totalAmount || 0))}
+                              {formatCurrency(group.totalAmount, group.currencyCode)}
                             </span>
                           </Table.Cell>
 
@@ -945,10 +945,7 @@ export const DocumentsPage = () => {
                                         <div className="flex items-center gap-2">
                                           <span className="text-[11px] font-semibold text-ui-fg-base">
                                             {subDoc.total_amount != null && Number(subDoc.total_amount) > 0
-                                              ? new Intl.NumberFormat("en-US", {
-                                                  style: "currency",
-                                                  currency: (subDoc.currency_code || "KES").toUpperCase(),
-                                                }).format(Number(subDoc.total_amount))
+                                              ? formatCurrency(subDoc.total_amount, subDoc.currency_code)
                                               : "—"}
                                           </span>
                                           <ArrowDownTray className="w-3.5 h-3.5 text-ui-fg-subtle" />
@@ -1072,10 +1069,7 @@ export const DocumentsPage = () => {
                                             </td>
                                             <td className="py-2 px-3 font-semibold text-ui-fg-base">
                                               {subDoc.total_amount != null && Number(subDoc.total_amount) > 0
-                                                ? new Intl.NumberFormat("en-US", {
-                                                    style: "currency",
-                                                    currency: (subDoc.currency_code || "KES").toUpperCase(),
-                                                  }).format(Number(subDoc.total_amount))
+                                                ? formatCurrency(subDoc.total_amount, subDoc.currency_code)
                                                 : "—"}
                                             </td>
                                             <td className="py-2 px-3">
@@ -1184,10 +1178,7 @@ export const DocumentsPage = () => {
                         </Table.Cell>
                         <Table.Cell>
                           <span className="text-xs font-semibold">
-                            {new Intl.NumberFormat("en-US", {
-                              style: "currency",
-                              currency: (doc.currency_code || "KES").toUpperCase(),
-                            }).format(Number(doc.total_amount || 0))}
+                            {formatCurrency(doc.total_amount, doc.currency_code)}
                           </span>
                         </Table.Cell>
                         <Table.Cell>
@@ -2415,10 +2406,7 @@ export const DocumentsPage = () => {
                         <div className="col-span-2 flex flex-col items-end justify-between self-stretch">
                           <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Row Total</Label>
                           <span className="text-xs font-semibold text-ui-fg-base py-1">
-                            {new Intl.NumberFormat("en-US", {
-                              style: "currency",
-                              currency: (manualForm.currency_code || "KES").toUpperCase(),
-                            }).format(lineTotal)}
+                            {formatCurrency(lineTotal, manualForm.currency_code)}
                           </span>
                           {manualForm.items.length > 1 && (
                             <button
@@ -2461,14 +2449,12 @@ export const DocumentsPage = () => {
                   <div className="flex items-center gap-3 bg-ui-bg-subtle px-4 py-2 rounded border border-ui-border-base">
                     <span className="text-xs text-ui-fg-subtle font-medium">Document Total:</span>
                     <span className="text-sm font-bold text-ui-fg-base">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: (manualForm.currency_code || "KES").toUpperCase(),
-                      }).format(
+                      {formatCurrency(
                         manualForm.items.reduce(
                           (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),
                           0
-                        )
+                        ),
+                        manualForm.currency_code
                       )}
                     </span>
                   </div>
@@ -2726,10 +2712,7 @@ export const DocumentsPage = () => {
                         <div className="col-span-2 flex flex-col items-end justify-between self-stretch">
                           <Label className="text-[11px] text-ui-fg-subtle mb-0.5">Row Total</Label>
                           <span className="text-xs font-semibold text-ui-fg-base py-1">
-                            {new Intl.NumberFormat("en-US", {
-                              style: "currency",
-                              currency: (customDocForm.currency_code || "KES").toUpperCase(),
-                            }).format(lineTotal)}
+                            {formatCurrency(lineTotal, customDocForm.currency_code)}
                           </span>
                           {customDocForm.items.length > 1 && (
                             <button
@@ -2772,14 +2755,12 @@ export const DocumentsPage = () => {
                   <div className="flex items-center gap-3 bg-ui-bg-subtle px-4 py-2 rounded border border-ui-border-base">
                     <span className="text-xs text-ui-fg-subtle font-medium">Document Total:</span>
                     <span className="text-sm font-bold text-ui-fg-base">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: (customDocForm.currency_code || "KES").toUpperCase(),
-                      }).format(
+                      {formatCurrency(
                         customDocForm.items.reduce(
                           (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),
                           0
-                        )
+                        ),
+                        customDocForm.currency_code
                       )}
                     </span>
                   </div>

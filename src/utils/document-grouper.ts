@@ -124,6 +124,20 @@ export function getDocTypeLabel(type?: string): string {
 }
 
 /**
+ * Formats a numeric currency amount into a localized currency string.
+ * Defaults to en-KE / KES (Ksh ... or KES ...), treating empty or legacy "usd" as "kes".
+ */
+export function formatCurrency(amount?: number | string | null, currencyCode?: string | null): string {
+  const raw = (currencyCode || "kes").toLowerCase().trim();
+  const normalized = (!raw || raw === "usd") ? "KES" : raw.toUpperCase();
+  const locale = normalized === "KES" ? "en-KE" : "en-US";
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: normalized,
+  }).format(Number(amount) || 0);
+}
+
+/**
  * Groups related documents by job or order using a multi-tier correlation algorithm.
  * 1. Ties documents by repair_ticket_id
  * 2. Ties documents by order_id
@@ -252,8 +266,9 @@ export function groupDocuments(documents: DocumentRecord[]): DocumentGroup[] {
         : primaryDoc.total_amount || 0
     );
 
-    // Group currency
-    const currencyCode = primaryDoc.currency_code || invoiceDoc?.currency_code || "kes";
+    // Group currency: normalize legacy "usd" or empty to "kes"
+    const rawCurrency = (primaryDoc.currency_code || invoiceDoc?.currency_code || "kes").toLowerCase().trim();
+    const currencyCode = (!rawCurrency || rawCurrency === "usd") ? "kes" : rawCurrency;
 
     // Summary of included types
     const uniqueTypes = Array.from(new Set(clusterDocs.map((d) => getDocTypeLabel(d.type))));

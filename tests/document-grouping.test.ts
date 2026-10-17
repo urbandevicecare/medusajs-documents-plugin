@@ -5,6 +5,7 @@ import {
   getDocTypePriority,
   getDocLifecycleOrder,
   groupDocuments,
+  formatCurrency,
   DocumentRecord,
 } from "../src/utils/document-grouper";
 
@@ -162,5 +163,47 @@ describe("Document Grouping Utility (Pack Related Documents by Job / Order)", ()
     assert.equal(groups.length, 1);
     assert.equal(groups[0].primaryDoc.id, "doc_ord_inv");
     assert.equal(groups[0].documents.length, 2);
+  });
+
+  it("normalizes legacy usd and empty currency codes to kes in groupDocuments", () => {
+    const legacyDocs: DocumentRecord[] = [
+      {
+        id: "doc_legacy_1",
+        display_id: "RT-1792156525673-SNL9QH",
+        title: "Tax Invoice",
+        type: "invoice",
+        source: "zoho",
+        status: "paid",
+        total_amount: 13500,
+        currency_code: "usd", // legacy USD from database
+        repair_ticket_id: "rep_ticket_99",
+        created_at: "2026-10-16T12:00:00Z",
+      },
+    ];
+
+    const groups = groupDocuments(legacyDocs);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].currencyCode, "kes");
+    assert.equal(groups[0].totalAmount, 13500);
+  });
+
+  it("formatCurrency formats amounts with en-KE / KES and treats usd or empty as kes", () => {
+    const formattedUsd = formatCurrency(13500, "usd");
+    assert.ok(formattedUsd.includes("13,500.00"), "Must format numeric amount with separators");
+    assert.ok(formattedUsd.includes("Ksh") || formattedUsd.includes("KES"), "Legacy usd must format as KES / Ksh");
+    assert.ok(!formattedUsd.includes("$"), "Legacy usd must not format with dollar sign");
+
+    const formattedKes = formatCurrency(13500, "kes");
+    assert.ok(formattedKes.includes("13,500.00"));
+    assert.ok(formattedKes.includes("Ksh") || formattedKes.includes("KES"));
+    assert.ok(!formattedKes.includes("$"));
+
+    const formattedEmpty = formatCurrency(13500, "");
+    assert.ok(formattedEmpty.includes("13,500.00"));
+    assert.ok(formattedEmpty.includes("Ksh") || formattedEmpty.includes("KES"));
+
+    const formattedZero = formatCurrency(0, "usd");
+    assert.ok(formattedZero.includes("0.00"));
+    assert.ok(!formattedZero.includes("$"));
   });
 });

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.19] - 2026-10-17
+
+### Localized Currency Normalization & KES Formatting
+- **Document Record Currency Default**: Updated default currency to `kes` in `DocumentRecord` model.
+- **Document Grouper Currency Normalization**: Fallback normalizes legacy `"usd"` or empty currency codes to `"kes"` so grouped packs consistently format in KES.
+- **Admin Hub Currency Formatting**: Introduced `formatCurrency` helper across all Admin Hub views (master packed rows, related docs dropdown, accordion sub-tables, flat list, and creation modals), defaulting to `en-KE` / `KES` (`KSh ...`) and preventing unwanted dollar (`$`) rendering.
+
 ## [1.1.17] - 2026-10-16
 
 ### Seamless Zoho Books Credentials Inheritance

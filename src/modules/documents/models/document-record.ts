@@ -20,7 +20,7 @@ export const DocumentRecord = model.define("document_record", {
 
   // Financial fields
   total_amount: model.number().default(0),
-  currency_code: model.text().default("usd"),
+  currency_code: model.text().default("kes"),
   payment_status: model.text().default("unpaid"), // "paid" | "unpaid" | "not_applicable"
 
   // Links
