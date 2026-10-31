@@ -1,6 +1,6 @@
 {
   "name": "medusajs-documents-plugin",
-  "version": "1.1.21",
+  "version": "1.1.22",
   "description": "Comprehensive document generation and management module for Medusa v2 with Zoho Books integration, PDFKit fallback, QR codes, shortlinks, multi-channel notifications and unified admin hub.",
   "author": "Urban Device Care <info@urbandevicecare.co.uk>",
   "license": "MIT",
@@ -46,10 +46,10 @@
     "invoices"
   ],
   "scripts": {
-    "build": "medusa plugin:build && mkdir -p .medusa/server/src/assets && cp -r src/assets/* .medusa/server/src/assets/",
+    "build": "medusa plugin:build && node -e \"const fs=require('fs');if(fs.existsSync('src/assets')){fs.mkdirSync('.medusa/server/src/assets',{recursive:true});fs.cpSync('src/assets','.medusa/server/src/assets',{recursive:true})}\"",
     "dev": "medusa plugin:dev",
     "test": "npx tsx --test tests/run-all-tests.ts",
-    "prepack": "medusa plugin:build && mkdir -p .medusa/server/src/assets && cp -r src/assets/* .medusa/server/src/assets/"
+    "prepack": "medusa plugin:build && node -e \"const fs=require('fs');if(fs.existsSync('src/assets')){fs.mkdirSync('.medusa/server/src/assets',{recursive:true});fs.cpSync('src/assets','.medusa/server/src/assets',{recursive:true})}\""
   },
   "dependencies": {
     "bwip-js": "^4.11.4",

@@ -12,8 +12,8 @@ lerna-debug.log*
 coverage/
 *.tsbuildinfo
 *.tgz
-*.zip
-assets/
+/assets/
+!src/assets/
 release_notes.md
 .yarn/install-state.gz
 .yarn/cache/
