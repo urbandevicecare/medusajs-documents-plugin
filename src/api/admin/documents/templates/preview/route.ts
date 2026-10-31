@@ -7,10 +7,11 @@ import { PDFKitGenerator, DocumentData } from "../../../../../services/pdfkit-ge
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   try {
     const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
-    const settings = (await documentService.getSettings().catch(() => ({}))) || {};
+    const settings = (await documentService.getSettings({}, req.scope).catch(() => ({}))) || {};
 
     const rawStyle = String(req.query.style || "").trim().toLowerCase();
-    const style = ["modern", "classic", "minimal"].includes(rawStyle) ? rawStyle : "modern";
+    const validStyles = ["modern", "classic", "minimal", "zoho_exact", "standard"];
+    const style = validStyles.includes(rawStyle) ? rawStyle : "modern";
 
     const rawType = String(req.query.type || "").trim().toLowerCase();
     const validTypes = ["invoice", "receipt", "packing_slip", "estimate", "custom", "job_card"];

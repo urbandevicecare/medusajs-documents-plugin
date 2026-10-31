@@ -46,10 +46,10 @@
     "invoices"
   ],
   "scripts": {
-    "build": "medusa plugin:build",
+    "build": "medusa plugin:build && mkdir -p .medusa/server/src/assets && cp -r src/assets/* .medusa/server/src/assets/",
     "dev": "medusa plugin:dev",
     "test": "npx tsx --test tests/run-all-tests.ts",
-    "prepack": "medusa plugin:build"
+    "prepack": "medusa plugin:build && mkdir -p .medusa/server/src/assets && cp -r src/assets/* .medusa/server/src/assets/"
   },
   "dependencies": {
     "bwip-js": "^4.11.4",

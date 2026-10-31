@@ -20,7 +20,7 @@ export default async function repairDocumentsSubscriber({
     });
     if (!documentService) return;
 
-    const settings = await documentService.getSettings();
+    const settings = await documentService.getSettings({}, container);
 
     // Fix 5: Handle repair completion via repair.status_changed where status === "completed"
     const isCompleted =
@@ -167,24 +167,34 @@ export default async function repairDocumentsSubscriber({
       });
     }
 
+    if (ticket.status === "cancelled") {
+      logger.info(`[Documents-Subscriber] Repair ticket #${ticket.ticket_number} is cancelled. Skipping document generation.`);
+      return;
+    }
+
     const isPaid =
       ticket.payment_status === "captured" ||
       ticket.payment_status === "paid" ||
       eventName === "repair.payment_received";
-    const isAwaitingApproval = ticket.status === "awaiting_approval";
 
-    let docType: any = isPaid ? "receipt" : (isAwaitingApproval ? "estimate" : "invoice");
-    let docTitle = isPaid
-      ? "Repair Payment Receipt"
-      : isAwaitingApproval
-      ? "Repair Estimate / Quote"
-      : isCompleted
-      ? "Final Repair Invoice"
-      : "Repair Invoice";
+    let docType: any;
+    let docTitle: string;
 
     if (eventName === "repair.created") {
       docType = "job_card";
       docTitle = "Repair Job Card";
+    } else if (isPaid) {
+      docType = "receipt";
+      docTitle = "Repair Payment Receipt";
+    } else if (["repairing", "ready", "completed", "collected", "repaired"].includes(ticket.status)) {
+      docType = "invoice";
+      docTitle = (isCompleted || ticket.status === "completed" || ticket.status === "repaired")
+        ? "Final Repair Invoice"
+        : "Repair Invoice";
+    } else {
+      // Pre-repair statuses (received, diagnosing, awaiting_approval, pending_dropoff)
+      docType = "estimate";
+      docTitle = "Repair Estimate / Quote";
     }
 
     const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-)+/i, "");
@@ -193,9 +203,7 @@ export default async function repairDocumentsSubscriber({
         ? `JOB-${cleanTicketNumber}`
         : docType === "receipt"
         ? `RCPT-${cleanTicketNumber}`
-        : docType === "estimate"
-        ? `EST-${cleanTicketNumber}`
-        : `RT-${cleanTicketNumber}`;
+        : (ticket.ticket_number || `RT-${cleanTicketNumber}`);
 
     let currencyCode = ticket.currency_code || (ticket.metadata as any)?.currency_code;
     if (!currencyCode) {
@@ -255,6 +263,7 @@ export default async function repairDocumentsSubscriber({
         type: docType,
         repair_ticket_id: ticket.id,
         order_id: data.order_id || ticket.order_id || (ticket.metadata as any)?.order_id,
+        force_source: settings.zoho_books_enabled ? "zoho" : undefined,
         customer: {
           name: customerName,
           company_name: customerCompanyName || undefined,
@@ -292,16 +301,25 @@ export default async function repairDocumentsSubscriber({
         if (repairModule) {
           const existingTicket = await repairModule.retrieveRepairTicket(ticket.id).catch(() => null);
           const currentMeta = existingTicket?.metadata || ticket.metadata || {};
+          const metaUpdate: any = {
+            ...currentMeta,
+            document_id: genResult.record.id,
+            pdf_url: genResult.record.pdf_url,
+            short_pdf_link: genResult.record.short_pdf_link || genResult.record.pdf_url,
+            last_document_type: docType,
+            last_document_title: genResult.record.title,
+          };
+          if (docType === "invoice" && genResult.record.zoho_document_id) {
+            metaUpdate.zoho_invoice_id = genResult.record.zoho_document_id;
+          } else if (docType === "estimate" && genResult.record.zoho_document_id) {
+            metaUpdate.zoho_estimate_id = genResult.record.zoho_document_id;
+          } else if (docType === "receipt" && genResult.record.zoho_document_id) {
+            metaUpdate.zoho_payment_id = genResult.record.zoho_document_id;
+          }
+
           await repairModule.updateRepairTickets({
             id: ticket.id,
-            metadata: {
-              ...currentMeta,
-              document_id: genResult.record.id,
-              pdf_url: genResult.record.pdf_url,
-              short_pdf_link: genResult.record.short_pdf_link || genResult.record.pdf_url,
-              last_document_type: docType,
-              last_document_title: genResult.record.title,
-            },
+            metadata: metaUpdate,
           });
           logger.info(`[Documents-Subscriber] Successfully handed over document link (${genResult.record.short_pdf_link || genResult.record.pdf_url}) to repair ticket #${ticket.ticket_number}`);
         }

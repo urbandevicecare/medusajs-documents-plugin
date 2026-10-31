@@ -8,3 +8,4 @@ import "./repair-fixes.test";
 import "./table-resilience.test";
 import "./release-1.1.14.test";
 import "./document-grouping.test";
+import "./release-duplicate-and-zoho-invoicing.test";

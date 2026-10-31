@@ -161,11 +161,11 @@ export const DEFAULT_DOCUMENT_SETTINGS: Record<string, any> = {
   event_repair_created_enabled: true,
   event_repair_completed_enabled: true,
   event_repair_reminder_enabled: true,
-  invoice_template: "modern",
+  invoice_template: "zoho_exact",
   packing_slip_template: "modern",
-  receipt_template: "modern",
-  estimate_template: "modern",
-  job_card_template: "modern",
+  receipt_template: "zoho_exact",
+  estimate_template: "zoho_exact",
+  job_card_template: "standard",
   custom_doc_template: "modern",
   zoho_books_enabled: true,
   zoho_client_id: null,
@@ -217,42 +217,97 @@ export class DocumentModuleService extends MedusaService({
   DocumentLink,
 }) {
   /**
+   * Helper to fetch repair_settings from module or directly via database
+   */
+  private async fetchRepairSettings(container?: any): Promise<any> {
+    try {
+      const repMod = (container || (this as any).__container__)?.resolve?.("repair", { allowUnregistered: true });
+      if (repMod) {
+        const [repSettings] = await repMod.listRepairSettings({});
+        if (repSettings) return repSettings;
+      }
+    } catch (_) {}
+
+    try {
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+      if (conn) {
+        const row = await conn("repair_settings").whereNull("deleted_at").first();
+        if (row) return row;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /**
+   * Applies inherited settings from repair_settings into target document_settings
+   */
+  private applyInheritedRepairSettings(targetSettings: any, repSettings: any): any {
+    if (!repSettings || !targetSettings) return targetSettings;
+    if (!targetSettings.zoho_client_id && repSettings.zoho_client_id) {
+      targetSettings.zoho_books_enabled = Boolean(repSettings.zoho_books_enabled);
+      targetSettings.zoho_client_id = repSettings.zoho_client_id;
+      targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
+      targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
+      targetSettings.zoho_organization_id = repSettings.zoho_organization_id;
+      targetSettings.zoho_domain = repSettings.zoho_domain || targetSettings.zoho_domain || "com";
+      if (repSettings.zoho_tax_inclusive != null) targetSettings.zoho_tax_inclusive = repSettings.zoho_tax_inclusive;
+      if (repSettings.zoho_invoice_notes && !targetSettings.zoho_invoice_notes) targetSettings.zoho_invoice_notes = repSettings.zoho_invoice_notes;
+      if (repSettings.zoho_invoice_terms && !targetSettings.zoho_invoice_terms) targetSettings.zoho_invoice_terms = repSettings.zoho_invoice_terms;
+    }
+    if (!targetSettings.pdf_logo_url && repSettings.pdf_logo_url) targetSettings.pdf_logo_url = repSettings.pdf_logo_url;
+    if (!targetSettings.pdf_address && repSettings.pdf_address) targetSettings.pdf_address = repSettings.pdf_address;
+    if (!targetSettings.pdf_phone && repSettings.pdf_phone) targetSettings.pdf_phone = repSettings.pdf_phone;
+    if (!targetSettings.pdf_email && repSettings.pdf_email) targetSettings.pdf_email = repSettings.pdf_email;
+    if (!targetSettings.pdf_website && repSettings.pdf_website) targetSettings.pdf_website = repSettings.pdf_website;
+    if (!targetSettings.pdf_payment_details && repSettings.pdf_payment_details) targetSettings.pdf_payment_details = repSettings.pdf_payment_details;
+    if (!targetSettings.pdf_terms && repSettings.pdf_terms) targetSettings.pdf_terms = repSettings.pdf_terms;
+    if (!targetSettings.company_name || targetSettings.company_name === "Company Store" || targetSettings.company_name === "Store") {
+      if (repSettings.company_name) targetSettings.company_name = repSettings.company_name;
+    }
+    if (repSettings.invoice_template && (!targetSettings.invoice_template || targetSettings.invoice_template === "modern")) {
+      targetSettings.invoice_template = repSettings.invoice_template;
+    }
+    if (repSettings.estimate_template && (!targetSettings.estimate_template || targetSettings.estimate_template === "modern")) {
+      targetSettings.estimate_template = repSettings.estimate_template;
+    }
+    if (repSettings.receipt_template && (!targetSettings.receipt_template || targetSettings.receipt_template === "modern")) {
+      targetSettings.receipt_template = repSettings.receipt_template;
+    }
+    if (repSettings.job_card_template && (!targetSettings.job_card_template || targetSettings.job_card_template === "modern")) {
+      targetSettings.job_card_template = repSettings.job_card_template;
+    }
+    return targetSettings;
+  }
+
+  /**
    * Retrieves or initializes default plugin settings
    */
   async getSettings(sharedContext?: any, container?: any): Promise<any> {
     try {
       const [settings] = await this.listDocumentSettings({}, {}, sharedContext);
       if (settings) {
-        if (!settings.zoho_client_id) {
-          try {
-            const repMod = (container || (this as any).__container__)?.resolve?.("repair", { allowUnregistered: true });
-            if (repMod) {
-              const [repSettings] = await repMod.listRepairSettings({});
-              if (repSettings?.zoho_client_id) {
-                settings.zoho_books_enabled = Boolean(repSettings.zoho_books_enabled);
-                settings.zoho_client_id = repSettings.zoho_client_id;
-                settings.zoho_client_secret = repSettings.zoho_client_secret;
-                settings.zoho_refresh_token = repSettings.zoho_refresh_token;
-                settings.zoho_organization_id = repSettings.zoho_organization_id;
-                settings.zoho_domain = repSettings.zoho_domain || settings.zoho_domain || "com";
-              }
-            }
-          } catch (_) {}
-        }
+        const repSettings = await this.fetchRepairSettings(container);
+        this.applyInheritedRepairSettings(settings, repSettings);
         return settings;
       }
-      return await this.createDocumentSettings({
+      const created = await this.createDocumentSettings({
         ...DEFAULT_DOCUMENT_SETTINGS,
       }, sharedContext);
+      const repSettings = await this.fetchRepairSettings(container);
+      return this.applyInheritedRepairSettings(created, repSettings);
     } catch (err: any) {
       if (isUndefinedTableError(err)) {
-        return { ...DEFAULT_DOCUMENT_SETTINGS };
+        const repSettings = await this.fetchRepairSettings(container);
+        return this.applyInheritedRepairSettings({ ...DEFAULT_DOCUMENT_SETTINGS }, repSettings);
       }
       const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
       if (conn) {
         try {
           let row = await conn("document_settings").whereNull("deleted_at").first();
-          if (row) return row;
+          if (row) {
+            const repSettings = await this.fetchRepairSettings(container);
+            return this.applyInheritedRepairSettings(row, repSettings);
+          }
           const { id: _ignoreId, ...restDefaults } = DEFAULT_DOCUMENT_SETTINGS;
           const createdResult = await conn("document_settings").insert({
             ...restDefaults,
@@ -260,10 +315,13 @@ export class DocumentModuleService extends MedusaService({
             created_at: new Date(),
             updated_at: new Date(),
           }).returning("*");
-          return Array.isArray(createdResult) ? createdResult[0] : createdResult;
+          const created = Array.isArray(createdResult) ? createdResult[0] : createdResult;
+          const repSettings = await this.fetchRepairSettings(container);
+          return this.applyInheritedRepairSettings(created, repSettings);
         } catch (knexErr: any) {
           if (isUndefinedTableError(knexErr)) {
-            return { ...DEFAULT_DOCUMENT_SETTINGS };
+            const repSettings = await this.fetchRepairSettings(container);
+            return this.applyInheritedRepairSettings({ ...DEFAULT_DOCUMENT_SETTINGS }, repSettings);
           }
           throw knexErr;
         }
@@ -309,6 +367,10 @@ export class DocumentModuleService extends MedusaService({
     const sharedContext = manager ? { manager } : {};
     const settings = await this.getSettings(sharedContext, container);
     const storeUrl = (settings.storefront_url || process.env.STORE_URL || "http://localhost:3000").replace(/\/$/, "");
+
+    if ((input.type as string) === "quote") {
+      input.type = "estimate";
+    }
 
     // 0. Auto-hydrate repair ticket data if needed
     if (input.repair_ticket_id && (!input.customer || !input.items || input.items.length === 0)) {
@@ -518,42 +580,101 @@ export class DocumentModuleService extends MedusaService({
         }));
 
         const customFields: Array<{ label: string; value: string }> = [];
-        if (shortPaymentLink || input.payment_link) {
+        if (settings.zoho_custom_field_payment_link && settings.zoho_custom_field_payment_link.trim() !== "" && (shortPaymentLink || input.payment_link)) {
           customFields.push({
-            label: settings.zoho_custom_field_payment_link || "Payment Link",
+            label: settings.zoho_custom_field_payment_link,
             value: (shortPaymentLink || input.payment_link) as string,
           });
         }
 
         if (input.type === "invoice") {
-          const res = await zoho.createInvoice(contactId, {
-            reference_number: displayId,
-            line_items: zohoLineItems,
-            notes: zohoNotes,
-            terms: zohoTerms,
-            payment_terms: settings.zoho_payment_terms_days || 0,
-            is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
-            custom_fields: customFields,
-          });
-          zohoDocumentId = res.invoice_id;
+          let targetInvoiceId: string | null = null;
+          if (input.repair_ticket_id) {
+            const existingDocs = await this.listDocumentRecords({
+              repair_ticket_id: input.repair_ticket_id,
+              type: "invoice",
+            }).catch(() => []);
+            const inv = existingDocs.find((d: any) => d.zoho_document_id);
+            if (inv) {
+              targetInvoiceId = inv.zoho_document_id;
+            }
+          }
+          if (!targetInvoiceId) {
+            let existingInZoho = await zoho.getInvoiceByNumber(displayId);
+            if (!existingInZoho && displayId.startsWith("RT-")) {
+              existingInZoho = await zoho.getInvoiceByNumber(displayId.replace(/^RT-/, ""));
+            }
+            if (!existingInZoho && !displayId.startsWith("RT-")) {
+              existingInZoho = await zoho.getInvoiceByNumber(`RT-${displayId}`);
+            }
+            if (existingInZoho) {
+              targetInvoiceId = existingInZoho.invoice_id;
+            }
+          }
+
+          if (!targetInvoiceId) {
+            const res = await zoho.createInvoice(contactId, {
+              reference_number: displayId,
+              invoice_number: displayId,
+              line_items: zohoLineItems,
+              notes: zohoNotes,
+              terms: zohoTerms,
+              payment_terms: settings.zoho_payment_terms_days || 0,
+              is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+              custom_fields: customFields,
+            });
+            targetInvoiceId = res.invoice_id;
+          }
+
+          zohoDocumentId = targetInvoiceId;
           source = "zoho";
-          const rawBuffer = await zoho.getDocumentPdf(res.invoice_id, "invoice");
+          const rawBuffer = await zoho.getDocumentPdf(targetInvoiceId, "invoice");
           const qrUrlToEmbed = settings.zoho_include_payment_qr !== false ? (shortPaymentLink || input.payment_link) : undefined;
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
             qrUrl: qrUrlToEmbed,
             obscureZohoFooter: true,
           });
         } else if (input.type === "estimate") {
-          const res = await zoho.createEstimate(contactId, {
-            reference_number: displayId,
-            line_items: zohoLineItems,
-            notes: zohoNotes,
-            terms: zohoTerms,
-            is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
-          });
-          zohoDocumentId = res.estimate_id;
+          let targetEstId: string | null = null;
+          if (input.repair_ticket_id) {
+            const existingDocs = await this.listDocumentRecords({
+              repair_ticket_id: input.repair_ticket_id,
+              type: "estimate",
+            }).catch(() => []);
+            const est = existingDocs.find((d: any) => d.zoho_document_id);
+            if (est) {
+              targetEstId = est.zoho_document_id;
+            }
+          }
+          if (!targetEstId) {
+            let existingInZoho = await zoho.getEstimateByNumber(displayId);
+            if (!existingInZoho && displayId.startsWith("EST-")) {
+              existingInZoho = await zoho.getEstimateByNumber(displayId.replace(/^EST-/, ""));
+            }
+            if (!existingInZoho && !displayId.startsWith("EST-")) {
+              existingInZoho = await zoho.getEstimateByNumber(`EST-${displayId}`);
+            }
+            if (existingInZoho) {
+              targetEstId = existingInZoho.estimate_id;
+            }
+          }
+
+          if (!targetEstId) {
+            const res = await zoho.createEstimate(contactId, {
+              reference_number: displayId,
+              estimate_number: displayId,
+              line_items: zohoLineItems,
+              notes: zohoNotes,
+              terms: zohoTerms,
+              is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+              custom_fields: customFields,
+            });
+            targetEstId = res.estimate_id;
+          }
+
+          zohoDocumentId = targetEstId;
           source = "zoho";
-          const rawBuffer = await zoho.getDocumentPdf(res.estimate_id, "estimate");
+          const rawBuffer = await zoho.getDocumentPdf(targetEstId, "estimate");
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
             qrUrl: shortPaymentLink || input.payment_link,
             obscureZohoFooter: true,
@@ -582,10 +703,18 @@ export class DocumentModuleService extends MedusaService({
             }
           }
 
-          // If no invoice was previously synchronized to Zoho, create one to attach the payment
+          // If no invoice was previously synchronized to Zoho, check if it exists in Zoho or create one to attach the payment
+          if (!targetInvoiceId) {
+            const existingInZoho = await zoho.getInvoiceByNumber(displayId);
+            if (existingInZoho) {
+              targetInvoiceId = existingInZoho.invoice_id;
+            }
+          }
+
           if (!targetInvoiceId) {
             const invRes = await zoho.createInvoice(contactId, {
               reference_number: displayId,
+              invoice_number: displayId,
               line_items: zohoLineItems,
               notes: zohoNotes,
               terms: zohoTerms,
@@ -627,11 +756,11 @@ export class DocumentModuleService extends MedusaService({
     // -------------------------------------------------------------
     if (!pdfBuffer) {
       source = "pdfkit";
-      let templateName = settings.invoice_template || "modern";
+      let templateName = settings.invoice_template || "zoho_exact";
       if (input.type === "packing_slip") templateName = settings.packing_slip_template || "modern";
-      else if (input.type === "receipt") templateName = settings.receipt_template || "modern";
-      else if (input.type === "estimate") templateName = settings.estimate_template || "modern";
-      else if (input.type === "job_card") templateName = settings.job_card_template || "modern";
+      else if (input.type === "receipt") templateName = settings.receipt_template || "zoho_exact";
+      else if (input.type === "estimate") templateName = settings.estimate_template || "zoho_exact";
+      else if (input.type === "job_card") templateName = settings.job_card_template || "standard";
       else if (input.type === "custom") templateName = settings.custom_doc_template || "modern";
 
       const docData: DocumentData = {
@@ -676,66 +805,64 @@ export class DocumentModuleService extends MedusaService({
       });
     }
 
-    // Save Record to Database
-    const initialPdfUrl = `${storeUrl}/api/admin/documents/temp/document`;
-
+    // Save Record to Database (update existing if present for repair ticket to avoid duplicates)
     let record: any = null;
-    try {
-      record = await this.createDocumentRecords({
-        display_id: displayId,
-        title: input.title || (
-          input.type === "invoice" ? "Tax Invoice" :
-          input.type === "receipt" ? "Payment Receipt" :
-          input.type === "packing_slip" ? "Packing Slip" :
-          input.type === "estimate" ? "Quotation" : "Document"
-        ),
-        type: input.type,
-        source: source,
-        status: input.payment_status === "paid" ? "paid" : "sent",
-        customer_name: input.customer.name,
-        customer_email: input.customer.email,
-        customer_phone: input.customer.phone,
-        order_id: input.order_id,
-        repair_ticket_id: input.repair_ticket_id,
-        zoho_document_id: zohoDocumentId,
-        total_amount: input.total,
-        currency_code: input.currency_code,
-        payment_status: input.payment_status || "unpaid",
-        payment_link: input.payment_link,
-        short_payment_link: shortPaymentLink,
-        pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
-        metadata: {
-          items: input.items,
-          notes: input.notes,
-          body_text: input.body_text,
-          custom_fields: input.custom_fields,
-        },
-      }, sharedContext);
-    } catch (err: any) {
-      if (isUndefinedTableError(err)) {
-        throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
-      }
-      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
-      if (conn) {
-        try {
-          const [inserted] = await conn("document_record").insert({
-            id: generateEntityId(undefined, "doc"),
-            display_id: displayId,
-            title: input.title || (
-              input.type === "invoice" ? "Tax Invoice" :
-              input.type === "receipt" ? "Payment Receipt" :
-              input.type === "packing_slip" ? "Packing Slip" :
-              input.type === "estimate" ? "Quotation" : "Document"
-            ),
+    let existingRecord: any = null;
+
+    if (input.repair_ticket_id) {
+      try {
+        const existingDocs = await this.listDocumentRecords(
+          {
+            repair_ticket_id: input.repair_ticket_id,
             type: input.type,
+          },
+          {},
+          sharedContext
+        ).catch(() => []);
+        if (existingDocs && existingDocs.length > 0) {
+          existingRecord = existingDocs[0];
+        }
+      } catch (_) {}
+    }
+
+    if (existingRecord) {
+      try {
+        record = await this.updateDocumentRecords({
+          id: existingRecord.id,
+          display_id: displayId,
+          title: input.title || existingRecord.title,
+          source: source,
+          status: input.payment_status === "paid" ? "paid" : "sent",
+          customer_name: input.customer.name,
+          customer_email: input.customer.email,
+          customer_phone: input.customer.phone,
+          zoho_document_id: zohoDocumentId || existingRecord.zoho_document_id,
+          total_amount: input.total,
+          currency_code: input.currency_code,
+          payment_status: input.payment_status || "unpaid",
+          payment_link: input.payment_link,
+          short_payment_link: shortPaymentLink,
+          pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
+          metadata: {
+            ...(existingRecord.metadata || {}),
+            items: input.items,
+            notes: input.notes,
+            body_text: input.body_text,
+            custom_fields: input.custom_fields,
+          },
+        }, sharedContext);
+      } catch (upErr: any) {
+        const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+        if (conn) {
+          await conn("document_record").where({ id: existingRecord.id }).update({
+            display_id: displayId,
+            title: input.title || existingRecord.title,
             source: source,
             status: input.payment_status === "paid" ? "paid" : "sent",
             customer_name: input.customer.name,
             customer_email: input.customer.email,
             customer_phone: input.customer.phone,
-            order_id: input.order_id,
-            repair_ticket_id: input.repair_ticket_id,
-            zoho_document_id: zohoDocumentId,
+            zoho_document_id: zohoDocumentId || existingRecord.zoho_document_id,
             total_amount: input.total,
             currency_code: input.currency_code,
             payment_status: input.payment_status || "unpaid",
@@ -748,18 +875,95 @@ export class DocumentModuleService extends MedusaService({
               body_text: input.body_text,
               custom_fields: input.custom_fields,
             }),
-            created_at: new Date(),
             updated_at: new Date(),
-          }).returning("*");
-          record = inserted;
-        } catch (knexErr: any) {
-          if (isUndefinedTableError(knexErr)) {
-            throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
-          }
-          throw knexErr;
+          });
+          record = await conn("document_record").where({ id: existingRecord.id }).first();
         }
-      } else {
-        throw err;
+      }
+    }
+
+    if (!record) {
+      try {
+        record = await this.createDocumentRecords({
+          display_id: displayId,
+          title: input.title || (
+            input.type === "invoice" ? "Tax Invoice" :
+            input.type === "receipt" ? "Payment Receipt" :
+            input.type === "packing_slip" ? "Packing Slip" :
+            input.type === "estimate" ? "Quotation" : "Document"
+          ),
+          type: input.type,
+          source: source,
+          status: input.payment_status === "paid" ? "paid" : "sent",
+          customer_name: input.customer.name,
+          customer_email: input.customer.email,
+          customer_phone: input.customer.phone,
+          order_id: input.order_id,
+          repair_ticket_id: input.repair_ticket_id,
+          zoho_document_id: zohoDocumentId,
+          total_amount: input.total,
+          currency_code: input.currency_code,
+          payment_status: input.payment_status || "unpaid",
+          payment_link: input.payment_link,
+          short_payment_link: shortPaymentLink,
+          pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
+          metadata: {
+            items: input.items,
+            notes: input.notes,
+            body_text: input.body_text,
+            custom_fields: input.custom_fields,
+          },
+        }, sharedContext);
+      } catch (err: any) {
+        if (isUndefinedTableError(err)) {
+          throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+        }
+        const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+        if (conn) {
+          try {
+            const [inserted] = await conn("document_record").insert({
+              id: generateEntityId(undefined, "doc"),
+              display_id: displayId,
+              title: input.title || (
+                input.type === "invoice" ? "Tax Invoice" :
+                input.type === "receipt" ? "Payment Receipt" :
+                input.type === "packing_slip" ? "Packing Slip" :
+                input.type === "estimate" ? "Quotation" : "Document"
+              ),
+              type: input.type,
+              source: source,
+              status: input.payment_status === "paid" ? "paid" : "sent",
+              customer_name: input.customer.name,
+              customer_email: input.customer.email,
+              customer_phone: input.customer.phone,
+              order_id: input.order_id,
+              repair_ticket_id: input.repair_ticket_id,
+              zoho_document_id: zohoDocumentId,
+              total_amount: input.total,
+              currency_code: input.currency_code,
+              payment_status: input.payment_status || "unpaid",
+              payment_link: input.payment_link,
+              short_payment_link: shortPaymentLink,
+              pdf_url: `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${displayId}/document`,
+              metadata: JSON.stringify({
+                items: input.items,
+                notes: input.notes,
+                body_text: input.body_text,
+                custom_fields: input.custom_fields,
+              }),
+              created_at: new Date(),
+              updated_at: new Date(),
+            }).returning("*");
+            record = inserted;
+          } catch (knexErr: any) {
+            if (isUndefinedTableError(knexErr)) {
+              throw new Error("Database table document_record does not exist. Please run npx medusa db:migrate.");
+            }
+            throw knexErr;
+          }
+        } else {
+          throw err;
+        }
       }
     }
 
@@ -900,11 +1104,11 @@ export class DocumentModuleService extends MedusaService({
     }
 
     // PDFKit Fallback Generation
-    let templateName = settings.invoice_template || "modern";
+    let templateName = settings.invoice_template || "zoho_exact";
     if (record.type === "packing_slip") templateName = settings.packing_slip_template || "modern";
-    else if (record.type === "receipt") templateName = settings.receipt_template || "modern";
-    else if (record.type === "estimate") templateName = settings.estimate_template || "modern";
-    else if (record.type === "job_card") templateName = settings.job_card_template || "modern";
+    else if (record.type === "receipt") templateName = settings.receipt_template || "zoho_exact";
+    else if (record.type === "estimate") templateName = settings.estimate_template || "zoho_exact";
+    else if (record.type === "job_card") templateName = settings.job_card_template || "standard";
     else if (record.type === "custom") templateName = settings.custom_doc_template || "modern";
 
     const meta = (record.metadata || {}) as any;
@@ -943,6 +1147,177 @@ export class DocumentModuleService extends MedusaService({
     return await postProcessPdf(rawBuffer, {
       qrUrl: record.short_payment_link || record.payment_link,
     });
+  }
+
+  /**
+   * Deletes all generated documents (in database and in Zoho Books) for a repair ticket
+   * so they can be regenerated cleanly with updated information.
+   */
+  async deleteDocumentsForRepairTicket(repairTicketId: string, container?: any): Promise<{
+    deleted_records: number;
+    deleted_zoho_invoices: string[];
+    deleted_zoho_estimates: string[];
+    deleted_zoho_payments: string[];
+  }> {
+    const deletedInvoices: string[] = [];
+    const deletedEstimates: string[] = [];
+    const deletedPayments: string[] = [];
+
+    const manager = container?.resolve?.("manager", { allowUnregistered: true });
+    const sharedContext = manager ? { manager } : {};
+
+    // 1. Fetch all documents for this repair ticket
+    let records: any[] = [];
+    try {
+      records = await this.listDocumentRecords({ repair_ticket_id: repairTicketId }, {}, sharedContext);
+    } catch (_) {
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+      if (conn) {
+        records = await conn("document_record").where({ repair_ticket_id: repairTicketId }).whereNull("deleted_at");
+      }
+    }
+
+    // 2. Resolve ZohoBooksService if credentials exist
+    let zoho: ZohoBooksService | null = null;
+    try {
+      const settings = await this.getSettings(sharedContext, container);
+      if (
+        settings?.zoho_books_enabled &&
+        settings.zoho_client_id &&
+        settings.zoho_client_secret &&
+        settings.zoho_refresh_token &&
+        settings.zoho_organization_id
+      ) {
+        zoho = new ZohoBooksService(
+          {
+            client_id: settings.zoho_client_id,
+            client_secret: settings.zoho_client_secret,
+            refresh_token: settings.zoho_refresh_token,
+            organization_id: settings.zoho_organization_id,
+            domain: settings.zoho_domain || "com",
+          },
+          container?.resolve?.("logger", { allowUnregistered: true })
+        );
+      }
+    } catch (_) {}
+
+    // 3. Delete each document in Zoho Books if zoho_document_id exists
+    for (const record of records) {
+      if (zoho && record.zoho_document_id) {
+        try {
+          if (record.type === "invoice") {
+            await zoho.deleteInvoice(record.zoho_document_id);
+            deletedInvoices.push(record.zoho_document_id);
+          } else if (record.type === "estimate") {
+            await zoho.deleteEstimate(record.zoho_document_id);
+            deletedEstimates.push(record.zoho_document_id);
+          } else if (record.type === "receipt") {
+            await zoho.deletePayment(record.zoho_document_id);
+            deletedPayments.push(record.zoho_document_id);
+          }
+        } catch (e: any) {
+          container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[Documents-Module] Could not delete Zoho document ${record.zoho_document_id}: ${e.message}`);
+        }
+      }
+    }
+
+    // 4. Also check repair ticket metadata directly in case zoho_invoice_id or zoho_estimate_id was stored there
+    try {
+      const repairModule: any = container?.resolve?.("repair", { allowUnregistered: true });
+      if (repairModule) {
+        const ticket = await repairModule.retrieveRepairTicket(repairTicketId).catch(() => null);
+        if (ticket && ticket.metadata && zoho) {
+          const meta = ticket.metadata;
+          if (meta.zoho_invoice_id && !deletedInvoices.includes(meta.zoho_invoice_id)) {
+            await zoho.deleteInvoice(meta.zoho_invoice_id).catch(() => {});
+            deletedInvoices.push(meta.zoho_invoice_id);
+          }
+          if (meta.zoho_estimate_id && !deletedEstimates.includes(meta.zoho_estimate_id)) {
+            await zoho.deleteEstimate(meta.zoho_estimate_id).catch(() => {});
+            deletedEstimates.push(meta.zoho_estimate_id);
+          }
+          if (meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
+            await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
+            deletedPayments.push(meta.zoho_payment_id);
+          }
+        }
+
+        // Clean ticket metadata
+        if (ticket) {
+          const cleanMeta = { ...(ticket.metadata || {}) };
+          delete cleanMeta.document_id;
+          delete cleanMeta.pdf_url;
+          delete cleanMeta.short_pdf_link;
+          delete cleanMeta.zoho_invoice_id;
+          delete cleanMeta.zoho_estimate_id;
+          delete cleanMeta.zoho_payment_id;
+          delete cleanMeta.last_document_type;
+          delete cleanMeta.last_document_title;
+
+          await repairModule.updateRepairTickets({
+            id: repairTicketId,
+            metadata: cleanMeta,
+          }).catch(() => {});
+        }
+      } else {
+        const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+        if (conn) {
+          const ticket = await conn("repair_ticket").where({ id: repairTicketId }).first();
+          if (ticket) {
+            const meta = typeof ticket.metadata === "string" ? JSON.parse(ticket.metadata || "{}") : (ticket.metadata || {});
+            if (zoho) {
+              if (meta.zoho_invoice_id && !deletedInvoices.includes(meta.zoho_invoice_id)) {
+                await zoho.deleteInvoice(meta.zoho_invoice_id).catch(() => {});
+                deletedInvoices.push(meta.zoho_invoice_id);
+              }
+              if (meta.zoho_estimate_id && !deletedEstimates.includes(meta.zoho_estimate_id)) {
+                await zoho.deleteEstimate(meta.zoho_estimate_id).catch(() => {});
+                deletedEstimates.push(meta.zoho_estimate_id);
+              }
+              if (meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
+                await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
+                deletedPayments.push(meta.zoho_payment_id);
+              }
+            }
+            delete meta.document_id;
+            delete meta.pdf_url;
+            delete meta.short_pdf_link;
+            delete meta.zoho_invoice_id;
+            delete meta.zoho_estimate_id;
+            delete meta.zoho_payment_id;
+            delete meta.last_document_type;
+            delete meta.last_document_title;
+
+            await conn("repair_ticket").where({ id: repairTicketId }).update({
+              metadata: JSON.stringify(meta),
+              updated_at: new Date(),
+            });
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 5. Delete document records in database
+    let deletedCount = 0;
+    for (const record of records) {
+      try {
+        await this.deleteDocumentRecords(record.id, sharedContext);
+        deletedCount++;
+      } catch (_) {
+        const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+        if (conn) {
+          await conn("document_record").where({ id: record.id }).delete();
+          deletedCount++;
+        }
+      }
+    }
+
+    return {
+      deleted_records: deletedCount,
+      deleted_zoho_invoices: deletedInvoices,
+      deleted_zoho_estimates: deletedEstimates,
+      deleted_zoho_payments: deletedPayments,
+    };
   }
 }
 

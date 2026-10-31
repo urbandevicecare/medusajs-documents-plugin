@@ -15,7 +15,7 @@ export async function postProcessPdf(
   options: PostProcessOptions = {}
 ): Promise<Buffer> {
   try {
-    const pdfDoc = await PDFLibDoc.load(pdfBuffer);
+    const pdfDoc = await PDFLibDoc.load(pdfBuffer, { ignoreEncryption: true });
 
     // 1. Generate & Embed QR Code if URL is provided
     let qrImage: any = null;

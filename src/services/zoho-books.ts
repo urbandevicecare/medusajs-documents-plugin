@@ -191,11 +191,59 @@ export class ZohoBooksService {
       payload.custom_fields = invoiceData.custom_fields;
     }
 
-    const res = await this.request("POST", "/invoices", payload);
+    const endpoint = invoiceData.invoice_number
+      ? "/invoices?ignore_auto_number_generation=true"
+      : "/invoices";
+
+    let res: any;
+    try {
+      res = await this.request("POST", endpoint, payload);
+    } catch (err: any) {
+      if (payload.custom_fields && (err.message?.includes("custom field") || err.message?.includes("120129"))) {
+        delete payload.custom_fields;
+        res = await this.request("POST", endpoint, payload);
+      } else {
+        throw err;
+      }
+    }
+
     return {
       invoice_id: res.invoice.invoice_id,
       invoice_number: res.invoice.invoice_number,
     };
+  }
+
+  async getInvoiceByNumber(invoiceNumber: string): Promise<{ invoice_id: string; invoice_number: string } | null> {
+    try {
+      const cleanNum = String(invoiceNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-)+/i, "");
+      const candidates = Array.from(new Set([invoiceNumber, `RT-${cleanNum}`, cleanNum].filter(Boolean)));
+      for (const num of candidates) {
+        const res = await this.request("GET", `/invoices?invoice_number=${encodeURIComponent(num)}`);
+        if (res.invoices && res.invoices.length > 0) {
+          const match = res.invoices.find((inv: any) => String(inv.invoice_number).trim().toLowerCase() === String(num).trim().toLowerCase()) || res.invoices[0];
+          return {
+            invoice_id: match.invoice_id,
+            invoice_number: match.invoice_number,
+          };
+        }
+      }
+      for (const num of candidates) {
+        const refRes = await this.request("GET", `/invoices?reference_number=${encodeURIComponent(num)}`);
+        if (refRes.invoices && refRes.invoices.length > 0) {
+          return {
+            invoice_id: refRes.invoices[0].invoice_id,
+            invoice_number: refRes.invoices[0].invoice_number,
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async deleteInvoice(invoiceId: string): Promise<void> {
+    await this.request("DELETE", `/invoices/${invoiceId}`);
   }
 
   async getInvoicePaymentQrCode(invoiceId: string): Promise<ArrayBuffer | null> {
@@ -212,25 +260,84 @@ export class ZohoBooksService {
 
   async createEstimate(contactId: string, estimateData: {
     reference_number?: string;
+    estimate_number?: string;
     line_items: any[];
     notes?: string;
     terms?: string;
     is_inclusive_tax?: boolean;
+    custom_fields?: Array<{ label: string; value: string }>;
   }): Promise<{ estimate_id: string; estimate_number: string }> {
-    const payload = {
+    const payload: any = {
       customer_id: contactId,
       reference_number: estimateData.reference_number,
+      estimate_number: estimateData.estimate_number,
       line_items: estimateData.line_items,
       notes: estimateData.notes || "Estimate for goods/services.",
       terms: estimateData.terms || "",
       is_inclusive_tax: estimateData.is_inclusive_tax ?? false,
     };
 
-    const res = await this.request("POST", "/estimates", payload);
+    if (estimateData.custom_fields && estimateData.custom_fields.length > 0) {
+      payload.custom_fields = estimateData.custom_fields;
+    }
+
+    const endpoint = estimateData.estimate_number
+      ? "/estimates?ignore_auto_number_generation=true"
+      : "/estimates";
+
+    let res: any;
+    try {
+      res = await this.request("POST", endpoint, payload);
+    } catch (err: any) {
+      if (payload.custom_fields && (err.message?.includes("custom field") || err.message?.includes("120129"))) {
+        delete payload.custom_fields;
+        res = await this.request("POST", endpoint, payload);
+      } else {
+        throw err;
+      }
+    }
+
     return {
       estimate_id: res.estimate.estimate_id,
       estimate_number: res.estimate.estimate_number,
     };
+  }
+
+  async getEstimateByNumber(estimateNumber: string): Promise<{ estimate_id: string; estimate_number: string } | null> {
+    try {
+      const cleanNum = String(estimateNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-)+/i, "");
+      const candidates = Array.from(new Set([estimateNumber, `RT-${cleanNum}`, `EST-${cleanNum}`, cleanNum].filter(Boolean)));
+      for (const num of candidates) {
+        const res = await this.request("GET", `/estimates?estimate_number=${encodeURIComponent(num)}`);
+        if (res.estimates && res.estimates.length > 0) {
+          const match = res.estimates.find((est: any) => String(est.estimate_number).trim().toLowerCase() === String(num).trim().toLowerCase()) || res.estimates[0];
+          return {
+            estimate_id: match.estimate_id,
+            estimate_number: match.estimate_number,
+          };
+        }
+      }
+      for (const num of candidates) {
+        const refRes = await this.request("GET", `/estimates?reference_number=${encodeURIComponent(num)}`);
+        if (refRes.estimates && refRes.estimates.length > 0) {
+          return {
+            estimate_id: refRes.estimates[0].estimate_id,
+            estimate_number: refRes.estimates[0].estimate_number,
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async deleteEstimate(estimateId: string): Promise<void> {
+    await this.request("DELETE", `/estimates/${estimateId}`);
+  }
+
+  async deletePayment(paymentId: string): Promise<void> {
+    await this.request("DELETE", `/customerpayments/${paymentId}`);
   }
 
   async registerPayment(

@@ -205,11 +205,11 @@ export const DocumentsPage = () => {
     pdf_terms: "",
 
     // Template Choices
-    invoice_template: "modern",
+    invoice_template: "zoho_exact",
     packing_slip_template: "modern",
-    receipt_template: "modern",
-    estimate_template: "modern",
-    job_card_template: "modern",
+    receipt_template: "zoho_exact",
+    estimate_template: "zoho_exact",
+    job_card_template: "standard",
     custom_doc_template: "modern",
 
     // Customizable Notification Templates
@@ -573,6 +573,53 @@ export const DocumentsPage = () => {
       }
     } catch (e) {
       alert("Error syncing to Zoho Books.");
+    }
+  };
+
+  // Delete a single document record (including Zoho document if present)
+  const handleDeleteDocument = async (docId: string) => {
+    if (!confirm("Are you sure you want to delete this document record?")) return;
+    try {
+      const res = await fetch(`/admin/documents/${docId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("Document deleted successfully!");
+        loadDocuments();
+      } else {
+        alert(`Failed to delete document: ${data.message || "Unknown error"}`);
+      }
+    } catch (e: any) {
+      alert(`Error deleting document: ${e.message}`);
+    }
+  };
+
+  // Delete all documents for a repair ticket (including in Zoho Books) so they can be regenerated
+  const handleDeleteRepairDocuments = async (repairTicketId: string) => {
+    if (
+      !confirm(
+        "Are you sure you want to delete ALL generated documents for this repair ticket (including in Zoho Books)? This will allow documents to be cleanly regenerated with updated ticket information."
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/admin/documents/repair/${repairTicketId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const zohoCount = (data.deleted_zoho_invoices?.length || 0) + (data.deleted_zoho_estimates?.length || 0) + (data.deleted_zoho_payments?.length || 0);
+        alert(`Successfully deleted ${data.deleted_records || 0} document record(s)${zohoCount > 0 ? ` and ${zohoCount} Zoho document(s)` : ""}!`);
+        loadDocuments();
+      } else {
+        alert(`Failed to delete repair documents: ${data.message || "Unknown error"}`);
+      }
+    } catch (e: any) {
+      alert(`Error deleting repair documents: ${e.message}`);
     }
   };
 
@@ -1001,6 +1048,20 @@ export const DocumentsPage = () => {
                                   Copy Link
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (doc.repair_ticket_id) {
+                                    handleDeleteRepairDocuments(doc.repair_ticket_id);
+                                  } else {
+                                    handleDeleteDocument(doc.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-red-600 transition-colors"
+                                title={doc.repair_ticket_id ? "Delete / Reset All Documents for this Repair Ticket (including in Zoho Books)" : "Delete Document Record"}
+                              >
+                                <Trash className="w-4 h-4 text-red-500 hover:text-red-700" />
+                              </button>
                             </div>
                           </Table.Cell>
                         </Table.Row>
@@ -1017,13 +1078,25 @@ export const DocumentsPage = () => {
                                       Related Documents for this Job / Order ({group.documents.length})
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleGroup(group.groupId)}
-                                    className="text-[11px] text-ui-fg-interactive hover:underline"
-                                  >
-                                    Collapse
-                                  </button>
+                                  <div className="flex items-center gap-3">
+                                    {group.repair_ticket_id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteRepairDocuments(group.repair_ticket_id!)}
+                                        className="text-[11px] text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 font-medium"
+                                        title="Delete all generated documents for this repair job in database & Zoho Books to allow clean regeneration"
+                                      >
+                                        <Trash className="w-3 h-3" /> Reset / Delete Job Documents
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleGroup(group.groupId)}
+                                      className="text-[11px] text-ui-fg-interactive hover:underline"
+                                    >
+                                      Collapse
+                                    </button>
+                                  </div>
                                 </div>
 
                                 <div className="overflow-x-auto rounded border border-ui-border-base bg-ui-bg-base">
@@ -1136,6 +1209,20 @@ export const DocumentsPage = () => {
                                                     Copy Link
                                                   </button>
                                                 )}
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    if (subDoc.repair_ticket_id) {
+                                                      handleDeleteRepairDocuments(subDoc.repair_ticket_id);
+                                                    } else {
+                                                      handleDeleteDocument(subDoc.id);
+                                                    }
+                                                  }}
+                                                  className="p-1 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-red-600 transition-colors"
+                                                  title={subDoc.repair_ticket_id ? "Delete / Reset All Documents for this Repair Ticket (including in Zoho Books)" : "Delete Document Record"}
+                                                >
+                                                  <Trash className="w-3.5 h-3.5 text-red-500 hover:text-red-700" />
+                                                </button>
                                               </div>
                                             </td>
                                           </tr>
@@ -1243,6 +1330,20 @@ export const DocumentsPage = () => {
                                 Copy Link
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (doc.repair_ticket_id) {
+                                  handleDeleteRepairDocuments(doc.repair_ticket_id);
+                                } else {
+                                  handleDeleteDocument(doc.id);
+                                }
+                              }}
+                              className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-red-600 transition-colors"
+                              title={doc.repair_ticket_id ? "Delete / Reset All Documents for this Repair Ticket (including in Zoho Books)" : "Delete Document Record"}
+                            >
+                              <Trash className="w-4 h-4 text-red-500 hover:text-red-700" />
+                            </button>
                           </div>
                         </Table.Cell>
                       </Table.Row>
@@ -1336,13 +1437,14 @@ export const DocumentsPage = () => {
                 <Label className="font-semibold text-sm">Invoice Template</Label>
                 <Text className="text-xs text-ui-fg-subtle mb-3">Used for standard customer order & repair invoices.</Text>
                 <Select
-                  value={settings.invoice_template || "modern"}
+                  value={settings.invoice_template || "zoho_exact"}
                   onValueChange={(v) => updateSettingField("invoice_template", v)}
                 >
                   <Select.Trigger size="small">
                     <Select.Value />
                   </Select.Trigger>
                   <Select.Content>
+                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
                     <Select.Item value="modern">Modern Minimalist</Select.Item>
                     <Select.Item value="classic">Classic Corporate</Select.Item>
                     <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
@@ -1353,8 +1455,8 @@ export const DocumentsPage = () => {
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => handlePreviewTemplate(settings.invoice_template || "modern", "invoice")}
-                  isLoading={previewLoading === `${settings.invoice_template || "modern"}-invoice`}
+                  onClick={() => handlePreviewTemplate(settings.invoice_template || "zoho_exact", "invoice")}
+                  isLoading={previewLoading === `${settings.invoice_template || "zoho_exact"}-invoice`}
                 >
                   <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Invoice Template
                 </Button>
@@ -1398,13 +1500,14 @@ export const DocumentsPage = () => {
                 <Label className="font-semibold text-sm">Payment Receipt Template</Label>
                 <Text className="text-xs text-ui-fg-subtle mb-3">Issued when orders or repairs are captured and paid in full.</Text>
                 <Select
-                  value={settings.receipt_template || "modern"}
+                  value={settings.receipt_template || "zoho_exact"}
                   onValueChange={(v) => updateSettingField("receipt_template", v)}
                 >
                   <Select.Trigger size="small">
                     <Select.Value />
                   </Select.Trigger>
                   <Select.Content>
+                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
                     <Select.Item value="modern">Modern Minimalist</Select.Item>
                     <Select.Item value="classic">Classic Corporate</Select.Item>
                     <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
@@ -1415,8 +1518,8 @@ export const DocumentsPage = () => {
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => handlePreviewTemplate(settings.receipt_template || "modern", "receipt")}
-                  isLoading={previewLoading === `${settings.receipt_template || "modern"}-receipt`}
+                  onClick={() => handlePreviewTemplate(settings.receipt_template || "zoho_exact", "receipt")}
+                  isLoading={previewLoading === `${settings.receipt_template || "zoho_exact"}-receipt`}
                 >
                   <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Receipt Template
                 </Button>
@@ -1429,13 +1532,14 @@ export const DocumentsPage = () => {
                 <Label className="font-semibold text-sm">Estimate / Quotation Template</Label>
                 <Text className="text-xs text-ui-fg-subtle mb-3">Issued for customer repair quotations, diagnostics, and price estimates.</Text>
                 <Select
-                  value={settings.estimate_template || "modern"}
+                  value={settings.estimate_template || "zoho_exact"}
                   onValueChange={(v) => updateSettingField("estimate_template", v)}
                 >
                   <Select.Trigger size="small">
                     <Select.Value />
                   </Select.Trigger>
                   <Select.Content>
+                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
                     <Select.Item value="modern">Modern Minimalist</Select.Item>
                     <Select.Item value="classic">Classic Corporate</Select.Item>
                     <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
@@ -1446,8 +1550,8 @@ export const DocumentsPage = () => {
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => handlePreviewTemplate(settings.estimate_template || "modern", "estimate")}
-                  isLoading={previewLoading === `${settings.estimate_template || "modern"}-estimate`}
+                  onClick={() => handlePreviewTemplate(settings.estimate_template || "zoho_exact", "estimate")}
+                  isLoading={previewLoading === `${settings.estimate_template || "zoho_exact"}-estimate`}
                 >
                   <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Estimate Template
                 </Button>
@@ -1470,6 +1574,7 @@ export const DocumentsPage = () => {
                     <Select.Item value="modern">Modern Minimalist</Select.Item>
                     <Select.Item value="classic">Classic Corporate</Select.Item>
                     <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
                   </Select.Content>
                 </Select>
               </div>
@@ -1491,13 +1596,15 @@ export const DocumentsPage = () => {
                 <Label className="font-semibold text-sm">Repair Job Card Template</Label>
                 <Text className="text-xs text-ui-fg-subtle mb-3">Workshop intake job card with device specs, inspection checklist & technician sign-off.</Text>
                 <Select
-                  value={settings.job_card_template || "modern"}
+                  value={settings.job_card_template || "standard"}
                   onValueChange={(v) => updateSettingField("job_card_template", v)}
                 >
                   <Select.Trigger size="small">
                     <Select.Value />
                   </Select.Trigger>
                   <Select.Content>
+                    <Select.Item value="standard">Workshop Intake Job Card (Standard)</Select.Item>
+                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
                     <Select.Item value="modern">Modern Minimalist</Select.Item>
                     <Select.Item value="classic">Classic Corporate</Select.Item>
                     <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
@@ -1508,8 +1615,8 @@ export const DocumentsPage = () => {
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => handlePreviewTemplate(settings.job_card_template || "modern", "job_card")}
-                  isLoading={previewLoading === `${settings.job_card_template || "modern"}-job_card`}
+                  onClick={() => handlePreviewTemplate(settings.job_card_template || "standard", "job_card")}
+                  isLoading={previewLoading === `${settings.job_card_template || "standard"}-job_card`}
                 >
                   <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Job Card Template
                 </Button>
