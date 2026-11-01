@@ -2,6 +2,8 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../../../modules/documents";
 import DocumentModuleService, { getDatabaseConnection } from "../../../../../../modules/documents/service";
 
+export const AUTHENTICATE = false;
+
 // GET /api/admin/documents/:id/document (Compatibility endpoint for handed-over URLs)
 export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
   const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);

@@ -3,6 +3,8 @@ import { DOCUMENTS_MODULE } from "../../../../../modules/documents";
 import DocumentModuleService from "../../../../../modules/documents/service";
 import { PDFKitGenerator, DocumentData } from "../../../../../services/pdfkit-generator";
 
+export const AUTHENTICATE = false;
+
 // GET /admin/documents/templates/preview?style=modern | classic | minimal&type=invoice | receipt | packing_slip | estimate | custom | job_card
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   try {

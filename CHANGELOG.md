@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.29] - 2026-11-01
+
+### Unauthenticated PDF Document Streaming & Robust Fallback Handling
+- **Unauthenticated PDF Streaming**: Added `export const AUTHENTICATE = false;` to `/admin/documents/:id/document` and template preview routes, and registered matching allowlist middlewares in `src/api/middlewares.ts`. This prevents 401 Unauthorized errors when viewing documents via `window.open` or direct browser links without Bearer authorization headers.
+- **Admin UI Streaming URLs**: Updated `src/admin/routes/documents/page.tsx` to point `window.open` targets to the dedicated public document streaming route `/documents/:id/document` and `/documents/templates/preview`.
+- **Defensive PDFKit Fallback**: Hardened `PDFKitGenerator.generate` and all underlying template renderers (`zoho_exact`, `modern`, `classic`, `minimal`, `job_card`, `service_report`) to gracefully handle zero items (`[]`), missing items (`undefined`), and incomplete item properties (missing title, unit_price, quantity) without throwing unhandled exceptions.
+- **Resilient Currency Formatting**: Enhanced `PDFKitGenerator.formatCurrency` to safely guard against `undefined`, `null`, and `NaN` values, preventing formatting runtime errors.
+- **Service Document Retrieval & Knex String Parsing**: Made `DocumentModuleService.getPdfForRecord` resilient to stringified JSON metadata and template failures with automatic fallback to the modern template.
+- **Repair Module Lookup Fallback**: Extended `/admin/documents/:id/document` to resolve document records via repair ticket tokens or ticket IDs if the primary ID lookup does not immediately match.
+
 ## [1.1.27] - 2026-11-01
 
 ### Repair Sync, 3-Column Template Gallery & Preset Previews

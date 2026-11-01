@@ -546,7 +546,7 @@ export const DocumentsPage = () => {
 
   const handleOpenPreviewNewTab = () => {
     const presetParam = previewPreset ? `&preset=${previewPreset}` : "";
-    window.open(`/admin/documents/templates/preview?style=${previewStyle}&type=${previewType}${presetParam}`, "_blank");
+    window.open(`/documents/templates/preview?style=${previewStyle}&type=${previewType}${presetParam}`, "_blank");
   };
 
   const handleDownloadPreview = () => {
@@ -582,7 +582,7 @@ export const DocumentsPage = () => {
 
   // View Document PDF (Direct native browser stream without popup blocker restriction)
   const handleViewDocument = (id: string, displayId: string) => {
-    window.open(`/admin/documents/${id}/document`, "_blank");
+    window.open(`/documents/${id}/document`, "_blank");
   };
 
   // Submit Notification Send

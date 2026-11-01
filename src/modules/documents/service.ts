@@ -1142,7 +1142,7 @@ export class DocumentModuleService extends MedusaService({
       }
       if (!record) throw e;
     }
-    const settings = await this.getSettings(sharedContext, container);
+    const settings = await this.getSettings(sharedContext, container).catch(() => ({} as any));
 
     // If source is Zoho and zoho_document_id exists, fetch from Zoho API
     if (
@@ -1164,7 +1164,7 @@ export class DocumentModuleService extends MedusaService({
           logger
         );
 
-        let rawBuf: ArrayBuffer;
+        let rawBuf: ArrayBuffer | null = null;
         if (record.type === "receipt") {
           rawBuf = await zoho.getPaymentReceiptPdf(record.zoho_document_id);
         } else {
@@ -1172,10 +1172,12 @@ export class DocumentModuleService extends MedusaService({
           rawBuf = await zoho.getDocumentPdf(record.zoho_document_id, docType);
         }
 
-        return await postProcessPdf(Buffer.from(rawBuf), {
-          qrUrl: record.short_payment_link || record.payment_link,
-          obscureZohoFooter: true,
-        });
+        if (rawBuf && rawBuf.byteLength > 0) {
+          return await postProcessPdf(Buffer.from(rawBuf), {
+            qrUrl: record.short_payment_link || record.payment_link,
+            obscureZohoFooter: true,
+          });
+        }
       } catch (err: any) {
         try {
           container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[Documents-Module] Failed to fetch PDF from Zoho (${err.message}). Regenerating via PDFKit.`);
@@ -1191,12 +1193,20 @@ export class DocumentModuleService extends MedusaService({
     else if (record.type === "job_card") templateName = settings.job_card_template || "standard";
     else if (record.type === "custom") templateName = settings.custom_doc_template || "modern";
 
-    const meta = (record.metadata || {}) as any;
+    let meta = (record.metadata || {}) as any;
+    if (typeof meta === "string") {
+      try {
+        meta = JSON.parse(meta);
+      } catch (_) {
+        meta = {};
+      }
+    }
+
     const docData: DocumentData = {
-      display_id: record.display_id,
-      title: record.title,
+      display_id: record.display_id || record.id || "DOC",
+      title: record.title || "Document",
       type: record.type as any,
-      date: new Date().toISOString().split("T")[0],
+      date: record.created_at ? new Date(record.created_at).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       customer: {
         name: record.customer_name || "Valued Customer",
         email: record.customer_email || undefined,
@@ -1212,21 +1222,36 @@ export class DocumentModuleService extends MedusaService({
         payment_details: settings.pdf_payment_details,
         terms: settings.pdf_terms,
       },
-      items: meta.items || [],
-      total: record.total_amount || 0,
+      items: Array.isArray(meta?.items) ? meta.items : [],
+      total: Number(record.total_amount || 0) || 0,
       currency_code: record.currency_code || "kes",
       payment_status: record.payment_status,
       payment_link: record.short_payment_link || record.payment_link,
       qr_url: record.short_payment_link || record.payment_link,
-      notes: meta.notes,
-      body_text: meta.body_text,
-      custom_fields: meta.custom_fields,
+      notes: meta?.notes,
+      body_text: meta?.body_text,
+      custom_fields: meta?.custom_fields,
     };
 
-    const rawBuffer = await PDFKitGenerator.generate(docData, templateName);
-    return await postProcessPdf(rawBuffer, {
-      qrUrl: record.short_payment_link || record.payment_link,
-    });
+    let rawBuffer: Buffer;
+    try {
+      rawBuffer = await PDFKitGenerator.generate(docData, templateName);
+    } catch (tmplErr: any) {
+      try {
+        container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(
+          `[Documents-Module] Error generating ${templateName} template: ${tmplErr.message}. Falling back to modern.`
+        );
+      } catch (_) {}
+      rawBuffer = await PDFKitGenerator.generate(docData, "modern");
+    }
+
+    try {
+      return await postProcessPdf(rawBuffer, {
+        qrUrl: record.short_payment_link || record.payment_link,
+      });
+    } catch (_) {
+      return rawBuffer;
+    }
   }
 
   /**

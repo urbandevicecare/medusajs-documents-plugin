@@ -52,12 +52,13 @@ export interface DocumentData {
 }
 
 export class PDFKitGenerator {
-  static formatCurrency(amount: number, currency: string = "KES"): string {
+  static formatCurrency(amount?: number | null, currency: string = "KES"): string {
+    const num = typeof amount === "number" && !isNaN(amount) ? amount : (Number(amount || 0) || 0);
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: (currency || "KES").toUpperCase(),
       minimumFractionDigits: 2,
-    }).format(amount);
+    }).format(num);
   }
 
   static formatDate(dateString?: string | Date): string {
@@ -399,33 +400,41 @@ export class PDFKitGenerator {
         doc.fillColor("#111827").font("Helvetica").fontSize(8.5);
         let idx = 1;
         const items = data.items || [];
-        for (const item of items) {
-          if (currentY > doc.page.height - 130) {
-            doc.addPage();
-            currentY = 45;
-          }
-
-          doc.font("Helvetica").fillColor("#6b7280").text(idx.toString(), 50, currentY, { width: 25 });
-          doc.font("Helvetica-Bold").fillColor("#111827").text(item.title, 78, currentY, { width: 255 });
-          const titleH = doc.heightOfString(item.title, { width: 255 });
-
-          let descH = 0;
-          if (item.description) {
-            doc.font("Helvetica").fillColor("#6b7280").fontSize(7.5).text(item.description, 78, currentY + titleH + 2, { width: 255 });
-            descH = doc.heightOfString(item.description, { width: 255 }) + 2;
-          }
-
-          const unitP = Number(item.unit_price || 0);
-          const totalP = Number(item.total != null ? item.total : unitP * Number(item.quantity || 1));
-
-          doc.font("Helvetica").fillColor("#111827").fontSize(8.5);
-          doc.text(Number(item.quantity || 1).toFixed(2), 335, currentY, { width: 35, align: "center" });
-          doc.text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unitP), 375, currentY, { width: 70, align: "right" });
-          doc.text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP), 455, currentY, { width: 90, align: "right" });
-
-          currentY += Math.max(16, titleH + descH + 4);
+        if (items.length === 0) {
+          doc.font("Helvetica-Oblique").fillColor("#9ca3af").fontSize(8.5).text("No itemized charges listed", 78, currentY, { width: 255 });
+          currentY += 20;
           doc.rect(45, currentY - 3, 505, 0.5).fill("#f3f4f6");
-          idx++;
+        } else {
+          for (const item of items) {
+            if (currentY > doc.page.height - 130) {
+              doc.addPage();
+              currentY = 45;
+            }
+
+            const itemTitle = item?.title ? String(item.title) : "Item";
+            doc.font("Helvetica").fillColor("#6b7280").text(idx.toString(), 50, currentY, { width: 25 });
+            doc.font("Helvetica-Bold").fillColor("#111827").text(itemTitle, 78, currentY, { width: 255 });
+            const titleH = doc.heightOfString(itemTitle, { width: 255 });
+
+            let descH = 0;
+            if (item?.description) {
+              const itemDesc = String(item.description);
+              doc.font("Helvetica").fillColor("#6b7280").fontSize(7.5).text(itemDesc, 78, currentY + titleH + 2, { width: 255 });
+              descH = doc.heightOfString(itemDesc, { width: 255 }) + 2;
+            }
+
+            const unitP = Number(item?.unit_price || 0);
+            const totalP = Number(item?.total != null ? item.total : unitP * Number(item?.quantity || 1));
+
+            doc.font("Helvetica").fillColor("#111827").fontSize(8.5);
+            doc.text(Number(item?.quantity || 1).toFixed(2), 335, currentY, { width: 35, align: "center" });
+            doc.text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unitP), 375, currentY, { width: 70, align: "right" });
+            doc.text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP), 455, currentY, { width: 90, align: "right" });
+
+            currentY += Math.max(16, titleH + descH + 4);
+            doc.rect(45, currentY - 3, 505, 0.5).fill("#f3f4f6");
+            idx++;
+          }
         }
 
         currentY += 8;
@@ -624,24 +633,31 @@ export class PDFKitGenerator {
         currentY += 6;
 
         const items = data.items || [];
-        for (const item of items) {
-          if (currentY > doc.page.height - 120) {
-            doc.addPage();
-            currentY = 50;
-          }
-
-          const unitP = Number(item.unit_price || 0);
-          const totalP = Number(item.total != null ? item.total : unitP * Number(item.quantity || 1));
-
-          doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5);
-          doc.text(item.title, 48, currentY, { width: 250 });
-          doc.text(Number(item.quantity || 1).toString(), 325, currentY, { width: 35, align: "center" });
-          doc.text(`KSh ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unitP)}`, 375, currentY, { width: 75, align: "right" });
-          doc.text(`KSh ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP)}`, 460, currentY, { width: 85, align: "right" });
-          const titleH = doc.heightOfString(item.title, { width: 250 });
-          const rowH = Math.max(16, titleH + 4);
-          currentY += rowH;
+        if (items.length === 0) {
+          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8.5).text("No itemized services listed", 48, currentY, { width: 250 });
+          currentY += 20;
           doc.rect(45, currentY - 3, 505, 0.5).fill("#f1f5f9");
+        } else {
+          for (const item of items) {
+            if (currentY > doc.page.height - 120) {
+              doc.addPage();
+              currentY = 50;
+            }
+
+            const unitP = Number(item?.unit_price || 0);
+            const totalP = Number(item?.total != null ? item.total : unitP * Number(item?.quantity || 1));
+            const itemTitle = item?.title ? String(item.title) : "Service Item";
+
+            doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5);
+            doc.text(itemTitle, 48, currentY, { width: 250 });
+            doc.text(Number(item?.quantity || 1).toString(), 325, currentY, { width: 35, align: "center" });
+            doc.text(`KSh ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unitP)}`, 375, currentY, { width: 75, align: "right" });
+            doc.text(`KSh ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP)}`, 460, currentY, { width: 85, align: "right" });
+            const titleH = doc.heightOfString(itemTitle, { width: 250 });
+            const rowH = Math.max(16, titleH + 4);
+            currentY += rowH;
+            doc.rect(45, currentY - 3, 505, 0.5).fill("#f1f5f9");
+          }
         }
 
         // Total Row
@@ -727,26 +743,33 @@ export class PDFKitGenerator {
         currentY += 25;
 
         const items = data.items || [];
-        for (const item of items) {
-          if (currentY > doc.page.height - 180) { doc.addPage(); currentY = 45; }
-
-          const totalP = Number(item.total != null ? item.total : Number(item.unit_price || 0) * Number(item.quantity || 1));
-
-          doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5);
-          doc.text(Number(item.quantity || 1).toString(), 48, currentY, { width: 30, align: "center" });
-
-          doc.font("Helvetica-Bold").text(item.title, 85, currentY, { width: 145 });
-          const titleHeight = doc.heightOfString(item.title, { width: 145 });
-
-          const specText = item.description || "Full OEM disassembly, component replacement, thermal validation, adhesive resealing, and stress testing.";
-          doc.font("Helvetica").fillColor("#475569").fontSize(7.5).text(specText, 235, currentY, { width: 195 });
-          const specHeight = doc.heightOfString(specText, { width: 195 });
-
-          doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5).text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP), 435, currentY, { width: 110, align: "right" });
-
-          const rowHeight = Math.max(18, titleHeight + 8, specHeight + 8);
-          currentY += rowHeight;
+        if (items.length === 0) {
+          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8.5).text("No itemized items listed", 85, currentY, { width: 145 });
+          currentY += 20;
           doc.rect(45, currentY - 3, 505, 0.5).fill("#e2e8f0");
+        } else {
+          for (const item of items) {
+            if (currentY > doc.page.height - 180) { doc.addPage(); currentY = 45; }
+
+            const totalP = Number(item?.total != null ? item.total : Number(item?.unit_price || 0) * Number(item?.quantity || 1));
+            const itemTitle = item?.title ? String(item.title) : "Service Item";
+
+            doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5);
+            doc.text(Number(item?.quantity || 1).toString(), 48, currentY, { width: 30, align: "center" });
+
+            doc.font("Helvetica-Bold").text(itemTitle, 85, currentY, { width: 145 });
+            const titleHeight = doc.heightOfString(itemTitle, { width: 145 });
+
+            const specText = item?.description || "Full OEM disassembly, component replacement, thermal validation, adhesive resealing, and stress testing.";
+            doc.font("Helvetica").fillColor("#475569").fontSize(7.5).text(specText, 235, currentY, { width: 195 });
+            const specHeight = doc.heightOfString(specText, { width: 195 });
+
+            doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5).text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP), 435, currentY, { width: 110, align: "right" });
+
+            const rowHeight = Math.max(18, titleHeight + 8, specHeight + 8);
+            currentY += rowHeight;
+            doc.rect(45, currentY - 3, 505, 0.5).fill("#e2e8f0");
+          }
         }
 
         // Total Box
@@ -1099,28 +1122,35 @@ export class PDFKitGenerator {
         let itemY = tableTop + 24;
         let isAlt = false;
 
-        for (const item of data.items) {
-          if (itemY > 680) {
-            doc.addPage();
-            itemY = 50;
-          }
-          if (isAlt) {
-            doc.rect(40, itemY, 515, 28).fill(lightBg);
-          }
+        const modernItems = data.items || [];
+        if (modernItems.length === 0) {
+          doc.font("Helvetica-Oblique").fontSize(8).fillColor(subtleColor).text("No itemized charges listed", 50, itemY + 6, { width: 280 });
+          itemY += 24;
+        } else {
+          for (const item of modernItems) {
+            if (itemY > 680) {
+              doc.addPage();
+              itemY = 50;
+            }
+            if (isAlt) {
+              doc.rect(40, itemY, 515, 28).fill(lightBg);
+            }
 
-          doc.font("Helvetica-Bold").fontSize(8).fillColor(darkColor).text(item.title, 50, itemY + 6, { width: 280 });
-          if (item.description) {
-            doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(item.description, 50, itemY + 16, { width: 280, ellipsis: true });
+            const itemTitle = item?.title ? String(item.title) : "Item";
+            doc.font("Helvetica-Bold").fontSize(8).fillColor(darkColor).text(itemTitle, 50, itemY + 6, { width: 280 });
+            if (item?.description) {
+              doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(String(item.description), 50, itemY + 16, { width: 280, ellipsis: true });
+            }
+
+            doc.font("Helvetica").fontSize(8).fillColor(darkColor);
+            doc.text(String(item?.quantity || 1), 340, itemY + 8, { width: 40, align: "center" });
+            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 390, itemY + 8, { width: 70, align: "right" });
+            const lineTotal = item?.total != null ? item.total : (Number(item?.quantity || 1) * Number(item?.unit_price || 0));
+            doc.font("Helvetica-Bold").text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 470, itemY + 8, { width: 75, align: "right" });
+
+            itemY += 28;
+            isAlt = !isAlt;
           }
-
-          doc.font("Helvetica").fontSize(8).fillColor(darkColor);
-          doc.text(String(item.quantity || 1), 340, itemY + 8, { width: 40, align: "center" });
-          doc.text(PDFKitGenerator.formatCurrency(item.unit_price, data.currency_code), 390, itemY + 8, { width: 70, align: "right" });
-          const lineTotal = item.total != null ? item.total : (item.quantity || 1) * item.unit_price;
-          doc.font("Helvetica-Bold").text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 470, itemY + 8, { width: 75, align: "right" });
-
-          itemY += 28;
-          isAlt = !isAlt;
         }
 
         doc.strokeColor(borderColor).lineWidth(1).moveTo(40, itemY).lineTo(555, itemY).stroke();
@@ -1290,24 +1320,31 @@ export class PDFKitGenerator {
         let rowY = tableTop + 20;
         doc.font("Times-Roman").fontSize(8.5).fillColor("#111827");
 
-        for (const item of data.items) {
-          if (rowY > 680) {
-            doc.addPage();
-            rowY = 50;
-          }
-          doc.font("Times-Bold").text(item.title, 50, rowY + 5, { width: 285 });
-          if (item.description) {
-            doc.font("Times-Italic").fontSize(7.5).fillColor("#64748b").text(item.description, 50, rowY + 15, { width: 285, ellipsis: true });
-            doc.font("Times-Roman").fontSize(8.5).fillColor("#111827");
-          }
-
-          doc.text(String(item.quantity || 1), 350, rowY + 6, { width: 35, align: "center" });
-          doc.text(PDFKitGenerator.formatCurrency(item.unit_price, data.currency_code), 400, rowY + 6, { width: 65, align: "right" });
-          const lineTotal = item.total != null ? item.total : (item.quantity || 1) * item.unit_price;
-          doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 480, rowY + 6, { width: 65, align: "right" });
-
+        const classicItems = data.items || [];
+        if (classicItems.length === 0) {
+          doc.font("Times-Italic").fontSize(8.5).fillColor("#64748b").text("No itemized charges listed", 50, rowY + 5, { width: 285 });
           rowY += 26;
-          doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(40, rowY).lineTo(555, rowY).stroke();
+        } else {
+          for (const item of classicItems) {
+            if (rowY > 680) {
+              doc.addPage();
+              rowY = 50;
+            }
+            const itemTitle = item?.title ? String(item.title) : "Item";
+            doc.font("Times-Bold").text(itemTitle, 50, rowY + 5, { width: 285 });
+            if (item?.description) {
+              doc.font("Times-Italic").fontSize(7.5).fillColor("#64748b").text(String(item.description), 50, rowY + 15, { width: 285, ellipsis: true });
+              doc.font("Times-Roman").fontSize(8.5).fillColor("#111827");
+            }
+
+            doc.text(String(item?.quantity || 1), 350, rowY + 6, { width: 35, align: "center" });
+            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 400, rowY + 6, { width: 65, align: "right" });
+            const lineTotal = item?.total != null ? item.total : (Number(item?.quantity || 1) * Number(item?.unit_price || 0));
+            doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 480, rowY + 6, { width: 65, align: "right" });
+
+            rowY += 26;
+            doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(40, rowY).lineTo(555, rowY).stroke();
+          }
         }
 
         // Summary Rows
@@ -1454,17 +1491,24 @@ export class PDFKitGenerator {
         let rowY = tableTop + 24;
         doc.font("Courier").fontSize(8).fillColor("#111827");
 
-        for (const item of data.items) {
-          if (rowY > 700) {
-            doc.addPage();
-            rowY = 50;
-          }
-          doc.text(item.title, 45, rowY, { width: 300 });
-          doc.text(String(item.quantity || 1), 360, rowY, { width: 30, align: "center" });
-          doc.text(PDFKitGenerator.formatCurrency(item.unit_price, data.currency_code), 410, rowY, { width: 60, align: "right" });
-          const lineTotal = item.total != null ? item.total : (item.quantity || 1) * item.unit_price;
-          doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 485, rowY, { width: 65, align: "right" });
+        const minimalItems = data.items || [];
+        if (minimalItems.length === 0) {
+          doc.font("Courier-Oblique").fontSize(8).fillColor("#64748b").text("No itemized charges listed", 45, rowY, { width: 300 });
           rowY += 18;
+        } else {
+          for (const item of minimalItems) {
+            if (rowY > 700) {
+              doc.addPage();
+              rowY = 50;
+            }
+            const itemTitle = item?.title ? String(item.title) : "Item";
+            doc.text(itemTitle, 45, rowY, { width: 300 });
+            doc.text(String(item?.quantity || 1), 360, rowY, { width: 30, align: "center" });
+            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 410, rowY, { width: 60, align: "right" });
+            const lineTotal = item?.total != null ? item.total : (Number(item?.quantity || 1) * Number(item?.unit_price || 0));
+            doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 485, rowY, { width: 65, align: "right" });
+            rowY += 18;
+          }
         }
 
         doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(40, rowY).lineTo(555, rowY).stroke();
@@ -1493,25 +1537,41 @@ export class PDFKitGenerator {
   // CENTRAL DISPATCHER
   // -------------------------------------------------------------
   static async generate(data: DocumentData, templateStyle: string = "modern"): Promise<Buffer> {
+    const rawItems = Array.isArray(data?.items) ? data.items : [];
+    const normalizedItems = rawItems.map((it: any) => ({
+      ...it,
+      title: it?.title != null && String(it.title).trim().length > 0 ? String(it.title) : "Item",
+      description: it?.description != null ? String(it.description) : undefined,
+      quantity: Number(it?.quantity ?? 1) || 1,
+      unit_price: typeof it?.unit_price === "number" && !isNaN(it.unit_price) ? it.unit_price : (Number(it?.unit_price || 0) || 0),
+      total: it?.total != null ? (Number(it.total) || 0) : undefined,
+    }));
+
     const normalizedData: DocumentData = {
       ...data,
+      display_id: String(data?.display_id || "DOC-001"),
+      title: data?.title || "Document",
+      type: data?.type || "invoice",
+      total: typeof data?.total === "number" && !isNaN(data.total) ? data.total : (Number(data?.total || 0) || 0),
+      currency_code: data?.currency_code || "KES",
+      items: normalizedItems,
       company: {
-        name: data.company?.name || "Company Store",
-        logo_url: data.company?.logo_url,
-        address: data.company?.address,
-        phone: data.company?.phone,
-        email: data.company?.email,
-        website: data.company?.website,
-        payment_details: data.company?.payment_details,
-        terms: data.company?.terms,
-        kra_pin: data.company?.kra_pin,
+        name: data?.company?.name || "Company Store",
+        logo_url: data?.company?.logo_url,
+        address: data?.company?.address,
+        phone: data?.company?.phone,
+        email: data?.company?.email,
+        website: data?.company?.website,
+        payment_details: data?.company?.payment_details,
+        terms: data?.company?.terms,
+        kra_pin: data?.company?.kra_pin,
       },
       customer: {
-        name: data.customer?.name || "Valued Customer",
-        company_name: data.customer?.company_name,
-        email: data.customer?.email,
-        phone: data.customer?.phone,
-        address: data.customer?.address,
+        name: data?.customer?.name || "Valued Customer",
+        company_name: data?.customer?.company_name,
+        email: data?.customer?.email,
+        phone: data?.customer?.phone,
+        address: data?.customer?.address,
       },
     };
 

@@ -2,6 +2,8 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../modules/documents";
 import DocumentModuleService, { getDatabaseConnection } from "../../../../modules/documents/service";
 
+export const AUTHENTICATE = false;
+
 // GET /documents/:id/document (Public PDF download & view for recipients)
 export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
   const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
