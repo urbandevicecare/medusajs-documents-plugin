@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.32] - 2026-11-01
+
+### Certificate Document Consistent Header, Rich Editable Fillers, and Repair Ticket Autofill
+- **Consistent Certificate Header**: Standardized the header across all certificate documents (Warranty Certificate, Service Completion Certificate, Certificate of Destruction, Diagnostic Inspection Report, etc.) to match invoice and quote templates (enlarged company logo on top left `[155, 54]`, company contact details positioned directly under the logo, document title on top right with date and document reference `#...`).
+- **Dedicated Certificate Renderer & Routing**: Added dedicated `renderCertificateDocument` renderer in `PDFKitGenerator` with modern 2-column client & equipment specifications card, declaration statement box, itemized scope table, notes & terms, and dual signature blocks. Routed all custom and certificate documents seamlessly to this renderer.
+- **Unpriced Job Card Intake Form**: Completely removed item pricing, Unit Cost column, Total column, and 'Est. Total' row from `renderJobCardDocument`, ensuring repair intake job cards function strictly as non-financial equipment check-in records.
+- **Rich Realistic Default Fillers**: Pre-populated realistic specifications, technical scopes, bullet points, and warranty/destruction terms across all 8 custom document presets in the admin UI and template preview routes (`warranty`, `service_completion`, `destruction`, `diagnostic`, `handover`, `proforma`, `trade_in`, `generic`).
+- **Repair Ticket Selector & Autofill**: Added a "Link / Load from Repair Ticket" selector in the "Create Custom Document & Send Email" modal (`page.tsx`) that fetches available repair tickets from `/admin/repairs` and active documents hub, automatically populating customer contact details (name, email, phone, company), device specifications (model, serial/IMEI, accessories, technician), ticket reference, and services.
+- **Editable Custom Fields & Notes**: Added key-value specification editor with dynamic row additions/deletions and a terms/notes textarea to the custom document modal, fully passed to backend `/admin/documents/custom` and persisted in document record metadata.
+
 ## [1.1.31] - 2026-11-01
 
 ### HTTP HEAD Request Handling, Accept-Ranges Byte Streaming & Order Fallback

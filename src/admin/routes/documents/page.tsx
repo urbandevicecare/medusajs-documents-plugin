@@ -46,6 +46,8 @@ interface CustomDocPreset {
   subject: string;
   body_text: string;
   items: Array<{ title: string; description: string; quantity: number; unit_price: number }>;
+  custom_fields?: Record<string, string>;
+  notes?: string;
 }
 
 const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
@@ -56,25 +58,21 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     badge: "90-Day Coverage",
     title: "Warranty Certificate",
     subject: "Your Official Warranty Certificate - Urban Device Care",
-    body_text: `This certificate verifies that your device has undergone professional repairs with genuine OEM-specification components and has passed our multi-point quality assurance inspection.\n\nAll hardware replacements and associated workshop labor are covered under our comprehensive 90-day warranty against defects in parts and workmanship. Please retain this document for warranty verification.`,
+    body_text: `This official Warranty Certificate certifies that the serviced hardware specified below has undergone complete technical overhaul, component replacement, and bench testing in accordance with manufacturer specifications.\n\nAll genuine replacement components and associated technical workshop labor are guaranteed against functional defects for a period of 90 days from the date of issue. Urban Device Care warrants that all installed modules have passed rigorous electrical load and multi-point quality assurance protocols.`,
     items: [
-      { title: "OEM Component & Hardware Warranty", description: "90-Day Coverage from Date of Collection", quantity: 1, unit_price: 0 },
-      { title: "Workshop Diagnostic & Quality Clearance", description: "Multi-Point Hardware & Bench Testing", quantity: 1, unit_price: 0 },
+      { title: "OEM Screen Assembly & Digitizer Replacement", description: "90-Day Comprehensive Warranty Coverage against touch and display anomalies", quantity: 1, unit_price: 0 },
+      { title: "Internal Power Management & Battery Calibration", description: "Warranty against capacity degradation and voltage fluctuations", quantity: 1, unit_price: 0 },
+      { title: "Clean-Room Workshop Installation & Bench Clearance", description: "Certified labor coverage and water/dust ingress seal integrity", quantity: 1, unit_price: 0 },
     ],
-  },
-  {
-    id: "diagnostic",
-    name: "Diagnostic & Inspection Report",
-    icon: "🔍",
-    badge: "Hardware Findings",
-    title: "Diagnostic & Hardware Inspection Report",
-    subject: "Device Diagnostic & Inspection Findings",
-    body_text: `Our certified repair specialists have completed a hardware and firmware inspection of your equipment. Below are the confirmed technical findings, component test measurements, and technician notes regarding the state of your device.`,
-    items: [
-      { title: "Logic Board & Power Rail Inspection", description: "Voltage drop and circuit continuity tested", quantity: 1, unit_price: 0 },
-      { title: "Display & Touch Digitizer Diagnostic", description: "Digitizer touch grid, TrueTone, and Ambient Sensor test", quantity: 1, unit_price: 0 },
-      { title: "Battery Health & Thermal Profiling", description: "Cycle count, capacity retention, and charge testing", quantity: 1, unit_price: 0 },
-    ],
+    custom_fields: {
+      "Device Model": "Apple iPhone 15 Pro Max (256GB - Natural Titanium)",
+      "Serial / IMEI": "F2LZ90K8MD6R",
+      "Ticket Reference": "RT-2024-8841",
+      "Technician": "Bonifencia A. (Lead Certified Engineer)",
+      "Coverage Period": "90 Days from Date of Collection",
+      "Warranty Status": "Active & Validated",
+    },
+    notes: "Warranty excludes accidental damage, liquid ingress, unauthorized third-party tampering, or software jailbreaking. Please retain this document and quote your ticket reference number for any warranty claims.",
   },
   {
     id: "service_completion",
@@ -82,12 +80,68 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     icon: "📜",
     badge: "QC Cleared",
     title: "Certificate of Service Completion",
-    subject: "Service Completion & Quality Assurance Sign-off",
-    body_text: `This document certifies that the requested overhaul, maintenance, and repair services have been executed in full accordance with industry service standards. The device has cleared bench testing and is ready for customer collection.`,
+    subject: "Certificate of Service Completion & Quality Sign-Off",
+    body_text: `This Certificate of Service Completion verifies that all diagnostic, repair, and maintenance procedures authorized under the referenced work order have been satisfactorily executed in full adherence to ISO/IPC hardware rework standards.\n\nThe equipment has successfully cleared all pre-delivery functional verifications, thermal load evaluations, and electrical safety diagnostics, and is officially released as fully operational.`,
     items: [
-      { title: "Hardware Servicing & Component Replacement", description: "Executed per work order specifications", quantity: 1, unit_price: 0 },
-      { title: "Final Bench Testing & Quality Control", description: "Passed 100% functional test criteria", quantity: 1, unit_price: 0 },
+      { title: "Hardware Overhaul & Micro-Soldering Service", description: "Replaced degraded SMD power filtering capacitors and restored logic board rails", quantity: 1, unit_price: 0 },
+      { title: "Firmware Diagnostics & Peripheral Bench Testing", description: "100% operational clearance on audio codecs, cameras, biometric sensors, and radios", quantity: 1, unit_price: 0 },
+      { title: "Acoustic Chamber & Thermal Stress Verification", description: "Pass: Maximum load temperature maintained within normal threshold (38°C)", quantity: 1, unit_price: 0 },
     ],
+    custom_fields: {
+      "Device Model": "MacBook Pro 16-inch (M2 Max - Space Grey)",
+      "Serial / IMEI": "C02G8027MD6T",
+      "Ticket Reference": "RT-2024-9104",
+      "Technician": "Bonifencia A. (Lead Certified Engineer)",
+      "Quality Control Inspector": "Kevin M. (Senior QA Specialist)",
+      "Final Testing Result": "PASSED - All Benchmarks Satisfied",
+    },
+    notes: "All original customer data was preserved intact. Device firmware updated to current stable release. The client has 7 days from collection to report any cosmetic or configuration discrepancies.",
+  },
+  {
+    id: "destruction",
+    name: "Certificate of Destruction & Disposal",
+    icon: "♻️",
+    badge: "Eco & Compliance",
+    title: "Certificate of Destruction & Eco-Disposal",
+    subject: "Certificate of Secure Hardware Destruction & Eco-Disposal",
+    body_text: `This Certificate of Destruction legally certifies that the decommissioned computing equipment and electronic media detailed herein have been securely and irrevocably destroyed in compliance with NIST SP 800-88 Rev. 1 guidelines and WEEE environmental disposal regulations.\n\nAll storage media have undergone physical de-manufacturing, mechanical shredding, and complete demagnetization, ensuring zero residual data retrievability. Non-hazardous materials have been transferred to certified green-reclamation facilities.`,
+    items: [
+      { title: "Physical Demanufacturing & High-Torque Shredding", description: "Particle size reduced below DIN 66399 Level H-5 security standards", quantity: 1, unit_price: 0 },
+      { title: "Certified NIST 800-88 Cryptographic & Magnetic Sanitization", description: "Complete data eradication across all solid-state and magnetic platters", quantity: 1, unit_price: 0 },
+      { title: "Hazardous Materials & Lithium Battery Eco-Reclamation", description: "Zero-landfill certified chemical neutralization and precious metal recovery", quantity: 1, unit_price: 0 },
+    ],
+    custom_fields: {
+      "Device Model": "Dell PowerEdge R740 Server / 4x 1.92TB NVMe",
+      "Serial / IMEI": "SN-DELL-882194-X",
+      "Ticket Reference": "RT-2024-7712",
+      "Destruction Method": "Physical Shear Shredding & Degaussing",
+      "Compliance Standard": "NIST SP 800-88 Rev. 1 & WEEE Directive",
+      "Authorized Disposal Officer": "Bonifencia A. (Certified Waste Handler)",
+    },
+    notes: "Urban Device Care Ltd indemnifies the client against data breach liabilities originating from the specified serialized assets following the verified execution of destruction protocols.",
+  },
+  {
+    id: "diagnostic",
+    name: "Diagnostic & Inspection Report",
+    icon: "🔍",
+    badge: "Hardware Findings",
+    title: "Diagnostic & Hardware Inspection Report",
+    subject: "Device Diagnostic & Inspection Findings - Urban Device Care",
+    body_text: `Our certified repair specialists have concluded an in-depth hardware, firmware, and electrical diagnostic examination of your device. The comprehensive technical findings, voltage line readings, and component health metrics are detailed below alongside our certified remediation roadmap.`,
+    items: [
+      { title: "Logic Board Primary Power Rail Diagnostic", description: "PP_VDD_MAIN measured at 3.82V (Nominal). No ground short-circuits detected on primary PMIC", quantity: 1, unit_price: 0 },
+      { title: "Display Digitizer & Touch Array Profiling", description: "Matrix micro-fracture identified in bottom-left corner causing erratic capacitive touch feedback", quantity: 1, unit_price: 0 },
+      { title: "Battery Health & Internal Impedance Evaluation", description: "Current capacity: 74% of design capacity (842 cycles). Service battery recommended", quantity: 1, unit_price: 0 },
+    ],
+    custom_fields: {
+      "Device Model": "Samsung Galaxy S23 Ultra (512GB - Phantom Black)",
+      "Serial / IMEI": "358941092847120",
+      "Ticket Reference": "RT-2024-6523",
+      "Technician": "Bonifencia A. (Lead Certified Engineer)",
+      "Diagnostic Verdict": "Component Replacement Feasible",
+      "Estimated Labor Time": "2.5 Workshop Hours",
+    },
+    notes: "Diagnostic findings remain valid for 14 calendar days. Internal safety seals have been inspected and logged.",
   },
   {
     id: "handover",
@@ -96,11 +150,21 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     badge: "Custody Form",
     title: "Equipment Handover & Custody Release Agreement",
     subject: "Equipment Handover & Custody Release Form",
-    body_text: `This handover document certifies the return and physical custody release of customer equipment and associated accessories from Urban Device Care. The customer acknowledges receipt of equipment in verified working order.`,
+    body_text: `This Handover Agreement legally documents the transfer of custody of the repaired equipment and accessories listed below from Urban Device Care to the client or authorized corporate representative.\n\nThe recipient confirms that the device has been inspected, tested in their presence (including display, camera, audio, and network connectivity), and accepted in verified good working condition.`,
     items: [
-      { title: "Device Handover & Physical Release", description: "Customer custody confirmed", quantity: 1, unit_price: 0 },
-      { title: "Accessories Handover", description: "Chargers, cases, and cables returned in verified condition", quantity: 1, unit_price: 0 },
+      { title: "Primary Computing Device Release", description: "Serial verified, cosmetic inspection performed, customer account signed in", quantity: 1, unit_price: 0 },
+      { title: "OEM 96W USB-C Power Adapter & Braided Cable", description: "Tested and verified delivering 20V/4.8A under load", quantity: 1, unit_price: 0 },
+      { title: "Protective Hard Case & Accessories", description: "Returned in clean, intact custody state", quantity: 1, unit_price: 0 },
     ],
+    custom_fields: {
+      "Device Model": "Lenovo ThinkPad X1 Carbon Gen 10",
+      "Serial / IMEI": "PF-29X810-22",
+      "Ticket Reference": "RT-2024-5390",
+      "Released By": "Bonifencia A. (Urban Device Care)",
+      "Received By": "Authorized Client Representative",
+      "Handover Condition": "Inspected & Approved in Workshop",
+    },
+    notes: "By accepting handover, the client acknowledges satisfactory return of all custody items and confirms device operability.",
   },
   {
     id: "proforma",
@@ -108,12 +172,22 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     icon: "💼",
     badge: "Cost Estimate",
     title: "Commercial Quotation (Proforma)",
-    subject: "Commercial Quotation & Scope of Work",
-    body_text: `Thank you for choosing Urban Device Care. Below is an itemized breakdown of estimated hardware parts, workshop labor, and turnaround schedule for your project. This quote is valid for 14 calendar days.`,
+    subject: "Commercial Quotation & Scope of Work - Urban Device Care",
+    body_text: `Thank you for choosing Urban Device Care. Below is an itemized commercial quotation detailing required OEM components, workshop labor, precision calibration, and expected turnaround schedule for your equipment overhaul.\n\nThis quotation is valid for 14 calendar days from the date of issue. Upon formal approval, component procurement and bench allocation will commence immediately.`,
     items: [
-      { title: "OEM Replacement Hardware Assembly", description: "Brand new replacement module", quantity: 1, unit_price: 150 },
-      { title: "Workshop Labor & Clean-Room Installation", description: "Certified technician installation & calibration", quantity: 1, unit_price: 45 },
+      { title: "OEM Liquid Retina XDR Display Assembly", description: "Brand new original factory panel with factory color calibration", quantity: 1, unit_price: 42000 },
+      { title: "Clean-Room Workshop Installation & Sensor Alignment", description: "Certified clean-room installation, gasket replacement & TrueTone calibration", quantity: 1, unit_price: 6500 },
+      { title: "Hydrophobic Dust & Water Ingress Seal Restoration", description: "OEM adhesive barrier pressure cured to IP68 rating", quantity: 1, unit_price: 2500 },
     ],
+    custom_fields: {
+      "Device Model": "Apple iPad Pro 12.9-inch (6th Gen - Wi-Fi + Cellular)",
+      "Serial / IMEI": "DLXW9201M93K",
+      "Ticket Reference": "RT-2024-4190",
+      "Estimator / Technician": "Bonifencia A.",
+      "Validity Period": "14 Calendar Days",
+      "Estimated Turnaround": "24 - 48 Hours",
+    },
+    notes: "All replaced hardware carries our standard 90-day warranty coverage. Payment accepted via M-Pesa, Bank Transfer, or Credit/Debit Card.",
   },
   {
     id: "trade_in",
@@ -122,24 +196,20 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     badge: "Trade-In & Transfer",
     title: "Device Trade-In & Buyback Agreement",
     subject: "Device Trade-In & Buyback Agreement - Urban Device Care",
-    body_text: `This agreement confirms the valuation, transfer of title, and trade-in credit for the listed customer hardware. Customer verifies legal ownership and consents to complete data sanitation and ownership transfer.`,
+    body_text: `This Agreement formalizes the title transfer, functional evaluation, and agreed trade-in credit valuation for the customer-owned equipment listed below.\n\nThe seller warrants that they are the sole lawful owner of the equipment, that it is free of all liens, financial encumbrances, iCloud/Google activation locks, and corporate MDM profiles. Urban Device Care agrees to apply the confirmed credit towards service fees or disbursement.`,
     items: [
-      { title: "Trade-In Device Valuation & Credit", description: "Assessed Grade A condition allowance", quantity: 1, unit_price: 25000 },
-      { title: "Data Sanitization & Ownership Transfer", description: "Certified NIST 800-88 cryptographic wipe", quantity: 1, unit_price: 0 },
+      { title: "Trade-In Device Valuation Allowance (Grade A)", description: "Full functional clearance: battery health 91%, minor bezel wear, pristine screen", quantity: 1, unit_price: 35000 },
+      { title: "NIST 800-88 Cryptographic Data Sanitation Protocol", description: "Certified factory reset and firmware wipe with zero data retention guarantee", quantity: 1, unit_price: 0 },
     ],
-  },
-  {
-    id: "destruction",
-    name: "Certificate of Destruction & Disposal",
-    icon: "♻️",
-    badge: "Eco & Compliance",
-    title: "Certificate of Destruction & Eco-Disposal",
-    subject: "Certificate of Hardware Destruction & Eco-Disposal",
-    body_text: `This certificate confirms that the decommissioned hardware listed below has been safely demanufactured, shredded, or recycled in full compliance with WEEE and environmental data destruction standards.`,
-    items: [
-      { title: "Hardware Demanufacturing & Shredding", description: "Certified environmental destruction", quantity: 1, unit_price: 0 },
-      { title: "Hazardous Materials Recycling", description: "Zero-landfill lithium battery reclamation", quantity: 1, unit_price: 0 },
-    ],
+    custom_fields: {
+      "Device Model": "Apple iPhone 13 Pro (128GB - Sierra Blue)",
+      "Serial / IMEI": "G6TD9021ML8R",
+      "Ticket Reference": "RT-2024-3829",
+      "Activation Lock": "Removed & Verified Off",
+      "Assessed Grade": "Grade A (Excellent)",
+      "Evaluation Specialist": "Bonifencia A.",
+    },
+    notes: "Ownership transfers immediately upon document execution. Valuation is binding and irrevocable once trade-in payout or store credit is issued.",
   },
   {
     id: "blank",
@@ -148,10 +218,17 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     badge: "Custom",
     title: "Official Document",
     subject: "Official Document from Urban Device Care",
-    body_text: "",
+    body_text: "This official technical document confirms the specifications, service terms, and verified conditions documented by Urban Device Care for the specified customer asset.",
     items: [
-      { title: "", description: "", quantity: 1, unit_price: 0 },
+      { title: "Professional Hardware Inspection & Maintenance Service", description: "Certified technical evaluation and service clearance", quantity: 1, unit_price: 0 },
     ],
+    custom_fields: {
+      "Device Model": "Computing Asset / Hardware Module",
+      "Serial / IMEI": "SN-XXXX-XXXX",
+      "Ticket Reference": "RT-2024-0001",
+      "Technician": "Bonifencia A.",
+    },
+    notes: "Standard terms and conditions apply. For inquiries, contact info@urbandevicecare.co.uk.",
   },
 ];
 
@@ -278,32 +355,230 @@ export const DocumentsPage = () => {
   // Custom Document Form
   const [customDocForm, setCustomDocForm] = useState({
     preset_id: "warranty",
-    title: "Warranty Certificate",
+    title: CUSTOM_DOC_PRESETS[0].title,
     company_name: "",
-    customer_name: "",
-    customer_email: "",
-    customer_phone: "",
-    body_text: "This certificate verifies that your device has undergone professional repairs with genuine OEM-specification components and has passed our multi-point quality assurance inspection.\n\nAll hardware replacements and associated workshop labor are covered under our comprehensive 90-day warranty against defects in parts and workmanship. Please retain this document for warranty verification.",
-    items: [
-      { title: "OEM Component & Hardware Warranty", description: "90-Day Coverage from Date of Collection", quantity: 1, unit_price: 0 },
-      { title: "Workshop Diagnostic & Quality Clearance", description: "Multi-Point Hardware & Bench Testing", quantity: 1, unit_price: 0 },
-    ],
+    customer_name: "Jane Doe",
+    customer_email: "jane.doe@example.com",
+    customer_phone: "+254 712 345 678",
+    body_text: CUSTOM_DOC_PRESETS[0].body_text,
+    items: CUSTOM_DOC_PRESETS[0].items.map((it) => ({ ...it })),
+    custom_fields: { ...(CUSTOM_DOC_PRESETS[0].custom_fields || {}) } as Record<string, string>,
+    notes: CUSTOM_DOC_PRESETS[0].notes || "",
     currency_code: "kes",
     send_email_now: true,
-    email_subject: "Your Official Warranty Certificate - Urban Device Care",
+    email_subject: CUSTOM_DOC_PRESETS[0].subject,
   });
+
+  const [repairTickets, setRepairTickets] = useState<any[]>([]);
+  const [loadingRepairs, setLoadingRepairs] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string>("");
+  const [newCustomFieldKey, setNewCustomFieldKey] = useState<string>("");
+  const [newCustomFieldValue, setNewCustomFieldValue] = useState<string>("");
+
+  const loadRepairTickets = async () => {
+    setLoadingRepairs(true);
+    try {
+      const res = await fetch("/admin/repairs", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.repair_tickets && Array.isArray(data.repair_tickets)) {
+          setRepairTickets(data.repair_tickets);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch /admin/repairs:", e);
+    } finally {
+      setLoadingRepairs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (customDocModalOpen) {
+      loadRepairTickets();
+    }
+  }, [customDocModalOpen]);
+
+  const availableTickets = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const t of repairTickets) {
+      if (t.id) map.set(t.id, t);
+    }
+    for (const d of documents) {
+      const ticketId = (d as any).repair_ticket_id;
+      const displayId = d.display_id || "";
+      const isRepairDoc = displayId.startsWith("RT-") || displayId.startsWith("JOB-") || Boolean(ticketId);
+      const idKey = ticketId || displayId;
+      if (isRepairDoc && idKey && !map.has(idKey)) {
+        const customFields = (d as any).custom_fields || (d as any).metadata?.custom_fields || {};
+        map.set(idKey, {
+          id: idKey,
+          ticket_number: String(displayId).replace(/^(RT-|JOB-)+/i, "") || idKey,
+          customer_name: d.customer_name,
+          customer_email: d.customer_email,
+          customer_phone: d.customer_phone,
+          device: {
+            brand: customFields["Brand"] || "",
+            model_name: customFields["Device Model"] || customFields["Model"] || "Device",
+            serial_number: customFields["Serial / IMEI"] || customFields["Serial Number"] || "N/A",
+            condition: customFields["Condition"] || "Good condition",
+          },
+          accessories: customFields["Accessories"] || "None",
+          technician_name: customFields["Technician"] || "Bonifencia A.",
+          issue_description: customFields["Reported Issue"] || d.notes || "Standard Service",
+          custom_fields: customFields,
+          items: (d as any).metadata?.items || [],
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [repairTickets, documents]);
+
+  const handleSelectRepairTicket = (ticketId: string) => {
+    setSelectedTicketId(ticketId);
+    if (!ticketId) return;
+
+    const ticket = availableTickets.find((t) => t.id === ticketId || t.ticket_number === ticketId);
+    if (!ticket) return;
+
+    const brandModel = [ticket.device?.brand, ticket.device?.model_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || ticket.custom_fields?.["Device Model"] || "Apple iPhone 15 Pro Max";
+
+    const serialImei = ticket.device?.serial_number || ticket.device?.imei || ticket.custom_fields?.["Serial / IMEI"] || "N/A";
+    const technician = ticket.technician_name || ticket.custom_fields?.["Technician"] || "Bonifencia A. (Lead Certified Engineer)";
+    const accessories = ticket.accessories || ticket.custom_fields?.["Accessories"] || "None (Unit only)";
+    const condition = ticket.device?.condition || ticket.custom_fields?.["Condition"] || "Good (Normal wear)";
+    const cleanNum = String(ticket.ticket_number || ticket.id).replace(/^(RT-|JOB-)+/i, "");
+    const ticketRef = `RT-${cleanNum}`;
+
+    const customerName =
+      ticket.customer?.company_name ||
+      ticket.company_name ||
+      ticket.customer_name ||
+      (ticket.customer?.first_name ? `${ticket.customer.first_name} ${ticket.customer.last_name || ""}`.trim() : "") ||
+      "Valued Customer";
+
+    const customerEmail = ticket.customer?.email || ticket.customer_email || "";
+    const customerPhone = ticket.customer?.phone || ticket.customer_phone || "";
+    const companyName = ticket.customer?.company_name || ticket.company_name || "";
+
+    const ticketItems: Array<{ title: string; description: string; quantity: number; unit_price: number }> = [];
+
+    if (ticket.product_variants && Array.isArray(ticket.product_variants) && ticket.product_variants.length > 0) {
+      for (const pv of ticket.product_variants) {
+        const qty = Number(pv.quantity || (pv as any).pivot?.quantity || 1);
+        const unitPrice = Number(pv.unit_price ?? pv.price ?? pv.prices?.[0]?.amount ?? 0);
+        const partTitle = pv.product?.title
+          ? `${pv.product.title}${pv.title && pv.title !== "Default Variant" ? ` (${pv.title})` : ""}`
+          : pv.title || pv.product?.title || "Inventory Part";
+        ticketItems.push({
+          title: partTitle,
+          description: pv.sku ? `SKU: ${pv.sku}` : "",
+          quantity: qty,
+          unit_price: unitPrice,
+        });
+      }
+    }
+
+    if (ticket.custom_parts && Array.isArray(ticket.custom_parts) && ticket.custom_parts.length > 0) {
+      for (const cp of ticket.custom_parts) {
+        ticketItems.push({
+          title: cp.name || cp.title || "Custom Repair Part / Service",
+          description: cp.description || "",
+          quantity: Number(cp.quantity || 1),
+          unit_price: Number(cp.price || cp.unit_price || 0),
+        });
+      }
+    }
+
+    if (ticket.device?.parts_used && Array.isArray(ticket.device.parts_used)) {
+      for (const p of ticket.device.parts_used) {
+        ticketItems.push({
+          title: p.name || p.title || "Replacement Part",
+          description: p.sku ? `SKU: ${p.sku}` : "",
+          quantity: Number(p.quantity || 1),
+          unit_price: Number(p.price || 0),
+        });
+      }
+    }
+
+    if (Number(ticket.labor_estimate || 0) > 0) {
+      ticketItems.push({
+        title: "Workshop Labor & Clean-Room Installation",
+        description: "Certified hardware diagnostic and component installation",
+        quantity: 1,
+        unit_price: Number(ticket.labor_estimate),
+      });
+    }
+
+    if (ticketItems.length === 0 && ticket.items && Array.isArray(ticket.items) && ticket.items.length > 0) {
+      for (const it of ticket.items) {
+        ticketItems.push({
+          title: it.title || "Service Item",
+          description: it.description || "",
+          quantity: Number(it.quantity || 1),
+          unit_price: Number(it.unit_price || 0),
+        });
+      }
+    }
+
+    setCustomDocForm((prev) => ({
+      ...prev,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
+      company_name: companyName,
+      custom_fields: {
+        ...prev.custom_fields,
+        "Device Model": brandModel,
+        "Serial / IMEI": serialImei,
+        "Ticket Reference": ticketRef,
+        "Technician": technician,
+        "Accessories": accessories,
+        "Condition": condition,
+        "Reported Issue": ticket.issue_description || ticket.reported_issue || "Standard Service",
+      },
+      items: ticketItems.length > 0 ? ticketItems : prev.items,
+      email_subject: `${prev.title} - ${brandModel} (${ticketRef})`,
+      notes: prev.notes || `Linked to Repair Ticket ${ticketRef}. Device: ${brandModel} (S/N: ${serialImei}).`,
+    }));
+  };
+
+  const handleClearRepairLink = () => {
+    setSelectedTicketId("");
+  };
 
   const selectCustomDocPreset = (presetId: string) => {
     const preset = CUSTOM_DOC_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
-    setCustomDocForm((prev) => ({
-      ...prev,
-      preset_id: preset.id,
-      title: preset.title,
-      email_subject: preset.subject,
-      body_text: preset.body_text,
-      items: preset.items.map((it) => ({ ...it })),
-    }));
+    setCustomDocForm((prev) => {
+      const updatedFields = {
+        ...(preset.custom_fields || {}),
+        ...(selectedTicketId ? {
+          "Device Model": prev.custom_fields?.["Device Model"] || preset.custom_fields?.["Device Model"],
+          "Serial / IMEI": prev.custom_fields?.["Serial / IMEI"] || preset.custom_fields?.["Serial / IMEI"],
+          "Ticket Reference": prev.custom_fields?.["Ticket Reference"] || preset.custom_fields?.["Ticket Reference"],
+          "Technician": prev.custom_fields?.["Technician"] || preset.custom_fields?.["Technician"],
+          "Accessories": prev.custom_fields?.["Accessories"] || preset.custom_fields?.["Accessories"],
+          "Condition": prev.custom_fields?.["Condition"] || preset.custom_fields?.["Condition"],
+          "Reported Issue": prev.custom_fields?.["Reported Issue"] || preset.custom_fields?.["Reported Issue"],
+        } : {}),
+      };
+      return {
+        ...prev,
+        preset_id: preset.id,
+        title: preset.title,
+        email_subject: prev.custom_fields?.["Device Model"]
+          ? `${preset.title} - ${prev.custom_fields["Device Model"]}`
+          : preset.subject,
+        body_text: preset.body_text,
+        items: preset.items.map((it) => ({ ...it })),
+        custom_fields: updatedFields,
+        notes: preset.notes != null ? preset.notes : prev.notes,
+      };
+    });
   };
 
   // Send Notification Form
@@ -475,6 +750,8 @@ export const DocumentsPage = () => {
             phone: customDocForm.customer_phone,
           },
           body_text: customDocForm.body_text,
+          notes: customDocForm.notes,
+          custom_fields: customDocForm.custom_fields,
           items: customDocForm.items.filter((it) => it.title.trim() !== ""),
           currency_code: customDocForm.currency_code,
           send_email_now: customDocForm.send_email_now,
@@ -3031,6 +3308,83 @@ export const DocumentsPage = () => {
                 Create a customized document (e.g. Warranty Certificate, Inspection Report, Service Clearance) and directly dispatch via email.
               </Text>
 
+              {/* Repair Ticket Selector / Linker */}
+              <div className="p-3.5 border border-ui-border-base rounded-lg bg-ui-bg-subtle flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DocumentText className="w-4 h-4 text-ui-fg-interactive" />
+                    <Label className="text-xs font-semibold text-ui-fg-base">
+                      Link / Load from Repair Ticket (Optional)
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {selectedTicketId && (
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        className="text-[11px] h-6 px-2 text-ui-fg-muted hover:text-red-600"
+                        onClick={handleClearRepairLink}
+                      >
+                        Clear Ticket Link
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      className="text-[11px] h-6 px-2"
+                      onClick={loadRepairTickets}
+                      isLoading={loadingRepairs}
+                    >
+                      <ArrowPath className="w-3 h-3 mr-1" /> Refresh Tickets
+                    </Button>
+                  </div>
+                </div>
+
+                <Text className="text-[11px] text-ui-fg-subtle">
+                  Automatically autofills customer details, device specifications (model, serial/IMEI, accessories), technician notes, and services from active repairs.
+                </Text>
+
+                <Select
+                  value={selectedTicketId || undefined}
+                  onValueChange={handleSelectRepairTicket}
+                >
+                  <Select.Trigger size="small" className="w-full bg-ui-bg-base">
+                    <Select.Value placeholder="-- Select a Repair Ticket to autofill fields --" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    {availableTickets.map((t) => {
+                      const brandModel = [t.device?.brand, t.device?.model_name]
+                        .filter(Boolean)
+                        .join(" ")
+                        .trim() || t.custom_fields?.["Device Model"] || "Device";
+                      const cleanNum = String(t.ticket_number || t.id).replace(/^(RT-|JOB-)+/i, "");
+                      const displayRef = `RT-${cleanNum}`;
+                      const custName =
+                        t.customer?.company_name ||
+                        t.company_name ||
+                        t.customer_name ||
+                        (t.customer?.first_name ? `${t.customer.first_name} ${t.customer.last_name || ""}`.trim() : "") ||
+                        "Customer";
+                      return (
+                        <Select.Item key={t.id} value={t.id}>
+                          {displayRef} — {custName} ({brandModel})
+                        </Select.Item>
+                      );
+                    })}
+                  </Select.Content>
+                </Select>
+
+                {selectedTicketId && (
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-ui-bg-interactive-subtle border border-ui-border-interactive text-[11px] text-ui-fg-interactive font-medium">
+                    <span>✓ Loaded details from ticket</span>
+                    <span className="font-semibold underline">
+                      {customDocForm.custom_fields?.["Ticket Reference"] || selectedTicketId}
+                    </span>
+                    <span>• {customDocForm.custom_fields?.["Device Model"]}</span>
+                  </div>
+                )}
+              </div>
+
               {/* Optional Preset Templates Selector */}
               <div className="flex flex-col gap-2">
                 <Label className="text-xs font-semibold">Select a Document Preset (Optional)</Label>
@@ -3289,6 +3643,113 @@ export const DocumentsPage = () => {
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* Equipment & Record Specifications (Custom Fields) */}
+              <div className="flex flex-col gap-2 p-3.5 border border-ui-border-base rounded-lg bg-ui-bg-subtle">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-xs font-semibold text-ui-fg-base">
+                      Equipment & Record Specifications (Custom Fields)
+                    </Label>
+                    <Text className="text-[11px] text-ui-fg-subtle">
+                      Key-value metadata printed prominently in the client & equipment specifications summary box.
+                    </Text>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-1">
+                  {Object.entries(customDocForm.custom_fields || {}).map(([key, value]) => (
+                    <div key={key} className="grid grid-cols-12 gap-2 items-center bg-ui-bg-base p-2 rounded border border-ui-border-base">
+                      <div className="col-span-4">
+                        <Label className="text-[11px] text-ui-fg-subtle mb-0.5">{key}</Label>
+                      </div>
+                      <div className="col-span-7">
+                        <Input
+                          size="small"
+                          value={value}
+                          onChange={(e) => {
+                            setCustomDocForm({
+                              ...customDocForm,
+                              custom_fields: {
+                                ...(customDocForm.custom_fields || {}),
+                                [key]: e.target.value,
+                              },
+                            });
+                          }}
+                          placeholder={`Enter ${key}...`}
+                        />
+                      </div>
+                      <div className="col-span-1 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = { ...(customDocForm.custom_fields || {}) };
+                            delete updated[key];
+                            setCustomDocForm({ ...customDocForm, custom_fields: updated });
+                          }}
+                          className="text-ui-fg-muted hover:text-red-500 p-1 rounded hover:bg-ui-bg-subtle transition-colors cursor-pointer"
+                          title="Delete Field"
+                        >
+                          <Trash className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add New Custom Field Row */}
+                  <div className="grid grid-cols-12 gap-2 items-center pt-1">
+                    <div className="col-span-4">
+                      <Input
+                        size="small"
+                        placeholder="New Field Name (e.g. Battery Health)"
+                        value={newCustomFieldKey}
+                        onChange={(e) => setNewCustomFieldKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-6">
+                      <Input
+                        size="small"
+                        placeholder="Field Value (e.g. 98% Peak Performance)"
+                        value={newCustomFieldValue}
+                        onChange={(e) => setNewCustomFieldValue(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="small"
+                        className="w-full text-xs"
+                        onClick={() => {
+                          if (!newCustomFieldKey.trim()) return;
+                          setCustomDocForm({
+                            ...customDocForm,
+                            custom_fields: {
+                              ...(customDocForm.custom_fields || {}),
+                              [newCustomFieldKey.trim()]: newCustomFieldValue.trim(),
+                            },
+                          });
+                          setNewCustomFieldKey("");
+                          setNewCustomFieldValue("");
+                        }}
+                      >
+                        <Plus className="w-3 h-3 mr-1" /> Add Field
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Terms & Conditions / Special Notes */}
+              <div>
+                <Label className="text-xs font-semibold">Terms & Conditions / Special Notes (Printed at bottom)</Label>
+                <Textarea
+                  value={customDocForm.notes || ""}
+                  onChange={(e) => setCustomDocForm({ ...customDocForm, notes: e.target.value })}
+                  placeholder="Official warranty terms, legal compliance notes, or inspection disclaimers..."
+                  rows={3}
+                />
               </div>
 
               <div>

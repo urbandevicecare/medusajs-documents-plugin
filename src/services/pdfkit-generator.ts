@@ -217,7 +217,7 @@ export class PDFKitGenerator {
     // 1. Logo or Brand Name on Top-Left
     if (logoBuffer) {
       try {
-        doc.image(logoBuffer, leftX, topY, { fit: [140, 50] });
+        doc.image(logoBuffer, leftX, topY, { fit: [155, 54] });
       } catch (e) {
         doc.fontSize(16).font("Helvetica-Bold").fillColor("#111827").text(settings?.company_name || "URBAN DEVICE CARE LTD", leftX, topY);
       }
@@ -226,7 +226,7 @@ export class PDFKitGenerator {
     }
 
     // 2. Company Details below Logo
-    let detailsY = topY + 54;
+    let detailsY = topY + 58;
     doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#111827").text((settings?.company_name || "Urban Device Care Ltd").toUpperCase(), leftX, detailsY);
     detailsY += 12;
 
@@ -624,17 +624,15 @@ export class PDFKitGenerator {
         doc.rect(45, currentY, 505, 1.5).fill("#334155");
         currentY += 4;
         doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(8.5);
-        doc.text("Task / Part Description", 48, currentY, { width: 250 });
-        doc.text("Qty", 325, currentY, { width: 35, align: "center" });
-        doc.text("Unit Cost", 375, currentY, { width: 75, align: "right" });
-        doc.text("Total", 460, currentY, { width: 85, align: "right" });
+        doc.text("Task / Service / Part Description", 48, currentY, { width: 440 });
+        doc.text("Qty", 495, currentY, { width: 50, align: "center" });
         currentY += 14;
         doc.rect(45, currentY, 505, 0.5).fill("#94a3b8");
         currentY += 6;
 
         const items = data.items || [];
         if (items.length === 0) {
-          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8.5).text("No itemized services listed", 48, currentY, { width: 250 });
+          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8.5).text("No itemized intake tasks listed", 48, currentY, { width: 440 });
           currentY += 20;
           doc.rect(45, currentY - 3, 505, 0.5).fill("#f1f5f9");
         } else {
@@ -644,28 +642,19 @@ export class PDFKitGenerator {
               currentY = 50;
             }
 
-            const unitP = Number(item?.unit_price || 0);
-            const totalP = Number(item?.total != null ? item.total : unitP * Number(item?.quantity || 1));
-            const itemTitle = item?.title ? String(item.title) : "Service Item";
+            const itemTitle = item?.title ? String(item.title) : "Intake Item";
 
             doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5);
-            doc.text(itemTitle, 48, currentY, { width: 250 });
-            doc.text(Number(item?.quantity || 1).toString(), 325, currentY, { width: 35, align: "center" });
-            doc.text(`KSh ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unitP)}`, 375, currentY, { width: 75, align: "right" });
-            doc.text(`KSh ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP)}`, 460, currentY, { width: 85, align: "right" });
-            const titleH = doc.heightOfString(itemTitle, { width: 250 });
+            doc.text(itemTitle, 48, currentY, { width: 440 });
+            doc.text(Number(item?.quantity || 1).toString(), 495, currentY, { width: 50, align: "center" });
+            const titleH = doc.heightOfString(itemTitle, { width: 440 });
             const rowH = Math.max(16, titleH + 4);
             currentY += rowH;
             doc.rect(45, currentY - 3, 505, 0.5).fill("#f1f5f9");
           }
         }
 
-        // Total Row
-        currentY += 6;
-        doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f172a");
-        doc.text("Est. Total:", 375, currentY, { width: 75, align: "right" });
-        doc.text(`KSh ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(data.total || 0))}`, 460, currentY, { width: 85, align: "right" });
-        currentY += 28;
+        currentY += 10;
 
         // SECTION 4: DUAL SIGNATURES
         if (currentY > doc.page.height - 120) { doc.addPage(); currentY = 50; }
@@ -848,30 +837,15 @@ export class PDFKitGenerator {
           ? `${data.customer.company_name} (Attn: ${data.customer.name})`
           : data.customer.name;
 
-        const leftX = 45;
-        const topY = 40;
+        const nextY = PDFKitGenerator.drawConsistentHeader(doc, logoBuffer, settings, {
+          title: "IT ASSET HANDOVER",
+          subtitle: "CUSTODY RELEASE &",
+          docNumber: `Reference: #${data.display_id}`,
+          dateLabel: "Handover Date",
+          dateValue: PDFKitGenerator.formatDate(data.date),
+        });
 
-        if (logoBuffer) {
-          try { doc.image(logoBuffer, leftX, topY, { fit: [140, 48] }); } catch (e) {}
-        } else {
-          doc.fontSize(16).font("Helvetica-Bold").fillColor("#111827").text(settings?.company_name || "URBAN DEVICE CARE LTD", leftX, topY);
-        }
-
-        const rightX = 320;
-        let rY = topY;
-        doc.fontSize(8).font("Helvetica-Bold").fillColor("#0f172a").text(settings?.company_name || "Urban Device Care Ltd", rightX, rY, { width: 230, align: "right" });
-        rY += 10;
-        doc.font("Helvetica").fontSize(7.5).fillColor("#64748b");
-        const address = settings?.pdf_address || "Bekim House, Westlands Crossway Road, Nairobi 00800, Kenya";
-        doc.text(address, rightX, rY, { width: 230, align: "right" });
-        rY += doc.heightOfString(address, { width: 230 }) + 2;
-        doc.text(`Tel: ${settings?.pdf_phone || "0729436660 / 0794700241"}`, rightX, rY, { width: 230, align: "right" });
-        rY += 9;
-        doc.text(`Email: ${settings?.pdf_email || "info@urbandevicecare.co.uk"}`, rightX, rY, { width: 230, align: "right" });
-        rY += 9;
-        doc.font("Helvetica-Bold").text(`KRA PIN: ${settings?.kra_pin || "P052534849N"}`, rightX, rY, { width: 230, align: "right" });
-
-        let currentY = Math.max(topY + 54, rY + 14);
+        let currentY = nextY;
         doc.rect(45, currentY, 505, 1.5).fill("#0f172a");
         currentY += 12;
 
@@ -980,6 +954,234 @@ export class PDFKitGenerator {
     });
   }
 
+  // ---------------------------------------------------------------------------------
+  // TEMPLATE: CERTIFICATES & CUSTOM DOCUMENTS (WARRANTY, COMPLETION, DESTRUCTION, ETC.)
+  // ---------------------------------------------------------------------------------
+  private static renderCertificateDocument(data: DocumentData, logoBuffer: Buffer | null): Promise<Buffer> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const doc = new PDFDocument({
+          margins: { top: 35, bottom: 25, left: 45, right: 45 },
+          size: "A4",
+        });
+        const buffers: Buffer[] = [];
+        doc.on("data", (chunk) => buffers.push(chunk));
+        doc.on("end", () => resolve(Buffer.concat(buffers)));
+
+        const settings = PDFKitGenerator.mapDataToSettings(data);
+        const customerName = data.customer.company_name
+          ? `${data.customer.company_name} (Attn: ${data.customer.name})`
+          : data.customer.name;
+
+        // Top Accent Stripe
+        doc.rect(0, 0, doc.page.width, 4).fill("#0f172a");
+
+        const docTitle = (data.title || "WARRANTY CERTIFICATE").toUpperCase();
+        const hasCharges = Number(data.total || 0) > 0;
+
+        const nextY = PDFKitGenerator.drawConsistentHeader(doc, logoBuffer, settings, {
+          title: docTitle,
+          docNumber: `#${data.display_id}`,
+          dateLabel: "Date",
+          dateValue: PDFKitGenerator.formatDate(data.date),
+          badgeText: hasCharges ? (data.payment_status === "paid" ? "PAID" : "AMOUNT DUE") : "OFFICIAL CERTIFICATE",
+          badgeColor: hasCharges ? (data.payment_status === "paid" ? "#16a34a" : "#dc2626") : "#16a34a",
+          amountLabel: hasCharges ? (data.payment_status === "paid" ? "Amount Paid" : "Balance Due") : undefined,
+          amountValue: hasCharges ? PDFKitGenerator.formatCurrency(data.total, data.currency_code) : undefined,
+          amountColor: "#0f172a",
+        });
+
+        let currentY = nextY;
+
+        // Divider
+        doc.strokeColor("#cbd5e1").lineWidth(0.75).moveTo(45, currentY).lineTo(550, currentY).stroke();
+        currentY += 12;
+
+        // Two-column metadata block: Recipient (Left) & Specifications (Right)
+        const startMetaY = currentY;
+        const leftColWidth = 235;
+        const rightColLeft = 295;
+        const rightColWidth = 255;
+
+        // Left Column: Recipient
+        doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#475569").text("CERTIFICATE ISSUED TO / BILLED TO:", 45, startMetaY);
+        let leftY = startMetaY + 13;
+        doc.fontSize(10).font("Helvetica-Bold").fillColor("#0f172a").text(customerName || "Valued Client", 45, leftY, { width: leftColWidth });
+        leftY += doc.heightOfString(customerName || "Valued Client", { width: leftColWidth }) + 3;
+
+        doc.fontSize(8).font("Helvetica").fillColor("#475569");
+        if (data.customer?.company_name && data.customer.name && data.customer.name !== data.customer.company_name) {
+          doc.text(`Contact: ${data.customer.name}`, 45, leftY, { width: leftColWidth });
+          leftY += 11;
+        }
+        if (data.customer?.address) {
+          doc.text(data.customer.address, 45, leftY, { width: leftColWidth });
+          leftY += doc.heightOfString(data.customer.address, { width: leftColWidth }) + 2;
+        }
+        const clientContacts = [data.customer?.phone, data.customer?.email].filter(Boolean).join("  •  ");
+        if (clientContacts) {
+          doc.text(clientContacts, 45, leftY, { width: leftColWidth });
+          leftY += 12;
+        }
+
+        // Right Column: Specifications / Asset Details
+        let rightY = startMetaY;
+        const customFields = data.custom_fields || {};
+        const fieldEntries = Object.entries(customFields);
+
+        if (fieldEntries.length > 0) {
+          doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#475569").text("EQUIPMENT & ASSET SPECIFICATIONS:", rightColLeft, rightY);
+          rightY += 13;
+
+          const boxTop = rightY;
+          let totalFieldHeight = 8;
+          for (const [k, v] of fieldEntries) {
+            totalFieldHeight += 12;
+          }
+          const boxH = Math.max(totalFieldHeight, 46);
+
+          doc.rect(rightColLeft, boxTop, rightColWidth, boxH).fill("#f8fafc");
+          doc.rect(rightColLeft, boxTop, 3, boxH).fill("#0f172a");
+          doc.strokeColor("#e2e8f0").lineWidth(0.5).rect(rightColLeft, boxTop, rightColWidth, boxH).stroke();
+
+          let fY = boxTop + 6;
+          for (const [k, v] of fieldEntries) {
+            doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#334155").text(`${k}: `, rightColLeft + 8, fY, { continued: true });
+            doc.font("Helvetica").fillColor("#0f172a").text(String(v), { width: rightColWidth - 16, ellipsis: true });
+            fY += 12;
+          }
+          rightY = boxTop + boxH;
+        }
+
+        currentY = Math.max(leftY, rightY) + 12;
+
+        // Certificate Statement / Body Text
+        if (data.body_text && data.body_text.trim().length > 0) {
+          const bodyW = 495;
+          const bodyText = data.body_text.trim();
+          doc.fontSize(8.5).font("Helvetica");
+          const textHeight = doc.heightOfString(bodyText, { width: bodyW, lineGap: 3 });
+          const cardHeight = textHeight + 16;
+
+          doc.rect(45, currentY, 505, cardHeight).fill("#f8fafc");
+          doc.rect(45, currentY, 3.5, cardHeight).fill("#2563eb");
+          doc.strokeColor("#e2e8f0").lineWidth(0.5).rect(45, currentY, 505, cardHeight).stroke();
+
+          doc.fontSize(8.5).font("Helvetica").fillColor("#1e293b").text(bodyText, 55, currentY + 8, {
+            width: bodyW,
+            lineGap: 3,
+          });
+
+          currentY += cardHeight + 14;
+        }
+
+        // Line Items Table
+        const certItems = data.items || [];
+        if (certItems.length > 0) {
+          doc.rect(45, currentY, 505, 20).fill("#0f172a");
+          doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
+          doc.text("ITEM / SPECIFICATION & SCOPE", 55, currentY + 6, { width: hasCharges ? 275 : 400 });
+          doc.text("QTY", hasCharges ? 335 : 460, currentY + 6, { width: 35, align: "center" });
+          if (hasCharges) {
+            doc.text("RATE", 380, currentY + 6, { width: 75, align: "right" });
+            doc.text("AMOUNT", 465, currentY + 6, { width: 75, align: "right" });
+          }
+
+          currentY += 20;
+
+          let isAlt = false;
+          for (const item of certItems) {
+            if (currentY > 680) {
+              doc.addPage();
+              currentY = 40;
+            }
+
+            const itemTitle = item.title || "Service Specification";
+            const itemDesc = item.description || "";
+            doc.font("Helvetica").fontSize(7.5);
+            const descHeight = itemDesc ? doc.heightOfString(itemDesc, { width: hasCharges ? 275 : 400 }) : 0;
+            const rowH = Math.max(22, 12 + descHeight + 6);
+
+            if (isAlt) {
+              doc.rect(45, currentY, 505, rowH).fill("#f8fafc");
+            }
+            doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(45, currentY + rowH).lineTo(550, currentY + rowH).stroke();
+
+            doc.font("Helvetica-Bold").fontSize(8).fillColor("#0f172a").text(itemTitle, 55, currentY + 4, { width: hasCharges ? 275 : 400 });
+            if (itemDesc) {
+              doc.font("Helvetica").fontSize(7.5).fillColor("#64748b").text(itemDesc, 55, currentY + 15, { width: hasCharges ? 275 : 400 });
+            }
+
+            doc.font("Helvetica").fontSize(8).fillColor("#0f172a").text(String(item.quantity || 1), hasCharges ? 335 : 460, currentY + 5, { width: 35, align: "center" });
+
+            if (hasCharges) {
+              doc.text(PDFKitGenerator.formatCurrency(item.unit_price, data.currency_code), 380, currentY + 5, { width: 75, align: "right" });
+              const lineTotal = item.total != null ? item.total : (Number(item.quantity || 1) * Number(item.unit_price || 0));
+              doc.font("Helvetica-Bold").text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 465, currentY + 5, { width: 75, align: "right" });
+            }
+
+            currentY += rowH;
+            isAlt = !isAlt;
+          }
+
+          if (hasCharges) {
+            currentY += 8;
+            const sumLeft = 360;
+            doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f172a");
+            doc.text("TOTAL:", sumLeft, currentY, { width: 95, align: "right" });
+            doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 465, currentY, { width: 75, align: "right" });
+            currentY += 16;
+          } else {
+            currentY += 6;
+          }
+        }
+
+        // Notes & Terms
+        if (data.notes && data.notes.trim().length > 0) {
+          if (currentY > 660) {
+            doc.addPage();
+            currentY = 40;
+          }
+          currentY += 4;
+          doc.fontSize(8).font("Helvetica-Bold").fillColor("#475569").text("TERMS & CONDITIONS / IMPORTANT NOTES:", 45, currentY);
+          currentY += 10;
+          doc.fontSize(7.5).font("Helvetica").fillColor("#64748b").text(data.notes.trim(), 45, currentY, { width: 505, lineGap: 2 });
+          currentY += doc.heightOfString(data.notes.trim(), { width: 505, lineGap: 2 }) + 10;
+        }
+
+        // Signatures Block
+        const minSigSpace = 65;
+        if (currentY + minSigSpace > doc.page.height - 45) {
+          doc.addPage();
+          currentY = 50;
+        } else {
+          currentY = Math.max(currentY + 12, doc.page.height - 110);
+        }
+
+        doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(45, currentY).lineTo(235, currentY).stroke();
+        doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(360, currentY).lineTo(550, currentY).stroke();
+
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#0f172a");
+        doc.text(settings?.company_name ? `${settings.company_name} — Authorized Signatory` : "Urban Device Care Ltd — Authorized Signatory", 45, currentY + 4);
+        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Certified Hardware Specialist  •  Official Seal", 45, currentY + 14);
+
+        doc.font("Helvetica-Bold").fontSize(8).fillColor("#0f172a").text("Customer / Authorized Representative", 360, currentY + 4);
+        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Signature & Acceptance Date", 360, currentY + 14);
+
+        // Bottom Page Footer
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 24;
+        doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
+        doc.text(`${settings?.company_name || "Urban Device Care Ltd"}  •  Official Compliance & Service Documentation`, 45, footerY, { lineBreak: false });
+        doc.text("Page 1 of 1", 500, footerY, { align: "right", lineBreak: false });
+
+        doc.end();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
   // -------------------------------------------------------------
   // TEMPLATE 1: MODERN
   // -------------------------------------------------------------
@@ -1007,7 +1209,7 @@ export class PDFKitGenerator {
 
         if (logoBuffer) {
           try {
-            doc.image(logoBuffer, 40, headerY - 5, { fit: [140, 45] });
+            doc.image(logoBuffer, 40, headerY - 5, { fit: [155, 52] });
           } catch (_) {
             doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(20).text(compName, 40, headerY);
           }
@@ -1588,6 +1790,13 @@ export class PDFKitGenerator {
 
     if (normalizedData.type === "handover") {
       return await this.renderHandoverReportDocument(normalizedData, logoBuffer);
+    }
+
+    if (
+      normalizedData.type === "custom" ||
+      /certificate|destruction|warranty|completion|clearance|trade[-_ ]?in/i.test(normalizedData.title || "")
+    ) {
+      return await this.renderCertificateDocument(normalizedData, logoBuffer);
     }
 
     if (

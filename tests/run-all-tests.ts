@@ -13,3 +13,4 @@ import "./store-order-invoicing.test";
 import "./release-1.1.27.test";
 import "./release-1.1.30.test";
 import "./release-1.1.31.test";
+import "./release-1.1.32.test";
