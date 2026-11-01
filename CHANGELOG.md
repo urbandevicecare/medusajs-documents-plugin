@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.32] - 2026-11-01
+## [1.1.33] - 2026-11-01
 
 ### Certificate Document Consistent Header, Rich Editable Fillers, and Repair Ticket Autofill
 - **Consistent Certificate Header**: Standardized the header across all certificate documents (Warranty Certificate, Service Completion Certificate, Certificate of Destruction, Diagnostic Inspection Report, etc.) to match invoice and quote templates (enlarged company logo on top left `[155, 54]`, company contact details positioned directly under the logo, document title on top right with date and document reference `#...`).
