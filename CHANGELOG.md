@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.25] - 2026-11-01
+
+### Receipt Companion Invoicing & Settings Tag Customization Hardening
+- **Receipt Companion Invoicing Fix**: Fixed receipt companion invoice creation in Zoho Books to use the store invoice prefix (`ST-` or configured prefix) instead of `RCPT-`, preventing ghost invoice creation in Zoho.
+- **Repair Priority over Store Order**: When both `repair_ticket_id` and `order_id` are present on a document or repair checkout payment, prioritize repair workshop identification (`RT-` prefix and repair ticket lookup) so repair tickets are not incorrectly classified as store orders.
+- **Admin Settings Tag UI**: Exposed the Store Order Invoice Prefix / Tag setting directly in General Branding & Details in addition to Zoho Customizations, ensuring administrators can customize the store prefix even if Zoho Books is toggled off.
+- **Universal Prefix Regex**: Generalized prefix stripping across `document-grouper`, `pdfkit-generator`, and `zoho-books` to support arbitrary custom tags (e.g. `SHOP-`, `ORD-`, `STORE-ORD-`) without losing ticket or order numbers.
+- **Estimate Matching Precision**: Removed blind fallback to `estimates[0]` in `getEstimateByNumber`, ensuring only exact matches by number or reference are returned.
+- **Strict Zoho Document Type Validation**: Restricted `POST /admin/documents/:id/sync-zoho` to strictly accept only `invoice` and `estimate` documents, returning HTTP 400 for receipts and packing slips.
+
 ## [1.1.24] - 2026-11-01
 
 ### Configurable Store Invoice Prefix & Zoho Idempotent Invoicing

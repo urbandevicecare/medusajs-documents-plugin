@@ -18,8 +18,8 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
     });
   }
 
-  // Reject non-Zoho document types (e.g. job_card, packing_slip, custom)
-  if (record.type === "job_card" || record.type === "packing_slip" || record.type === "custom") {
+  // Reject non-Zoho document types (only invoice and estimate documents are supported)
+  if (record.type !== "invoice" && record.type !== "estimate") {
     return res.status(400).json({
       message: `Cannot push ${record.type} documents to Zoho Books. Only invoice and estimate documents are supported.`,
       success: false,

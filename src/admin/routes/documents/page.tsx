@@ -1820,6 +1820,18 @@ export const DocumentsPage = () => {
                 />
               </div>
               <div>
+                <Label className="text-xs font-medium">Store Order Invoice Prefix / Tag</Label>
+                <Input
+                  value={settings.store_invoice_prefix || ""}
+                  onChange={(e) => updateSettingField("store_invoice_prefix", e.target.value)}
+                  placeholder="ST-"
+                  size="small"
+                />
+                <Text className="text-[11px] text-ui-fg-muted mt-1">
+                  Prefix for store order invoices (e.g. ST-1001) separated from repair tickets (RT-).
+                </Text>
+              </div>
+              <div>
                 <Label className="text-xs font-medium">Storefront URL</Label>
                 <Input
                   value={settings.storefront_url}

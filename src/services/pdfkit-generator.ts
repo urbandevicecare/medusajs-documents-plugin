@@ -152,7 +152,7 @@ export class PDFKitGenerator {
   }
 
   static mapDataToTicket(data: DocumentData): any {
-    const cleanTicketNumber = String(data.display_id || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+    const cleanTicketNumber = String(data.display_id || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
     return {
       ticket_number: cleanTicketNumber || data.display_id,
       created_at: data.date || new Date().toISOString().split("T")[0],

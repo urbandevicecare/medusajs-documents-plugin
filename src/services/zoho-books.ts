@@ -221,9 +221,9 @@ export class ZohoBooksService {
 
   async getInvoiceByNumber(invoiceNumber: string): Promise<{ invoice_id: string; invoice_number: string } | null> {
     try {
-      const cleanNum = String(invoiceNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+      const cleanNum = String(invoiceNumber || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
       const isRepair = /^(JOB-|RT-)/i.test(invoiceNumber);
-      const hasPrefix = /^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)/i.test(invoiceNumber);
+      const hasPrefix = /^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)/i.test(invoiceNumber);
       const candidates = Array.from(
         new Set(
           [
@@ -240,7 +240,7 @@ export class ZohoBooksService {
             res.invoices.find((inv: any) => String(inv.invoice_number).trim().toLowerCase() === String(num).trim().toLowerCase()) ||
             res.invoices.find((inv: any) => String(inv.reference_number || "").trim().toLowerCase() === String(num).trim().toLowerCase()) ||
             (!hasPrefix && res.invoices.find((inv: any) => {
-              const cleanInv = String(inv.invoice_number || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+              const cleanInv = String(inv.invoice_number || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
               return cleanInv.trim().toLowerCase() === cleanNum.trim().toLowerCase();
             }));
           if (match) {
@@ -258,7 +258,7 @@ export class ZohoBooksService {
             refRes.invoices.find((inv: any) => String(inv.invoice_number).trim().toLowerCase() === String(num).trim().toLowerCase()) ||
             refRes.invoices.find((inv: any) => String(inv.reference_number || "").trim().toLowerCase() === String(num).trim().toLowerCase()) ||
             (!hasPrefix && refRes.invoices.find((inv: any) => {
-              const cleanInv = String(inv.reference_number || inv.invoice_number || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+              const cleanInv = String(inv.reference_number || inv.invoice_number || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
               return cleanInv.trim().toLowerCase() === cleanNum.trim().toLowerCase();
             }));
           if (match) {
@@ -338,15 +338,16 @@ export class ZohoBooksService {
 
   async getEstimateByNumber(estimateNumber: string): Promise<{ estimate_id: string; estimate_number: string } | null> {
     try {
-      const cleanNum = String(estimateNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+      const cleanNum = String(estimateNumber || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
       const isRepair = /^(JOB-|RT-|EST-)/i.test(estimateNumber);
+      const hasPrefix = /^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)/i.test(estimateNumber);
       const candidates = Array.from(
         new Set(
           [
             estimateNumber,
             isRepair ? `RT-${cleanNum}` : null,
             isRepair ? `EST-${cleanNum}` : null,
-            cleanNum,
+            !hasPrefix ? cleanNum : null,
           ].filter(Boolean) as string[]
         )
       );
@@ -356,20 +357,34 @@ export class ZohoBooksService {
           const match =
             res.estimates.find((est: any) => String(est.estimate_number).trim().toLowerCase() === String(num).trim().toLowerCase()) ||
             res.estimates.find((est: any) => String(est.reference_number || "").trim().toLowerCase() === String(num).trim().toLowerCase()) ||
-            res.estimates[0];
-          return {
-            estimate_id: match.estimate_id,
-            estimate_number: match.estimate_number,
-          };
+            (!hasPrefix && res.estimates.find((est: any) => {
+              const cleanEst = String(est.estimate_number || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
+              return cleanEst.trim().toLowerCase() === cleanNum.trim().toLowerCase();
+            }));
+          if (match) {
+            return {
+              estimate_id: match.estimate_id,
+              estimate_number: match.estimate_number,
+            };
+          }
         }
       }
       for (const num of candidates) {
         const refRes = await this.request("GET", `/estimates?reference_number=${encodeURIComponent(num)}`);
         if (refRes.estimates && refRes.estimates.length > 0) {
-          return {
-            estimate_id: refRes.estimates[0].estimate_id,
-            estimate_number: refRes.estimates[0].estimate_number,
-          };
+          const match =
+            refRes.estimates.find((est: any) => String(est.estimate_number).trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            refRes.estimates.find((est: any) => String(est.reference_number || "").trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            (!hasPrefix && refRes.estimates.find((est: any) => {
+              const cleanEst = String(est.reference_number || est.estimate_number || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
+              return cleanEst.trim().toLowerCase() === cleanNum.trim().toLowerCase();
+            }));
+          if (match) {
+            return {
+              estimate_id: match.estimate_id,
+              estimate_number: match.estimate_number,
+            };
+          }
         }
       }
       return null;
