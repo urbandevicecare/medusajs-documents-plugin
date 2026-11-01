@@ -164,7 +164,7 @@ export const DocumentsPage = () => {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("invoice");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [zohoLiveDocs, setZohoLiveDocs] = useState<any[]>([]);
   const [loadingZoho, setLoadingZoho] = useState(false);
@@ -853,8 +853,8 @@ export const DocumentsPage = () => {
                   <Select.Value placeholder="Document Type" />
                 </Select.Trigger>
                 <Select.Content>
-                  <Select.Item value="all">All Types (Default)</Select.Item>
-                  <Select.Item value="invoice">Invoices</Select.Item>
+                  <Select.Item value="invoice">Invoices (Default)</Select.Item>
+                  <Select.Item value="all">All Types</Select.Item>
                   <Select.Item value="receipt">Receipts</Select.Item>
                   <Select.Item value="estimate">Estimates / Quotes</Select.Item>
                   <Select.Item value="job_card">Job Cards</Select.Item>

@@ -27,6 +27,7 @@ export interface GenerateDocumentInput {
   currency_code?: string;
   order_id?: string;
   repair_ticket_id?: string;
+  zoho_document_id?: string;
   payment_status?: string;
   payment_link?: string;
   notes?: string;
@@ -373,8 +374,9 @@ export class DocumentModuleService extends MedusaService({
       input.type = "estimate";
     }
 
+    let repairTicket: any = null;
     // 0. Auto-hydrate repair ticket data if needed
-    if (input.repair_ticket_id && (!input.customer || !input.items || input.items.length === 0)) {
+    if (input.repair_ticket_id) {
       try {
         const query = container?.resolve?.(ContainerRegistrationKeys.QUERY);
         if (query) {
@@ -390,6 +392,7 @@ export class DocumentModuleService extends MedusaService({
             filters: { id: input.repair_ticket_id },
           });
           if (tickets && tickets.length > 0) {
+            repairTicket = tickets[0];
             const ticket = tickets[0];
             const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-)+/i, "");
             input.display_id = input.display_id || (input.type === "job_card" ? `JOB-${cleanTicketNumber}` : `RT-${cleanTicketNumber}`);
@@ -584,12 +587,17 @@ export class DocumentModuleService extends MedusaService({
           logger
         );
 
-        // 1. Sync Contact in Zoho
-        const contactId = await zoho.syncContact({
-          first_name: input.customer.name,
-          email: input.customer.email,
-          phone: input.customer.phone,
-        });
+        let contactId: string | null = null;
+        const ensureContactId = async (): Promise<string> => {
+          if (!contactId && input.customer) {
+            contactId = await zoho.syncContact({
+              first_name: input.customer.name,
+              email: input.customer.email,
+              phone: input.customer.phone,
+            });
+          }
+          return contactId || "";
+        };
 
         // 2. Prepare Zoho Notes & Terms (including payment link if unpaid)
         let zohoNotes = input.notes || settings.zoho_invoice_notes || "Thank you for your business.";
@@ -614,8 +622,8 @@ export class DocumentModuleService extends MedusaService({
         }
 
         if (input.type === "invoice") {
-          let targetInvoiceId: string | null = null;
-          if (isRepairTicket) {
+          let targetInvoiceId: string | null = input.zoho_document_id || (repairTicket?.metadata as any)?.zoho_invoice_id || null;
+          if (!targetInvoiceId && isRepairTicket) {
             const existingDocs = await this.listDocumentRecords({
               repair_ticket_id: input.repair_ticket_id,
               type: "invoice",
@@ -624,7 +632,7 @@ export class DocumentModuleService extends MedusaService({
             if (inv) {
               targetInvoiceId = inv.zoho_document_id;
             }
-          } else if (isStoreOrder) {
+          } else if (!targetInvoiceId && isStoreOrder) {
             const existingDocs = await this.listDocumentRecords({
               order_id: input.order_id,
               type: "invoice",
@@ -649,7 +657,8 @@ export class DocumentModuleService extends MedusaService({
           }
 
           if (!targetInvoiceId) {
-            const res = await zoho.createInvoice(contactId, {
+            const cid = await ensureContactId();
+            const res = await zoho.createInvoice(cid, {
               reference_number: displayId,
               invoice_number: displayId,
               ignore_auto_number_generation: true,
@@ -672,8 +681,8 @@ export class DocumentModuleService extends MedusaService({
             obscureZohoFooter: true,
           });
         } else if (input.type === "estimate") {
-          let targetEstId: string | null = null;
-          if (input.repair_ticket_id) {
+          let targetEstId: string | null = input.zoho_document_id || (repairTicket?.metadata as any)?.zoho_estimate_id || null;
+          if (!targetEstId && input.repair_ticket_id) {
             const existingDocs = await this.listDocumentRecords({
               repair_ticket_id: input.repair_ticket_id,
               type: "estimate",
@@ -697,7 +706,8 @@ export class DocumentModuleService extends MedusaService({
           }
 
           if (!targetEstId) {
-            const res = await zoho.createEstimate(contactId, {
+            const cid = await ensureContactId();
+            const res = await zoho.createEstimate(cid, {
               reference_number: displayId,
               estimate_number: displayId,
               line_items: zohoLineItems,
@@ -769,7 +779,8 @@ export class DocumentModuleService extends MedusaService({
           }
 
           if (!targetInvoiceId) {
-            const invRes = await zoho.createInvoice(contactId, {
+            const cid = await ensureContactId();
+            const invRes = await zoho.createInvoice(cid, {
               reference_number: expectedInvoiceNumber,
               invoice_number: expectedInvoiceNumber,
               ignore_auto_number_generation: true,
@@ -793,11 +804,12 @@ export class DocumentModuleService extends MedusaService({
             } catch (_) {}
           }
 
+          const cid = await ensureContactId();
           const paymentAmount = Number(input.total || 0);
           const paymentId = await zoho.registerPayment(
             targetInvoiceId,
             paymentAmount,
-            contactId,
+            cid,
             "Online",
             displayId
           );

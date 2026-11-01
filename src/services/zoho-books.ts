@@ -28,6 +28,9 @@ export interface ZohoInvoicePayload {
 }
 
 export class ZohoBooksService {
+  private static tokenCache: Map<string, { token: string; expires_at: number }> = new Map();
+  private static tokenRefreshPromise: Map<string, Promise<string>> = new Map();
+
   private config: ZohoConfig;
   private logger?: Logger;
   private access_token: string | null = null;
@@ -47,31 +50,61 @@ export class ZohoBooksService {
   }
 
   private async getAccessToken(): Promise<string> {
+    const cacheKey = `${this.config.client_id}:${this.config.refresh_token}`;
+    const cached = ZohoBooksService.tokenCache.get(cacheKey);
+    if (cached && Date.now() < cached.expires_at) {
+      this.access_token = cached.token;
+      this.token_expires_at = cached.expires_at;
+      return cached.token;
+    }
+
     if (this.access_token && Date.now() < this.token_expires_at) {
       return this.access_token;
     }
 
-    this.logger?.info(`[Zoho Books] Refreshing access token...`);
-    const params = new URLSearchParams();
-    params.append("refresh_token", this.config.refresh_token);
-    params.append("client_id", this.config.client_id);
-    params.append("client_secret", this.config.client_secret);
-    params.append("grant_type", "refresh_token");
-
-    const response = await fetch(`${this.baseAccountsUrl}/oauth/v2/token`, {
-      method: "POST",
-      body: params,
-    });
-
-    const data = await response.json();
-    if (!response.ok || data.error) {
-      this.logger?.error(`[Zoho Books] Failed to refresh token: ${JSON.stringify(data)}`);
-      throw new Error(`Zoho authentication failed: ${data.error || response.statusText}`);
+    if (ZohoBooksService.tokenRefreshPromise.has(cacheKey)) {
+      return await ZohoBooksService.tokenRefreshPromise.get(cacheKey)!;
     }
 
-    this.access_token = data.access_token;
-    this.token_expires_at = Date.now() + (data.expires_in - 300) * 1000;
-    return this.access_token!;
+    const refreshPromise = (async () => {
+      try {
+        this.logger?.info(`[Zoho Books] Refreshing access token...`);
+        const params = new URLSearchParams();
+        params.append("refresh_token", this.config.refresh_token);
+        params.append("client_id", this.config.client_id);
+        params.append("client_secret", this.config.client_secret);
+        params.append("grant_type", "refresh_token");
+
+        const response = await fetch(`${this.baseAccountsUrl}/oauth/v2/token`, {
+          method: "POST",
+          body: params,
+        });
+
+        const data = await response.json();
+        if (!response.ok || data.error) {
+          this.logger?.error(`[Zoho Books] Failed to refresh token: ${JSON.stringify(data)}`);
+          if (cached && (data.error === "Access Denied" || data.error_description?.includes("too many requests"))) {
+            this.logger?.warn(`[Zoho Books] Rate limited by Zoho Accounts, falling back to cached token.`);
+            return cached.token;
+          }
+          throw new Error(`Zoho authentication failed: ${data.error || response.statusText}`);
+        }
+
+        const token = data.access_token;
+        const expiresIn = Number(data.expires_in || 3600);
+        const expiresAt = Date.now() + (expiresIn - 300) * 1000;
+
+        ZohoBooksService.tokenCache.set(cacheKey, { token, expires_at: expiresAt });
+        this.access_token = token;
+        this.token_expires_at = expiresAt;
+        return token;
+      } finally {
+        ZohoBooksService.tokenRefreshPromise.delete(cacheKey);
+      }
+    })();
+
+    ZohoBooksService.tokenRefreshPromise.set(cacheKey, refreshPromise);
+    return await refreshPromise;
   }
 
   public async request(method: string, endpoint: string, body?: any, isBlob: boolean = false): Promise<any> {
