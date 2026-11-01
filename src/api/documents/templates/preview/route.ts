@@ -204,10 +204,29 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
     const pdfBuffer = await PDFKitGenerator.generate(sampleData, style);
 
+    const totalLength = pdfBuffer.length;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="preview-${style}-${type}.pdf"`);
-    res.setHeader("Content-Length", String(pdfBuffer.length));
+    res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+
+    const range = req.headers?.range;
+    if (range && req.method !== "HEAD") {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalLength - 1;
+
+      if (!isNaN(start) && start < totalLength) {
+        const chunkEnd = Math.min(end, totalLength - 1);
+        const chunk = pdfBuffer.subarray(start, chunkEnd + 1);
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${chunkEnd}/${totalLength}`);
+        res.setHeader("Content-Length", String(chunk.length));
+        return res.send(chunk);
+      }
+    }
+
+    res.setHeader("Content-Length", String(totalLength));
     return res.send(pdfBuffer);
   } catch (err: any) {
     try {
@@ -216,3 +235,6 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     return res.status(500).send(`Failed to generate preview: ${err.message}`);
   }
 }
+
+// HEAD /documents/templates/preview
+export const HEAD = GET;

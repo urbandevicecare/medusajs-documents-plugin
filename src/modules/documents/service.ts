@@ -1172,11 +1172,14 @@ export class DocumentModuleService extends MedusaService({
           rawBuf = await zoho.getDocumentPdf(record.zoho_document_id, docType);
         }
 
-        if (rawBuf && rawBuf.byteLength > 0) {
-          return await postProcessPdf(Buffer.from(rawBuf), {
-            qrUrl: record.short_payment_link || record.payment_link,
-            obscureZohoFooter: true,
-          });
+        if (rawBuf && rawBuf.byteLength >= 4) {
+          const buf = Buffer.from(rawBuf);
+          if (buf.subarray(0, 4).toString() === "%PDF") {
+            return await postProcessPdf(buf, {
+              qrUrl: record.short_payment_link || record.payment_link,
+              obscureZohoFooter: true,
+            });
+          }
         }
       } catch (err: any) {
         try {

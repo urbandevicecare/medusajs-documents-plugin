@@ -69,10 +69,30 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
 
     const pdfBuffer = await documentService.getPdfForRecord(record.id, req.scope);
 
+    const safeFilename = (record.display_id || record.id || "document").replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+    const totalLength = pdfBuffer.length;
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${record.display_id}.pdf"`);
-    res.setHeader("Content-Length", String(pdfBuffer.length));
-    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Content-Disposition", `inline; filename="${safeFilename}.pdf"`);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+
+    const range = req.headers?.range;
+    if (range && req.method !== "HEAD") {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalLength - 1;
+
+      if (!isNaN(start) && start < totalLength) {
+        const chunkEnd = Math.min(end, totalLength - 1);
+        const chunk = pdfBuffer.subarray(start, chunkEnd + 1);
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${chunkEnd}/${totalLength}`);
+        res.setHeader("Content-Length", String(chunk.length));
+        return res.send(chunk);
+      }
+    }
+
+    res.setHeader("Content-Length", String(totalLength));
     return res.send(pdfBuffer);
   } catch (err: any) {
     try {
@@ -81,3 +101,6 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
     return res.status(500).send(`Failed to generate document: ${err.message}`);
   }
 }
+
+// HEAD /api/admin/documents/:id/document
+export const HEAD = GET;

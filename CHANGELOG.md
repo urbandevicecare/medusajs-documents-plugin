@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.31] - 2026-11-01
+
+### HTTP HEAD Request Handling, Accept-Ranges Byte Streaming & Order Fallback
+- **HEAD Method Route Handlers & Unauthenticated Allowlist**: Exported `export const HEAD = GET;` across all document streaming and template preview routes (`/admin/documents/:id/document`, `/admin/documents/templates/preview`, `/api/admin/documents/:id/document`, `/documents/:id/document`, `/documents/templates/preview`) and added `HEAD` and `OPTIONS` to `src/api/middlewares.ts`. This resolves HTTP 401 Unauthorized errors caused when browsers, PDF viewers, or proxies issue HTTP HEAD requests to verify content type before fetching the PDF body.
+- **HTTP Range & Accept-Ranges Streaming**: Added `Accept-Ranges: bytes` and HTTP 206 Partial Content byte-range slicing to stream handlers, supporting native PDF viewers and media pre-loaders requesting partial byte ranges.
+- **Order Lookup Fallback in Admin Stream Route**: Extended `/admin/documents/:id/document` route lookup to query `order_id` in both database query layers.
+- **Admin Document Navigation Alignment**: Restored `src/admin/routes/documents/page.tsx` view and preview handlers to use `/admin/documents/...` endpoints directly.
+- **Zoho PDF Magic Bytes Verification**: Enforced `%PDF` header validation on buffers received from Zoho Books before invoking PDF post-processing.
+
 ## [1.1.30] - 2026-11-01
 
 ### Unauthenticated PDF Document Streaming & Robust Fallback Handling

@@ -4,7 +4,7 @@ export default defineMiddlewares({
   routes: [
     {
       matcher: "/admin/documents/:id/document",
-      methods: ["GET"],
+      methods: ["GET", "HEAD", "OPTIONS"],
       middlewares: [
         authenticate("user", ["bearer", "session", "api-key"], {
           allowUnauthenticated: true,
@@ -13,7 +13,7 @@ export default defineMiddlewares({
     },
     {
       matcher: "/admin/documents/templates/preview",
-      methods: ["GET"],
+      methods: ["GET", "HEAD", "OPTIONS"],
       middlewares: [
         authenticate("user", ["bearer", "session", "api-key"], {
           allowUnauthenticated: true,
@@ -22,7 +22,7 @@ export default defineMiddlewares({
     },
     {
       matcher: "/api/admin/documents/:id/document",
-      methods: ["GET"],
+      methods: ["GET", "HEAD", "OPTIONS"],
       middlewares: [
         authenticate("user", ["bearer", "session", "api-key"], {
           allowUnauthenticated: true,
