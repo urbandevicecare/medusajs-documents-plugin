@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.42] - 2026-11-01
+## [1.1.43] - 2026-11-01
 
 ### Fix Blank Extra Pages, Orphan 1-Line Pages, and Sync-Zoho In-Place Updates
 - **Elimination of Blank Extra Pages & Orphan 1-Line Pages**:
