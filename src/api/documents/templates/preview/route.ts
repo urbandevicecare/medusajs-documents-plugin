@@ -16,8 +16,10 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     const style = validStyles.includes(rawStyle) ? rawStyle : "modern";
 
     const rawType = String(req.query.type || "").trim().toLowerCase();
-    const validTypes = ["invoice", "receipt", "packing_slip", "estimate", "custom", "job_card"];
-    const type = (validTypes.includes(rawType) ? rawType : "invoice") as DocumentData["type"];
+    const isCertRequest = rawType === "certificate";
+    const validTypes = ["invoice", "receipt", "packing_slip", "estimate", "custom", "job_card", "service_report", "handover", "certificate"];
+    const resolvedType = isCertRequest ? "custom" : (validTypes.includes(rawType) ? rawType : "invoice");
+    const type = resolvedType as DocumentData["type"];
 
     const isJobCard = type === "job_card";
     const isCustom = type === "custom";
@@ -154,6 +156,34 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
           "Evaluation Specialist": "Bonifencia A.",
         },
         notes: "Ownership transfers immediately upon document execution. Valuation is binding and irrevocable once trade-in payout or store credit is issued.",
+      },
+      blank: {
+        title: "Official Document",
+        body_text: "This official technical document confirms the specifications, service terms, and verified conditions documented by Urban Device Care for the specified customer asset.",
+        items: [
+          { title: "Professional Hardware Inspection & Maintenance Service", description: "Certified technical evaluation and service clearance", quantity: 1, unit_price: 0, total: 0 },
+        ],
+        custom_fields: {
+          "Device Model": "Computing Asset / Hardware Module",
+          "Serial / IMEI": "SN-XXXX-XXXX",
+          "Ticket Reference": "RT-2024-0001",
+          "Technician": "Bonifencia A.",
+        },
+        notes: "Standard terms and conditions apply. For inquiries, contact info@urbandevicecare.co.uk.",
+      },
+      generic: {
+        title: "Official Document",
+        body_text: "This official technical document confirms the specifications, service terms, and verified conditions documented by Urban Device Care for the specified customer asset.",
+        items: [
+          { title: "Professional Hardware Inspection & Maintenance Service", description: "Certified technical evaluation and service clearance", quantity: 1, unit_price: 0, total: 0 },
+        ],
+        custom_fields: {
+          "Device Model": "Computing Asset / Hardware Module",
+          "Serial / IMEI": "SN-XXXX-XXXX",
+          "Ticket Reference": "RT-2024-0001",
+          "Technician": "Bonifencia A.",
+        },
+        notes: "Standard terms and conditions apply. For inquiries, contact info@urbandevicecare.co.uk.",
       },
     };
 

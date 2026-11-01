@@ -16,6 +16,7 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       currency_code = "kes",
       notes,
       custom_fields,
+      repair_ticket_id,
       send_email_now = true,
       email_subject,
       custom_email_message,
@@ -34,8 +35,9 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
       {
         title: title,
         type: "custom",
+        repair_ticket_id: repair_ticket_id || undefined,
         customer: {
-          name: companyName || customer?.name || "Customer",
+          name: customer?.name || companyName || "Customer",
           company_name: companyName || undefined,
           email: customer?.email,
           phone: customer?.phone,

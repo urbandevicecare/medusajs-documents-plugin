@@ -407,28 +407,43 @@ export const DocumentsPage = () => {
     for (const d of documents) {
       const ticketId = (d as any).repair_ticket_id;
       const displayId = d.display_id || "";
-      const isRepairDoc = displayId.startsWith("RT-") || displayId.startsWith("JOB-") || Boolean(ticketId);
+      const isRepairDoc = displayId.startsWith("RT-") || displayId.startsWith("JOB-") || displayId.startsWith("CERT-") || Boolean(ticketId);
       const idKey = ticketId || displayId;
-      if (isRepairDoc && idKey && !map.has(idKey)) {
-        const customFields = (d as any).custom_fields || (d as any).metadata?.custom_fields || {};
-        map.set(idKey, {
-          id: idKey,
-          ticket_number: String(displayId).replace(/^(RT-|JOB-)+/i, "") || idKey,
-          customer_name: d.customer_name,
-          customer_email: d.customer_email,
-          customer_phone: d.customer_phone,
-          device: {
-            brand: customFields["Brand"] || "",
-            model_name: customFields["Device Model"] || customFields["Model"] || "Device",
-            serial_number: customFields["Serial / IMEI"] || customFields["Serial Number"] || "N/A",
-            condition: customFields["Condition"] || "Good condition",
-          },
-          accessories: customFields["Accessories"] || "None",
-          technician_name: customFields["Technician"] || "Bonifencia A.",
-          issue_description: customFields["Reported Issue"] || d.notes || "Standard Service",
-          custom_fields: customFields,
-          items: (d as any).metadata?.items || [],
-        });
+      if (isRepairDoc && idKey) {
+        if (!map.has(idKey)) {
+          const customFields = (d as any).custom_fields || (d as any).metadata?.custom_fields || {};
+          map.set(idKey, {
+            id: idKey,
+            ticket_number: String(displayId).replace(/^(RT-|JOB-|CERT-)+/i, "") || idKey,
+            customer_name: d.customer_name,
+            customer_email: d.customer_email,
+            customer_phone: d.customer_phone,
+            company_name: (d as any).customer?.company_name || (d as any).metadata?.company_name,
+            device: {
+              brand: customFields["Brand"] || "",
+              model_name: customFields["Device Model"] || customFields["Model"] || "Device",
+              serial_number: customFields["Serial / IMEI"] || customFields["Serial Number"] || "N/A",
+              condition: customFields["Condition"] || "Good condition",
+            },
+            accessories: customFields["Accessories"] || "None",
+            technician_name: customFields["Technician"] || "Bonifencia A.",
+            issue_description: customFields["Reported Issue"] || d.notes || "Standard Service",
+            custom_fields: customFields,
+            items: (d as any).metadata?.items || [],
+          });
+        } else {
+          // Enrich existing ticket from document records if fields are missing
+          const existing = map.get(idKey);
+          if (!existing.customer_name && d.customer_name) existing.customer_name = d.customer_name;
+          if (!existing.customer_email && d.customer_email) existing.customer_email = d.customer_email;
+          if (!existing.customer_phone && d.customer_phone) existing.customer_phone = d.customer_phone;
+          const compName = (d as any).customer?.company_name || (d as any).metadata?.company_name;
+          if (!existing.company_name && compName) existing.company_name = compName;
+          if ((!existing.device?.model_name || existing.device?.model_name === "Device") && (d as any).metadata?.custom_fields?.["Device Model"]) {
+            existing.device = existing.device || {};
+            existing.device.model_name = (d as any).metadata.custom_fields["Device Model"];
+          }
+        }
       }
     }
     return Array.from(map.values());
@@ -450,19 +465,21 @@ export const DocumentsPage = () => {
     const technician = ticket.technician_name || ticket.custom_fields?.["Technician"] || "Bonifencia A. (Lead Certified Engineer)";
     const accessories = ticket.accessories || ticket.custom_fields?.["Accessories"] || "None (Unit only)";
     const condition = ticket.device?.condition || ticket.custom_fields?.["Condition"] || "Good (Normal wear)";
-    const cleanNum = String(ticket.ticket_number || ticket.id).replace(/^(RT-|JOB-)+/i, "");
+    const cleanNum = String(ticket.ticket_number || ticket.id).replace(/^(RT-|JOB-|CERT-)+/i, "");
     const ticketRef = `RT-${cleanNum}`;
 
     const customerName =
+      (ticket.customer?.first_name ? `${ticket.customer.first_name} ${ticket.customer.last_name || ""}`.trim() : "") ||
+      ticket.customer?.name ||
+      ticket.customer_name ||
+      ticket.metadata?.customer_name ||
       ticket.customer?.company_name ||
       ticket.company_name ||
-      ticket.customer_name ||
-      (ticket.customer?.first_name ? `${ticket.customer.first_name} ${ticket.customer.last_name || ""}`.trim() : "") ||
       "Valued Customer";
 
-    const customerEmail = ticket.customer?.email || ticket.customer_email || "";
-    const customerPhone = ticket.customer?.phone || ticket.customer_phone || "";
-    const companyName = ticket.customer?.company_name || ticket.company_name || "";
+    const customerEmail = ticket.customer?.email || ticket.customer_email || ticket.metadata?.customer_email || "";
+    const customerPhone = ticket.customer?.phone || ticket.customer_phone || ticket.metadata?.customer_phone || "";
+    const companyName = ticket.customer?.company_name || ticket.company_name || ticket.metadata?.company_name || "";
 
     const ticketItems: Array<{ title: string; description: string; quantity: number; unit_price: number }> = [];
 
@@ -743,6 +760,7 @@ export const DocumentsPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: customDocForm.title,
+          repair_ticket_id: selectedTicketId || undefined,
           customer: {
             name: customDocForm.customer_name,
             company_name: customDocForm.company_name || undefined,

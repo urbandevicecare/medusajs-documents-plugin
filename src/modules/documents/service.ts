@@ -394,9 +394,9 @@ export class DocumentModuleService extends MedusaService({
           if (tickets && tickets.length > 0) {
             repairTicket = tickets[0];
             const ticket = tickets[0];
-            const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-)+/i, "");
-            input.display_id = input.display_id || (input.type === "job_card" ? `JOB-${cleanTicketNumber}` : `RT-${cleanTicketNumber}`);
-            input.title = input.title || (input.type === "job_card" ? "Repair Job Card" : "Repair Document");
+            const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-|CERT-)+/i, "");
+            input.display_id = input.display_id || (input.type === "job_card" ? `JOB-${cleanTicketNumber}` : input.type === "custom" ? `CERT-${cleanTicketNumber}` : `RT-${cleanTicketNumber}`);
+            input.title = input.title || (input.type === "job_card" ? "Repair Job Card" : input.type === "custom" ? "Warranty Certificate" : "Repair Document");
             let customerCompanyName: string | undefined =
               ticket.company_name ||
               ticket.customer?.company_name ||
@@ -540,6 +540,8 @@ export class DocumentModuleService extends MedusaService({
       } else {
         defaultPrefix = settings.zoho_invoice_prefix || "INV-";
       }
+    } else if (input.type === "custom") {
+      defaultPrefix = isRepairTicket ? "CERT-" : (settings.zoho_invoice_prefix || "DOC-");
     } else {
       defaultPrefix = isStoreOrder
         ? (settings.store_invoice_prefix || "ST-")
@@ -551,6 +553,8 @@ export class DocumentModuleService extends MedusaService({
       displayId = displayId.replace(/^JOB-RT-/, "JOB-");
     } else if (displayId.startsWith("RT-RT-")) {
       displayId = displayId.replace(/^RT-RT-/, "RT-");
+    } else if (displayId.startsWith("CERT-RT-")) {
+      displayId = displayId.replace(/^CERT-RT-/, "CERT-");
     }
 
     // Prepare short payment link if payment link is present

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.34] - 2026-11-01
+
+### Repair Ticket Linking, Customer Personal Name Preservation, Multi-Page Certificate Support & Dynamic Sizing
+- **Multi-Page Certificate Support & Dynamic Page Numbering**: Configured `bufferPages: true` in `renderCertificateDocument` and added post-render page loop to print official compliance footers with accurate page counts (`Page X of Y`) across every page. Added table header repetition when line item tables break across pages.
+- **Customer Personal Name Preservation**: Fixed bug in `POST /admin/documents/custom` and `handleSelectRepairTicket` where customer personal name was inadvertently overridden by company name, properly preserving both person name and company name (`Acme Corp (Attn: Jane Doe)`).
+- **Backend Repair Ticket Association**: Fixed custom document generation payload to pass `repair_ticket_id` to `/admin/documents/custom`, persisting the relationship on `document_record.repair_ticket_id` and grouping custom certificates into the repair ticket pack in the Documents Hub.
+- **CERT- Prefix & Disjoint Set Union Grouping**: Added dedicated `CERT-` display prefix for repair-linked custom documents to avoid ID collisions with repair invoices (`RT-`), and mapped `CERT-` into `document-grouper.ts` clustering.
+- **Available Tickets Customer Enrichment**: Enriched `availableTickets` with contact and device details from existing document records when `/admin/repairs` returns raw unexpanded ticket objects.
+- **Dynamic Header Title Scaling**: Added multi-step font scaling in `drawConsistentHeader` (20pt / 15pt / 13pt) to gracefully accommodate long official document titles without text clipping.
+- **Clean Document Number Rendering**: Prevented double `#` prefixing in certificate headers when display IDs already contain leading hashes.
+- **Preview Endpoints Enhancements**: Added `type=certificate` support and `blank`/`generic` presets to preview routes.
+
 ## [1.1.33] - 2026-11-01
 
 ### Certificate Document Consistent Header, Rich Editable Fillers, and Repair Ticket Autofill

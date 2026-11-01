@@ -259,7 +259,7 @@ export class PDFKitGenerator {
       rightY += 13;
     }
 
-    const titleFontSize = titleConfig.title.length > 15 ? 16 : 20;
+    const titleFontSize = titleConfig.title.length > 25 ? 13 : titleConfig.title.length > 16 ? 15 : 20;
     doc.fontSize(titleFontSize).font("Helvetica-Bold").fillColor("#111827");
     const titleHeight = doc.heightOfString(titleConfig.title, { width: rightW });
     doc.text(titleConfig.title, rightX, rightY, { width: rightW, align: "right" });
@@ -500,24 +500,37 @@ export class PDFKitGenerator {
 
         // Footer
         doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 65;
-        doc.fontSize(8).font("Helvetica-Bold").fillColor("#374151");
-        const paymentLinkText = data.payment_link ? `Pay Online: ${data.payment_link} | ` : "";
-        const payInstructions = settings?.pdf_payment_details
-          ? settings.pdf_payment_details.replace(/\n/g, " | ")
-          : "Thanks for your business. | Paybill: 880100 - Acc No: PAYURBANDEVICE";
-        doc.text(`${paymentLinkText}${payInstructions}`, 45, footerY, { width: 440, lineBreak: false });
+        const footerDividerY = doc.page.height - 75;
+        doc.rect(45, footerDividerY, 505, 0.5).fill("#e5e7eb");
+
+        const footerY = footerDividerY + 8;
+        const paymentLinkText = isInvoice && data.payment_link ? `Pay Online: ${data.payment_link}\n` : "";
+        const payInstructions = isInvoice
+          ? (settings?.pdf_payment_details ? settings.pdf_payment_details.replace(/\n/g, " | ") : "Paybill: 880100 - Acc: PAYURBANDEVICE")
+          : isReceipt
+          ? "Thank you for your payment. Official receipt for your records."
+          : "Thank you for your business. For inquiries, contact support@urbandevicecare.co.uk";
+
+        doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#1f2937");
+        if (paymentLinkText) {
+          doc.text(paymentLinkText, 45, footerY, { width: 440, lineBreak: false });
+        }
+        const payInstrY = footerY + (paymentLinkText ? 11 : 0);
+        doc.fontSize(7).font("Helvetica").fillColor("#4b5563").text(payInstructions, 45, payInstrY, { width: 440, lineBreak: false });
+
+        doc.fontSize(7).font("Helvetica").fillColor("#9ca3af");
+        doc.text(`POWERED BY ${(settings?.company_name || "URBAN DEVICE CARE LTD").toUpperCase()}  •  #${data.display_id}`, 45, footerDividerY + 54, { width: 440, lineBreak: false });
 
         if (qrBuffer) {
           try {
-            doc.image(qrBuffer, 490, footerY - 15, { width: 55 });
+            const qrSize = 48;
+            const qrX = 502;
+            const qrY = footerDividerY + 6;
+            doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+            const qrLabel = isInvoice ? "Scan to Pay Online" : isReceipt ? "Scan to Verify" : "Scan to View Quote";
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text(qrLabel, qrX - 8, qrY + qrSize + 2, { width: qrSize + 16, align: "center" });
           } catch (e) {}
         }
-
-        doc.rect(45, footerY + 20, 505, 0.5).fill("#d1d5db");
-        doc.fontSize(7.5).font("Helvetica").fillColor("#9ca3af");
-        doc.text(`POWERED BY ${(settings?.company_name || "URBAN DEVICE CARE LTD").toUpperCase()}`, 45, footerY + 26, { lineBreak: false });
-        doc.text("1", 540, footerY + 26, { align: "right", lineBreak: false });
 
         doc.end();
       } catch (err) {
@@ -657,21 +670,29 @@ export class PDFKitGenerator {
         currentY += 10;
 
         // SECTION 4: DUAL SIGNATURES
-        if (currentY > doc.page.height - 120) { doc.addPage(); currentY = 50; }
-        const sigY = currentY + 30;
-        doc.rect(45, sigY, 200, 0.75).fill("#0f172a");
-        doc.rect(310, sigY, 200, 0.75).fill("#0f172a");
+        if (currentY > doc.page.height - 135) { doc.addPage(); currentY = 50; }
+        const sigY = currentY + 25;
+        doc.rect(45, sigY, 190, 0.75).fill("#0f172a");
+        doc.rect(265, sigY, 190, 0.75).fill("#0f172a");
 
         doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#0f172a");
         doc.text("Technician Signature", 45, sigY + 5);
-        doc.text("Customer Signature", 310, sigY + 5);
+        doc.text("Customer Signature", 265, sigY + 5);
 
         doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 45;
-        doc.fontSize(7.5).font("Helvetica").fillColor("#94a3b8");
+        const footerY = doc.page.height - 48;
+        doc.rect(45, footerY - 6, 505, 0.5).fill("#e2e8f0");
+        doc.fontSize(7).font("Helvetica").fillColor("#64748b");
         doc.text("Intake Agreement: Diagnostics & component repairs carry standard 90-day warranty coverage. Customer accepts custody release terms.", 45, footerY, { width: 440, lineBreak: false });
+
         if (qrBuffer) {
-          try { doc.image(qrBuffer, 495, footerY - 12, { width: 45 }); } catch (e) {}
+          try {
+            const qrSize = 42;
+            const qrX = 504;
+            const qrY = footerY - 2;
+            doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to Track", qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+          } catch (e) {}
         }
 
         doc.end();
@@ -693,7 +714,17 @@ export class PDFKitGenerator {
         });
         const buffers: Buffer[] = [];
         doc.on("data", (chunk) => buffers.push(chunk));
-        doc.on("end", () => resolve(Buffer.concat(buffers)));
+        let qrBuffer: Buffer | null = null;
+        if (data.qr_url) {
+          try {
+            qrBuffer = await QRCode.toBuffer(data.qr_url, {
+              errorCorrectionLevel: "H",
+              type: "png",
+              margin: 1,
+              width: 50,
+            });
+          } catch (_) {}
+        }
 
         const ticket = PDFKitGenerator.mapDataToTicket(data);
         const settings = PDFKitGenerator.mapDataToSettings(data);
@@ -805,10 +836,20 @@ export class PDFKitGenerator {
         currentY += recH + 14;
 
         doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 40;
-        doc.fontSize(7.5).font("Helvetica").fillColor("#94a3b8");
-        doc.text(`Official Diagnostic & Scope Report — ${(settings?.company_name || "Urban Device Care Ltd")}`, 45, footerY, { lineBreak: false });
-        doc.text("Page 1 of 1", 500, footerY, { align: "right", lineBreak: false });
+        const footerY = doc.page.height - 48;
+        doc.rect(45, footerY - 6, 505, 0.5).fill("#e2e8f0");
+        doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
+        doc.text(`Official Diagnostic & Scope Report — ${(settings?.company_name || "Urban Device Care Ltd")}  •  Page 1 of 1`, 45, footerY, { width: 440, lineBreak: false });
+
+        if (qrBuffer) {
+          try {
+            const qrSize = 42;
+            const qrX = 504;
+            const qrY = footerY - 2;
+            doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to View", qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+          } catch (e) {}
+        }
 
         doc.end();
       } catch (err) {
@@ -829,7 +870,17 @@ export class PDFKitGenerator {
         });
         const buffers: Buffer[] = [];
         doc.on("data", (chunk) => buffers.push(chunk));
-        doc.on("end", () => resolve(Buffer.concat(buffers)));
+        let qrBuffer: Buffer | null = null;
+        if (data.qr_url) {
+          try {
+            qrBuffer = await QRCode.toBuffer(data.qr_url, {
+              errorCorrectionLevel: "H",
+              type: "png",
+              margin: 1,
+              width: 50,
+            });
+          } catch (_) {}
+        }
 
         const ticket = PDFKitGenerator.mapDataToTicket(data);
         const settings = PDFKitGenerator.mapDataToSettings(data);
@@ -931,21 +982,31 @@ export class PDFKitGenerator {
         currentY += vH + 24;
 
         // Dual Signatures
-        doc.rect(45, currentY, 200, 0.75).fill("#0f172a");
-        doc.rect(310, currentY, 200, 0.75).fill("#0f172a");
+        doc.rect(45, currentY, 190, 0.75).fill("#0f172a");
+        doc.rect(265, currentY, 190, 0.75).fill("#0f172a");
 
         doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#0f172a");
         doc.text(ticket.technician_name || "Bonifencia A.", 45, currentY + 5);
         doc.font("Helvetica").fontSize(7.5).fillColor("#64748b").text("Hardware Technician  •  Urban Device Care Ltd", 45, currentY + 16);
 
-        doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0f172a").text("IT Admin / Receiving Officer", 310, currentY + 5);
-        doc.font("Helvetica").fontSize(7.5).fillColor("#64748b").text("Date & Official Stamp", 310, currentY + 16);
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0f172a").text("IT Admin / Receiving Officer", 265, currentY + 5);
+        doc.font("Helvetica").fontSize(7.5).fillColor("#64748b").text("Date & Official Stamp", 265, currentY + 16);
 
         doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 35;
-        doc.fontSize(7.5).font("Helvetica").fillColor("#94a3b8");
-        doc.text(`${(settings?.company_name || "Urban Device Care Ltd")} — Device Clearance Report`, 45, footerY, { lineBreak: false });
-        doc.text("Page 1 of 1", 500, footerY, { align: "right", lineBreak: false });
+        const footerY = doc.page.height - 48;
+        doc.rect(45, footerY - 6, 505, 0.5).fill("#e2e8f0");
+        doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
+        doc.text(`${(settings?.company_name || "Urban Device Care Ltd")} — Device Clearance Report  •  Page 1 of 1`, 45, footerY, { width: 440, lineBreak: false });
+
+        if (qrBuffer) {
+          try {
+            const qrSize = 42;
+            const qrX = 504;
+            const qrY = footerY - 2;
+            doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to View", qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+          } catch (e) {}
+        }
 
         doc.end();
       } catch (err) {
@@ -963,6 +1024,7 @@ export class PDFKitGenerator {
         const doc = new PDFDocument({
           margins: { top: 35, bottom: 25, left: 45, right: 45 },
           size: "A4",
+          bufferPages: true,
         });
         const buffers: Buffer[] = [];
         doc.on("data", (chunk) => buffers.push(chunk));
@@ -978,10 +1040,11 @@ export class PDFKitGenerator {
 
         const docTitle = (data.title || "WARRANTY CERTIFICATE").toUpperCase();
         const hasCharges = Number(data.total || 0) > 0;
+        const cleanDocNumber = data.display_id ? (data.display_id.startsWith("#") ? data.display_id : `#${data.display_id}`) : undefined;
 
         const nextY = PDFKitGenerator.drawConsistentHeader(doc, logoBuffer, settings, {
           title: docTitle,
-          docNumber: `#${data.display_id}`,
+          docNumber: cleanDocNumber,
           dateLabel: "Date",
           dateValue: PDFKitGenerator.formatDate(data.date),
           badgeText: hasCharges ? (data.payment_status === "paid" ? "PAID" : "AMOUNT DUE") : "OFFICIAL CERTIFICATE",
@@ -1094,6 +1157,15 @@ export class PDFKitGenerator {
             if (currentY > 680) {
               doc.addPage();
               currentY = 40;
+              doc.rect(45, currentY, 505, 20).fill("#0f172a");
+              doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
+              doc.text("ITEM / SPECIFICATION & SCOPE", 55, currentY + 6, { width: hasCharges ? 275 : 400 });
+              doc.text("QTY", hasCharges ? 335 : 460, currentY + 6, { width: 35, align: "center" });
+              if (hasCharges) {
+                doc.text("RATE", 380, currentY + 6, { width: 75, align: "right" });
+                doc.text("AMOUNT", 465, currentY + 6, { width: 75, align: "right" });
+              }
+              currentY += 20;
             }
 
             const itemTitle = item.title || "Service Specification";
@@ -1168,12 +1240,16 @@ export class PDFKitGenerator {
         doc.font("Helvetica-Bold").fontSize(8).fillColor("#0f172a").text("Customer / Authorized Representative", 360, currentY + 4);
         doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Signature & Acceptance Date", 360, currentY + 14);
 
-        // Bottom Page Footer
-        doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 24;
-        doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
-        doc.text(`${settings?.company_name || "Urban Device Care Ltd"}  •  Official Compliance & Service Documentation`, 45, footerY, { lineBreak: false });
-        doc.text("Page 1 of 1", 500, footerY, { align: "right", lineBreak: false });
+        // Bottom Page Footer across all pages
+        const pages = doc.bufferedPageRange();
+        for (let i = 0; i < pages.count; i++) {
+          doc.switchToPage(i);
+          doc.page.margins.bottom = 0;
+          const footerY = doc.page.height - 24;
+          doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
+          doc.text(`${settings?.company_name || "Urban Device Care Ltd"}  •  Official Compliance & Service Documentation`, 45, footerY, { lineBreak: false });
+          doc.text(`Page ${i + 1} of ${pages.count}`, 45, footerY, { width: 505, align: "right", lineBreak: false });
+        }
 
         doc.end();
       } catch (err) {
@@ -1794,6 +1870,7 @@ export class PDFKitGenerator {
 
     if (
       normalizedData.type === "custom" ||
+      (normalizedData.type as string) === "certificate" ||
       /certificate|destruction|warranty|completion|clearance|trade[-_ ]?in/i.test(normalizedData.title || "")
     ) {
       return await this.renderCertificateDocument(normalizedData, logoBuffer);

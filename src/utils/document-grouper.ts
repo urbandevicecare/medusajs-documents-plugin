@@ -50,8 +50,8 @@ export interface DocumentGroup {
 export function extractBaseReference(displayId?: string): string {
   if (!displayId) return "";
   const cleaned = String(displayId).trim();
-  // Strip repeated prefixes like JOB-, RT-, EST-, RCPT-, INV-, PKG-, PACK-, DOC-, ST-, STORE-, and custom prefixes
-  const withoutPrefix = cleaned.replace(/^(?:(?:JOB|RT|EST|RCPT|INV|PKG|PACK|DOC|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
+  // Strip repeated prefixes like JOB-, RT-, EST-, RCPT-, INV-, PKG-, PACK-, DOC-, CERT-, ST-, STORE-, and custom prefixes
+  const withoutPrefix = cleaned.replace(/^(?:(?:JOB|RT|EST|RCPT|INV|PKG|PACK|DOC|CERT|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
   return withoutPrefix.trim();
 }
 
@@ -72,6 +72,7 @@ export function getDocTypePriority(type?: string): number {
     case "packing_slip":
       return 50;
     case "custom":
+    case "certificate":
       return 40;
     default:
       return 10;
@@ -80,7 +81,7 @@ export function getDocTypePriority(type?: string): number {
 
 /**
  * Workflow lifecycle ordering for sorting related documents inside an expanded pack.
- * 1. Job Card -> 2. Quote/Estimate -> 3. Invoice -> 4. Receipt -> 5. Packing Slip -> 6. Custom
+ * 1. Job Card -> 2. Quote/Estimate -> 3. Invoice -> 4. Receipt -> 5. Packing Slip -> 6. Custom/Certificate
  */
 export function getDocLifecycleOrder(type?: string): number {
   switch (type?.toLowerCase()) {
@@ -95,6 +96,7 @@ export function getDocLifecycleOrder(type?: string): number {
     case "packing_slip":
       return 5;
     case "custom":
+    case "certificate":
       return 6;
     default:
       return 10;
@@ -117,6 +119,7 @@ export function getDocTypeLabel(type?: string): string {
     case "packing_slip":
       return "Packing Slip";
     case "custom":
+    case "certificate":
       return "Certificate";
     default:
       return type || "Document";
