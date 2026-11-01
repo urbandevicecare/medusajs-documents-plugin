@@ -18,3 +18,4 @@ import "./release-1.1.34.test";
 import "./release-1.1.36.test";
 import "./release-1.1.40.test";
 import "./release-1.1.44.test";
+import "./release-1.1.46.test";

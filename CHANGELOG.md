@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.45] - 2026-11-01
+## [1.1.47] - 2026-11-01
+
+### Fix Chrome PDFium "Failed to load PDF document" via Full Stream Decryption
+- **PDF Encryption Decryption & Security Trailer Cleanup**:
+  - Implemented automatic decryption of standard PDF security / encryption (`Filter: /Standard`, `V: 1..4`, `R: 2..4`, AES-128 / RC4 with empty password `""`) using `@pdfsmaller/pdf-decrypt` and Standard Security Handler.
+  - Resolved Chrome PDFium crash where `pdf-lib` loaded Zoho encrypted buffers with `ignoreEncryption: true` without decrypting streams, leaving `/Encrypt` in the trailer and causing decryption key mismatch on newly stamped objects.
+  - Stripped `/Encrypt` from trailer dictionary and saved with `useObjectStreams: false`, producing 100% standard unencrypted PDFs that load flawlessly in Chrome and native viewers.
+- **Route Streaming Headers**:
+  - Added `X-Content-Type-Options: nosniff` and `Cache-Control: no-cache, no-store, must-revalidate` across both admin (`/admin/documents/:id/document`) and public (`/documents/:id/document`) streaming routes.
+
 
 ### Fix Browser PDF Loading Error and Ensure Visible Invoice Payment Link & QR Code
 - **Browser PDF Loading Reliability**:

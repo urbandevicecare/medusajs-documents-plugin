@@ -93,6 +93,7 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
     res.setHeader("Content-Disposition", `inline; filename="${safeFilename}.pdf"`);
     res.setHeader("Accept-Ranges", "none");
     res.setHeader("Content-Length", String(totalLength));
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
     if (req.method === "HEAD") {

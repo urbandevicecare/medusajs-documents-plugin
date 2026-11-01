@@ -1,6 +1,6 @@
 {
   "name": "medusajs-documents-plugin",
-  "version": "1.1.46",
+  "version": "1.1.47",
   "description": "Comprehensive document generation and management module for Medusa v2 with Zoho Books integration, PDFKit fallback, QR codes, shortlinks, multi-channel notifications and unified admin hub.",
   "author": "Urban Device Care <info@urbandevicecare.co.uk>",
   "license": "MIT",
@@ -52,6 +52,7 @@
     "prepack": "medusa plugin:build && node -e \"const fs=require('fs');if(fs.existsSync('src/assets')){fs.mkdirSync('.medusa/server/src/assets',{recursive:true});fs.cpSync('src/assets','.medusa/server/src/assets',{recursive:true})}\""
   },
   "dependencies": {
+    "@pdfsmaller/pdf-decrypt": "^1.0.1",
     "bwip-js": "^4.11.4",
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.18.0",
