@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.40] - 2026-11-01
+## [1.1.41] - 2026-11-01
 
 ### Single-Page Layout Safety, Phone Unicode Normalization & Zoho Custom Sync
 - **Elimination of Accidental Extra Blank / 1-Line Pages**:
