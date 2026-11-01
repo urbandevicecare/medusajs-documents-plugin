@@ -7,6 +7,23 @@ import { PDFKitGenerator, DocumentData, LineItem } from "../../services/pdfkit-g
 import { postProcessPdf } from "../../services/pdf-post-processor";
 import { NotificationSender } from "../../services/notification-sender";
 import { sanitizePhoneNumber } from "../../utils/phone-sanitizer";
+import { generateOrderPaymentLink } from "../../utils/payment-link";
+
+// In-memory cache for generated PDF buffers to avoid redundant Zoho Books API round-trips
+// and ensure byte-identical responses across rapid consecutive requests (TTL: 60 seconds)
+const pdfBufferCache = new Map<string, { buffer: Buffer; expiresAt: number }>();
+
+export function invalidatePdfCache(documentId?: string) {
+  if (documentId) {
+    for (const key of pdfBufferCache.keys()) {
+      if (key.startsWith(documentId)) {
+        pdfBufferCache.delete(key);
+      }
+    }
+  } else {
+    pdfBufferCache.clear();
+  }
+}
 
 export interface GenerateDocumentInput {
   display_id?: string;
@@ -510,7 +527,7 @@ export class DocumentModuleService extends MedusaService({
               "Reported Issue": ticket.issue_description || "Standard Repair",
               ...(input.custom_fields || {}),
             };
-            if (input.type === "job_card" && ticket.approval_token) {
+            if (input.type === "invoice" && !input.payment_link && ticket.approval_token) {
               input.payment_link = `${storeUrl}/repairs/track?token=${ticket.approval_token}`;
             }
           }
@@ -563,10 +580,29 @@ export class DocumentModuleService extends MedusaService({
       displayId = displayId.replace(/^CERT-RT-/, "CERT-");
     }
 
-    // Prepare short payment link if payment link is present
+    // Prepare short payment link ONLY for invoice documents
     let shortPaymentLink: string | undefined = undefined;
-    if (input.payment_link) {
-      shortPaymentLink = await this.getOrGenerateShortUrl(input.payment_link, storeUrl);
+    if (input.type === "invoice") {
+      if (!input.payment_link && isStoreOrder && input.order_id) {
+        try {
+          const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+          if (conn) {
+            const order = await conn("order").where({ id: input.order_id }).first();
+            if (order) {
+              const orderInfo = generateOrderPaymentLink(order, storeUrl);
+              if (orderInfo.paymentLink) {
+                input.payment_link = orderInfo.paymentLink;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      if (input.payment_link) {
+        shortPaymentLink = await this.getOrGenerateShortUrl(input.payment_link, storeUrl);
+      }
+    } else {
+      // For all non-invoices, leave payment_link undefined so they use online document shortlink
+      input.payment_link = undefined;
     }
 
     const backendUrl = (process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "");
@@ -1190,7 +1226,72 @@ export class DocumentModuleService extends MedusaService({
       }
       if (!record) throw e;
     }
+
+    // 0. In-memory buffer cache check (TTL: 60 seconds) to ensure byte-identical responses and avoid redundant Zoho API calls
+    const cacheKey = `${record.id}_${record.updated_at ? new Date(record.updated_at).getTime() : ""}`;
+    const cached = pdfBufferCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.buffer;
+    }
+
     const settings = await this.getSettings(sharedContext, container).catch(() => ({} as any));
+    const storeUrl = (settings?.storefront_url || process.env.STORE_URL || "https://urbandevicecare.co.uk").replace(/\/$/, "");
+
+    // 1. For invoices ONLY: resolve payment_link & short_payment_link dynamically if missing
+    if (record.type === "invoice" && (!record.payment_link || !record.short_payment_link)) {
+      try {
+        const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+        if (record.repair_ticket_id) {
+          let ticket: any = null;
+          if (conn) {
+            ticket = await conn("repair_ticket").where({ id: record.repair_ticket_id }).first();
+          }
+          if (ticket?.approval_token) {
+            const rawLink = `${storeUrl}/repairs/track?token=${ticket.approval_token}`;
+            const shortLink = await this.getOrGenerateShortUrl(rawLink, storeUrl);
+            record.payment_link = rawLink;
+            record.short_payment_link = shortLink;
+            if (conn) {
+              await conn("document_record")
+                .where({ id: record.id })
+                .update({
+                  payment_link: rawLink,
+                  short_payment_link: shortLink,
+                  updated_at: new Date(),
+                });
+            }
+          }
+        } else if (record.order_id) {
+          let order: any = null;
+          if (conn) {
+            order = await conn("order").where({ id: record.order_id }).first();
+          }
+          if (order) {
+            const orderInfo = generateOrderPaymentLink(order, storeUrl);
+            if (orderInfo.paymentLink) {
+              const shortLink = await this.getOrGenerateShortUrl(orderInfo.paymentLink, storeUrl);
+              record.payment_link = orderInfo.paymentLink;
+              record.short_payment_link = shortLink;
+              if (conn) {
+                await conn("document_record")
+                  .where({ id: record.id })
+                  .update({
+                    payment_link: orderInfo.paymentLink,
+                    short_payment_link: shortLink,
+                    updated_at: new Date(),
+                  });
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    const isInvoice = record.type === "invoice";
+    const effectivePayLink = isInvoice ? (record.short_payment_link || record.payment_link || null) : null;
+    const effectiveQrUrl = isInvoice
+      ? (effectivePayLink || record.short_pdf_link || record.pdf_url)
+      : (record.short_pdf_link || record.pdf_url);
 
     // If source is Zoho and zoho_document_id exists, fetch from Zoho API
     if (
@@ -1223,12 +1324,15 @@ export class DocumentModuleService extends MedusaService({
         if (rawBuf && rawBuf.byteLength >= 4) {
           const buf = Buffer.from(rawBuf);
           if (buf.subarray(0, 4).toString() === "%PDF") {
-            return await postProcessPdf(buf, {
-              qrUrl: record.short_payment_link || record.payment_link,
+            const processedBuf = await postProcessPdf(buf, {
+              qrUrl: effectiveQrUrl,
               obscureZohoFooter: true,
-              isInvoice: record.type === "invoice",
-              paymentLink: record.short_payment_link || record.payment_link,
+              isInvoice,
+              paymentLink: effectivePayLink,
+              docType: record.type,
             });
+            pdfBufferCache.set(cacheKey, { buffer: processedBuf, expiresAt: Date.now() + 60000 });
+            return processedBuf;
           }
         }
       } catch (err: any) {
@@ -1279,10 +1383,8 @@ export class DocumentModuleService extends MedusaService({
       total: Number(record.total_amount || 0) || 0,
       currency_code: record.currency_code || "kes",
       payment_status: record.payment_status,
-      payment_link: record.type === "invoice" ? (record.short_payment_link || record.payment_link || null) : null,
-      qr_url: record.type === "invoice"
-        ? (record.short_payment_link || record.payment_link || null)
-        : (record.short_pdf_link || record.pdf_url || `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${record.id}/document`),
+      payment_link: effectivePayLink,
+      qr_url: effectiveQrUrl,
       notes: meta?.notes,
       body_text: meta?.body_text,
       custom_fields: meta?.custom_fields,
@@ -1300,6 +1402,7 @@ export class DocumentModuleService extends MedusaService({
       rawBuffer = await PDFKitGenerator.generate(docData, "modern");
     }
 
+    pdfBufferCache.set(cacheKey, { buffer: rawBuffer, expiresAt: Date.now() + 60000 });
     return rawBuffer;
   }
 
@@ -1329,6 +1432,9 @@ export class DocumentModuleService extends MedusaService({
       if (conn) {
         records = await conn("document_record").where({ repair_ticket_id: repairTicketId }).whereNull("deleted_at");
       }
+    }
+    for (const r of records) {
+      invalidatePdfCache(r.id);
     }
 
     // 2. Resolve ZohoBooksService if credentials exist

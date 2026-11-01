@@ -250,7 +250,7 @@ export default async function repairDocumentsSubscriber({
     }
 
     const trackingUrl = ticket.approval_token ? `${storeUrl}/repairs/track?token=${ticket.approval_token}` : undefined;
-    const paymentOrTrackingLink = docType === "job_card" ? (trackingUrl || paymentInfo.paymentLink) : paymentInfo.paymentLink;
+    const paymentOrTrackingLink = docType === "invoice" ? (paymentInfo.paymentLink || trackingUrl) : undefined;
 
     // Documents plugin solely creates documents and hands them over to repair plugin.
     // All customer notifications are handled exclusively by Meduajs-repair-plugin alone.

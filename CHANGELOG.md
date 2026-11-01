@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.44] - 2026-11-01
+
+### Fix Browser PDF Loading Error and Ensure Visible Invoice Payment Link & QR Code
+- **Browser PDF Loading Reliability**:
+  - Removed Range 206 chunking in `admin` and `public` document routes that caused Chrome's PDF viewer to throw `"Failed to load PDF document"` when dynamic PDF generation resulted in mismatching byte offsets across requests.
+  - Set `Accept-Ranges: none` and serve complete PDF with standard `200 OK` responses.
+  - Added in-memory 60-second TTL PDF buffer cache in `DocumentModuleService` keyed by document ID and timestamp, guaranteeing byte-identical responses on rapid requests and eliminating redundant roundtrips to Zoho Books API.
+- **Invoice Payment Link & QR Stamping**:
+  - Automatically resolve and attach `payment_link` and `short_payment_link` for repair ticket and store order invoices in `generateDocument` and on-the-fly in `getPdfForRecord`.
+  - Restricted payment links strictly to invoices (`isInvoice: true`), ensuring quotes/estimates, receipts, job cards, and certificates continue to use the online document view shortlink for their QR codes.
+  - Display clean, unclipped payment link text (without `https://` prefix) in `pdf-post-processor.ts` fitting comfortably up to 45 characters.
+
 ## [1.1.43] - 2026-11-01
 
 ### Fix Blank Extra Pages, Orphan 1-Line Pages, and Sync-Zoho In-Place Updates

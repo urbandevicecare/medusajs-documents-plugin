@@ -40,6 +40,7 @@ export async function postProcessPdf(
       const lastPage = pages[pages.length - 1];
 
       // 1. Stamp QR Code on bottom right (above the divider line at 51 on the bottom right: y = 56, x = 502)
+      const isInvoice = options.isInvoice === true || options.docType === "invoice";
       if (qrImage) {
         lastPage.drawImage(qrImage, {
           x: 502,
@@ -51,8 +52,7 @@ export async function postProcessPdf(
         // Label under QR code
         try {
           const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-          const isInv = options.isInvoice ?? (Boolean(options.paymentLink) || options.docType === "invoice");
-          const qrLabel = isInv ? "Scan to Pay Online" : options.docType === "receipt" ? "Scan to Verify" : "Scan to View";
+          const qrLabel = isInvoice && options.paymentLink ? "Scan to Pay Online" : options.docType === "receipt" ? "Scan to Verify" : "Scan to View";
           lastPage.drawText(qrLabel, {
             x: 488,
             y: 42,
@@ -63,9 +63,8 @@ export async function postProcessPdf(
         } catch (_) {}
       }
 
-      // 2. For invoices, stamp payment link block to the left of QR code (x = 340..495)
+      // 2. For invoices ONLY, stamp payment link block to the left of QR code (x = 340..495)
       // without overlapping customer notes on the left (x < 320) or totals above (y > 170)
-      const isInvoice = options.isInvoice ?? (Boolean(options.paymentLink) || options.docType === "invoice");
       if (isInvoice && options.paymentLink) {
         try {
           const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -80,10 +79,10 @@ export async function postProcessPdf(
             color: rgb(0.12, 0.16, 0.22),
           });
 
-          // Truncate or fit link within x = 340..495 (max width 155pt)
-          let displayLink = pLink;
-          if (pLink.length > 36) {
-            displayLink = pLink.slice(0, 34) + "…";
+          // Display clean link without protocol (e.g. urbandevicecare.co.uk/r/15wb2j)
+          let displayLink = pLink.replace(/^https?:\/\//i, "");
+          if (displayLink.length > 44) {
+            displayLink = displayLink.slice(0, 42) + "…";
           }
           lastPage.drawText(displayLink, {
             x: 340,

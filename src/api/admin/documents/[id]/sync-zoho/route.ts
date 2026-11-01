@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../../modules/documents";
-import DocumentModuleService from "../../../../../modules/documents/service";
+import DocumentModuleService, { getDatabaseConnection, invalidatePdfCache } from "../../../../../modules/documents/service";
 import { ZohoBooksService } from "../../../../../services/zoho-books";
 import { sanitizePhoneNumber } from "../../../../../utils/phone-sanitizer";
 
@@ -64,9 +64,34 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
     quantity: it.quantity || 1,
   }));
 
-  // Prepare custom notes including payment link if applicable
+  // Prepare custom notes including payment link if applicable (ONLY for invoices)
   let zohoNotes = settings.zoho_invoice_notes || settings.pdf_payment_details || meta.notes || "Thank you for your business.";
-  const pLink = record.short_payment_link || record.payment_link;
+  let pLink = record.type === "invoice" ? (record.short_payment_link || record.payment_link) : null;
+  if (record.type === "invoice" && !pLink) {
+    const storeUrl = (settings.storefront_url || process.env.STORE_URL || "https://urbandevicecare.co.uk").replace(/\/$/, "");
+    if (record.repair_ticket_id) {
+      try {
+        const conn = getDatabaseConnection(req.scope);
+        let ticket: any = null;
+        if (conn) {
+          ticket = await conn("repair_ticket").where({ id: record.repair_ticket_id }).first();
+        }
+        if (ticket?.approval_token) {
+          const rawLink = `${storeUrl}/repairs/track?token=${ticket.approval_token}`;
+          const shortLink = await documentService.getOrGenerateShortUrl(rawLink, storeUrl);
+          pLink = shortLink || rawLink;
+          if (conn) {
+            await conn("document_record").where({ id: record.id }).update({
+              payment_link: rawLink,
+              short_payment_link: shortLink,
+              updated_at: new Date(),
+            });
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
   if (pLink && !zohoNotes.includes("Pay Online:")) {
     zohoNotes += `\n\nPay Online: ${pLink}`;
   }
@@ -130,6 +155,8 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
     source: "zoho",
     zoho_document_id: zohoDocId,
   });
+
+  invalidatePdfCache(record.id);
 
   res.json({
     document: updated,

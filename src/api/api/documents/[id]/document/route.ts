@@ -69,9 +69,15 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${record.display_id}.pdf"`);
+    res.setHeader("Accept-Ranges", "none");
     res.setHeader("Content-Length", String(pdfBuffer.length));
     res.setHeader("Cache-Control", "public, max-age=3600");
-    return res.send(pdfBuffer);
+
+    if (req.method === "HEAD") {
+      return res.status(200).end();
+    }
+
+    return res.status(200).send(pdfBuffer);
   } catch (err: any) {
     try {
       req.scope.resolve("logger", { allowUnregistered: true })?.error?.(`[Documents-API] Error streaming PDF: ${err.message}`);

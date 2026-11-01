@@ -581,7 +581,7 @@ test("Seamless Handover: repair.created generates JOB-xxx job card, sets auto_se
   assert.strictEqual(capturedDocInput.type, "job_card");
   assert.strictEqual(capturedDocInput.display_id, "JOB-777");
   assert.strictEqual(capturedDocInput.auto_send, false, "auto_send must be false to delegate notifications to repair plugin");
-  assert.ok(capturedDocInput.payment_link.includes("/repairs/track?token=tok_track_777"));
+  assert.strictEqual(capturedDocInput.payment_link, undefined, "payment_link must only be created for invoices");
 
   assert.ok(updatedTicketMetadata, "Repair ticket should be updated with handed over metadata");
   assert.strictEqual(updatedTicketMetadata.document_id, "doc_job_01");
