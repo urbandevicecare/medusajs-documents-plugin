@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.34] - 2026-11-01
+## [1.1.35] - 2026-11-01
 
 ### Repair Ticket Linking, Customer Personal Name Preservation, Multi-Page Certificate Support & Dynamic Sizing
 - **Multi-Page Certificate Support & Dynamic Page Numbering**: Configured `bufferPages: true` in `renderCertificateDocument` and added post-render page loop to print official compliance footers with accurate page counts (`Page X of Y`) across every page. Added table header repetition when line item tables break across pages.
