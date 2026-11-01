@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.44] - 2026-11-01
+## [1.1.45] - 2026-11-01
 
 ### Fix Browser PDF Loading Error and Ensure Visible Invoice Payment Link & QR Code
 - **Browser PDF Loading Reliability**:
