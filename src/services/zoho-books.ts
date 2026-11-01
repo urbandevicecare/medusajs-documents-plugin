@@ -167,6 +167,7 @@ export class ZohoBooksService {
   async createInvoice(contactId: string, invoiceData: {
     reference_number?: string;
     invoice_number?: string;
+    ignore_auto_number_generation?: boolean;
     line_items: any[];
     notes?: string;
     terms?: string;
@@ -191,7 +192,12 @@ export class ZohoBooksService {
       payload.custom_fields = invoiceData.custom_fields;
     }
 
-    const endpoint = invoiceData.invoice_number
+    const useIgnoreAuto =
+      invoiceData.ignore_auto_number_generation !== undefined
+        ? invoiceData.ignore_auto_number_generation
+        : Boolean(invoiceData.invoice_number);
+
+    const endpoint = useIgnoreAuto
       ? "/invoices?ignore_auto_number_generation=true"
       : "/invoices";
 
@@ -215,25 +221,52 @@ export class ZohoBooksService {
 
   async getInvoiceByNumber(invoiceNumber: string): Promise<{ invoice_id: string; invoice_number: string } | null> {
     try {
-      const cleanNum = String(invoiceNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-)+/i, "");
-      const candidates = Array.from(new Set([invoiceNumber, `RT-${cleanNum}`, cleanNum].filter(Boolean)));
+      const cleanNum = String(invoiceNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+      const isRepair = /^(JOB-|RT-)/i.test(invoiceNumber);
+      const hasPrefix = /^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)/i.test(invoiceNumber);
+      const candidates = Array.from(
+        new Set(
+          [
+            invoiceNumber,
+            isRepair ? `RT-${cleanNum}` : null,
+            !hasPrefix ? cleanNum : null,
+          ].filter(Boolean) as string[]
+        )
+      );
       for (const num of candidates) {
         const res = await this.request("GET", `/invoices?invoice_number=${encodeURIComponent(num)}`);
         if (res.invoices && res.invoices.length > 0) {
-          const match = res.invoices.find((inv: any) => String(inv.invoice_number).trim().toLowerCase() === String(num).trim().toLowerCase()) || res.invoices[0];
-          return {
-            invoice_id: match.invoice_id,
-            invoice_number: match.invoice_number,
-          };
+          const match =
+            res.invoices.find((inv: any) => String(inv.invoice_number).trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            res.invoices.find((inv: any) => String(inv.reference_number || "").trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            (!hasPrefix && res.invoices.find((inv: any) => {
+              const cleanInv = String(inv.invoice_number || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+              return cleanInv.trim().toLowerCase() === cleanNum.trim().toLowerCase();
+            }));
+          if (match) {
+            return {
+              invoice_id: match.invoice_id,
+              invoice_number: match.invoice_number,
+            };
+          }
         }
       }
       for (const num of candidates) {
         const refRes = await this.request("GET", `/invoices?reference_number=${encodeURIComponent(num)}`);
         if (refRes.invoices && refRes.invoices.length > 0) {
-          return {
-            invoice_id: refRes.invoices[0].invoice_id,
-            invoice_number: refRes.invoices[0].invoice_number,
-          };
+          const match =
+            refRes.invoices.find((inv: any) => String(inv.invoice_number).trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            refRes.invoices.find((inv: any) => String(inv.reference_number || "").trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            (!hasPrefix && refRes.invoices.find((inv: any) => {
+              const cleanInv = String(inv.reference_number || inv.invoice_number || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+              return cleanInv.trim().toLowerCase() === cleanNum.trim().toLowerCase();
+            }));
+          if (match) {
+            return {
+              invoice_id: match.invoice_id,
+              invoice_number: match.invoice_number,
+            };
+          }
         }
       }
       return null;
@@ -305,12 +338,25 @@ export class ZohoBooksService {
 
   async getEstimateByNumber(estimateNumber: string): Promise<{ estimate_id: string; estimate_number: string } | null> {
     try {
-      const cleanNum = String(estimateNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-)+/i, "");
-      const candidates = Array.from(new Set([estimateNumber, `RT-${cleanNum}`, `EST-${cleanNum}`, cleanNum].filter(Boolean)));
+      const cleanNum = String(estimateNumber || "").replace(/^(JOB-|RT-|REC-|RCPT-|EST-|DOC-|INV-|ST-|STORE-)+/i, "");
+      const isRepair = /^(JOB-|RT-|EST-)/i.test(estimateNumber);
+      const candidates = Array.from(
+        new Set(
+          [
+            estimateNumber,
+            isRepair ? `RT-${cleanNum}` : null,
+            isRepair ? `EST-${cleanNum}` : null,
+            cleanNum,
+          ].filter(Boolean) as string[]
+        )
+      );
       for (const num of candidates) {
         const res = await this.request("GET", `/estimates?estimate_number=${encodeURIComponent(num)}`);
         if (res.estimates && res.estimates.length > 0) {
-          const match = res.estimates.find((est: any) => String(est.estimate_number).trim().toLowerCase() === String(num).trim().toLowerCase()) || res.estimates[0];
+          const match =
+            res.estimates.find((est: any) => String(est.estimate_number).trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            res.estimates.find((est: any) => String(est.reference_number || "").trim().toLowerCase() === String(num).trim().toLowerCase()) ||
+            res.estimates[0];
           return {
             estimate_id: match.estimate_id,
             estimate_number: match.estimate_number,

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.24] - 2026-11-01
+
+### Configurable Store Invoice Prefix & Zoho Idempotent Invoicing
+- **Configurable Store Invoice Prefix**: Added `store_invoice_prefix` (defaulting to `ST-`) to `DocumentSettings` model, default settings, and the Admin UI Settings tab.
+- **Store Order Invoice Generation**: Store order tax invoices in `orderDocumentsSubscriber` now generate with `${store_invoice_prefix}${order.display_id || order.id.slice(-6)}` (e.g. `ST-1001`), cleanly separating store orders from workshop (`RT-`) and manual (`INV-`) invoices.
+- **Zoho Books Custom Numbering**: Ensured `ignore_auto_number_generation=true` is appended to Zoho Books endpoint and custom `invoice_number` is populated in payload.
+- **Idempotent Pre-flight Lookup**: Added pre-flight lookup before creating Zoho invoices to reuse existing invoices and prevent duplicates without false cross-prefix matches.
+- **Document Grouping & PDF Normalization**: Extended prefix stripping to cleanly group and render `ST-`, `STORE-`, and `PACK-` references alongside existing prefixes.
+
 ## [1.1.19] - 2026-10-17
 
 ### Localized Currency Normalization & KES Formatting

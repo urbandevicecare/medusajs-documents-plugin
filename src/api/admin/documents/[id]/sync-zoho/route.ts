@@ -65,22 +65,34 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
 
   let zohoDocId: string;
   if (record.type === "estimate") {
-    const est = await zoho.createEstimate(contactId, {
-      reference_number: record.display_id,
-      line_items: items,
-      notes: meta.notes || settings.zoho_invoice_notes,
-    });
-    zohoDocId = est.estimate_id;
+    const existingEst = await zoho.getEstimateByNumber(record.display_id);
+    if (existingEst) {
+      zohoDocId = existingEst.estimate_id;
+    } else {
+      const est = await zoho.createEstimate(contactId, {
+        reference_number: record.display_id,
+        line_items: items,
+        notes: meta.notes || settings.zoho_invoice_notes,
+      });
+      zohoDocId = est.estimate_id;
+    }
   } else {
-    const inv = await zoho.createInvoice(contactId, {
-      reference_number: record.display_id,
-      line_items: items,
-      notes: meta.notes || settings.zoho_invoice_notes,
-      terms: settings.zoho_invoice_terms,
-      payment_terms: settings.zoho_payment_terms_days,
-      is_inclusive_tax: settings.zoho_tax_inclusive,
-    });
-    zohoDocId = inv.invoice_id;
+    const existingInv = await zoho.getInvoiceByNumber(record.display_id);
+    if (existingInv) {
+      zohoDocId = existingInv.invoice_id;
+    } else {
+      const inv = await zoho.createInvoice(contactId, {
+        reference_number: record.display_id,
+        invoice_number: record.display_id,
+        ignore_auto_number_generation: true,
+        line_items: items,
+        notes: meta.notes || settings.zoho_invoice_notes,
+        terms: settings.zoho_invoice_terms,
+        payment_terms: settings.zoho_payment_terms_days,
+        is_inclusive_tax: settings.zoho_tax_inclusive,
+      });
+      zohoDocId = inv.invoice_id;
+    }
   }
 
   const updated = await documentService.updateDocumentRecords({

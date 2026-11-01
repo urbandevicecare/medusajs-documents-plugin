@@ -308,9 +308,12 @@ export default async function orderDocumentsSubscriber({
       } else {
         const paymentInfo = generateOrderPaymentLink(order, storeUrl);
 
+        const storeInvoicePrefix = settings.store_invoice_prefix || "ST-";
+        const formattedInvoiceNumber = `${storeInvoicePrefix}${order.display_id || order.id.slice(-6)}`;
+
         const gen = await documentService.generateDocument(
           {
-            display_id: `INV-${order.display_id || order.id.slice(-6)}`,
+            display_id: formattedInvoiceNumber,
             title: "Tax Invoice",
             type: "invoice",
             order_id: order.id,

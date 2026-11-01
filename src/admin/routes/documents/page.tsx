@@ -194,6 +194,7 @@ export const DocumentsPage = () => {
     zoho_payment_terms_days: 0,
     zoho_tax_inclusive: false,
     zoho_invoice_prefix: "INV-",
+    store_invoice_prefix: "ST-",
 
     // PDF Branding
     pdf_logo_url: "",
@@ -2227,13 +2228,28 @@ export const DocumentsPage = () => {
                   </Text>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-xs font-medium">Invoice Number Prefix</Label>
+                      <Label className="text-xs font-medium">Store Order Invoice Prefix / Tag</Label>
                       <Input
-                        value={settings.zoho_invoice_prefix}
+                        value={settings.store_invoice_prefix || ""}
+                        onChange={(e) => updateSettingField("store_invoice_prefix", e.target.value)}
+                        placeholder="ST-"
+                        size="small"
+                      />
+                      <Text className="text-[11px] text-ui-fg-muted mt-1">
+                        Prefix for store order invoices (e.g. ST-1001) separated from workshop (RT-) and manual (INV-).
+                      </Text>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium">Zoho Manual Invoice Prefix</Label>
+                      <Input
+                        value={settings.zoho_invoice_prefix || ""}
                         onChange={(e) => updateSettingField("zoho_invoice_prefix", e.target.value)}
                         placeholder="INV-"
                         size="small"
                       />
+                      <Text className="text-[11px] text-ui-fg-muted mt-1">
+                        Default prefix for manual or standalone invoices in Zoho Books.
+                      </Text>
                     </div>
                     <div>
                       <Label className="text-xs font-medium">Payment Due Terms (Days)</Label>

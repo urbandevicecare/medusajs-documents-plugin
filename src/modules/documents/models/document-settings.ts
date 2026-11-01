@@ -35,6 +35,7 @@ export const DocumentSettings = model.define("document_settings", {
   zoho_payment_terms_days: model.number().default(0),
   zoho_tax_inclusive: model.boolean().default(false),
   zoho_invoice_prefix: model.text().default("INV-"),
+  store_invoice_prefix: model.text().default("ST-"),
   zoho_include_payment_qr: model.boolean().default(true),
   zoho_custom_field_payment_link: model.text().nullable(),
 

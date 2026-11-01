@@ -50,8 +50,8 @@ export interface DocumentGroup {
 export function extractBaseReference(displayId?: string): string {
   if (!displayId) return "";
   const cleaned = String(displayId).trim();
-  // Strip repeated prefixes like JOB-, RT-, EST-, RCPT-, INV-, PKG-, DOC-
-  const withoutPrefix = cleaned.replace(/^(JOB-|RT-|EST-|RCPT-|INV-|PKG-|DOC-)+/i, "");
+  // Strip repeated prefixes like JOB-, RT-, EST-, RCPT-, INV-, PKG-, PACK-, DOC-, ST-, STORE-
+  const withoutPrefix = cleaned.replace(/^(JOB-|RT-|EST-|RCPT-|INV-|PKG-|PACK-|DOC-|ST-|STORE-)+/i, "");
   return withoutPrefix.trim();
 }
 

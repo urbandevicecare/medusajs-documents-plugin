@@ -179,6 +179,7 @@ export const DEFAULT_DOCUMENT_SETTINGS: Record<string, any> = {
   zoho_payment_terms_days: 0,
   zoho_tax_inclusive: false,
   zoho_invoice_prefix: "INV-",
+  store_invoice_prefix: "ST-",
   zoho_include_payment_qr: true,
   zoho_custom_field_payment_link: null,
   storefront_url: null,
@@ -516,8 +517,10 @@ export class DocumentModuleService extends MedusaService({
     }
 
     // Generate unique display ID if not given
-    const prefix = input.type === "job_card" ? "JOB-" : (settings.zoho_invoice_prefix || "DOC-");
-    let displayId = input.display_id || `${prefix}${Math.floor(100000 + Math.random() * 900000)}`;
+    const defaultPrefix = input.order_id
+      ? (settings.store_invoice_prefix || "ST-")
+      : (input.type === "job_card" ? "JOB-" : (settings.zoho_invoice_prefix || "DOC-"));
+    let displayId = input.display_id || `${defaultPrefix}${Math.floor(100000 + Math.random() * 900000)}`;
     if (displayId.startsWith("JOB-RT-")) {
       displayId = displayId.replace(/^JOB-RT-/, "JOB-");
     } else if (displayId.startsWith("RT-RT-")) {
@@ -589,7 +592,16 @@ export class DocumentModuleService extends MedusaService({
 
         if (input.type === "invoice") {
           let targetInvoiceId: string | null = null;
-          if (input.repair_ticket_id) {
+          if (input.order_id) {
+            const existingDocs = await this.listDocumentRecords({
+              order_id: input.order_id,
+              type: "invoice",
+            }).catch(() => []);
+            const inv = existingDocs.find((d: any) => d.zoho_document_id);
+            if (inv) {
+              targetInvoiceId = inv.zoho_document_id;
+            }
+          } else if (input.repair_ticket_id) {
             const existingDocs = await this.listDocumentRecords({
               repair_ticket_id: input.repair_ticket_id,
               type: "invoice",
@@ -601,11 +613,12 @@ export class DocumentModuleService extends MedusaService({
           }
           if (!targetInvoiceId) {
             let existingInZoho = await zoho.getInvoiceByNumber(displayId);
-            if (!existingInZoho && displayId.startsWith("RT-")) {
-              existingInZoho = await zoho.getInvoiceByNumber(displayId.replace(/^RT-/, ""));
-            }
-            if (!existingInZoho && !displayId.startsWith("RT-")) {
-              existingInZoho = await zoho.getInvoiceByNumber(`RT-${displayId}`);
+            if (!existingInZoho && input.repair_ticket_id) {
+              if (displayId.startsWith("RT-")) {
+                existingInZoho = await zoho.getInvoiceByNumber(displayId.replace(/^RT-/, ""));
+              } else {
+                existingInZoho = await zoho.getInvoiceByNumber(`RT-${displayId}`);
+              }
             }
             if (existingInZoho) {
               targetInvoiceId = existingInZoho.invoice_id;
@@ -616,6 +629,7 @@ export class DocumentModuleService extends MedusaService({
             const res = await zoho.createInvoice(contactId, {
               reference_number: displayId,
               invoice_number: displayId,
+              ignore_auto_number_generation: true,
               line_items: zohoLineItems,
               notes: zohoNotes,
               terms: zohoTerms,
@@ -715,6 +729,7 @@ export class DocumentModuleService extends MedusaService({
             const invRes = await zoho.createInvoice(contactId, {
               reference_number: displayId,
               invoice_number: displayId,
+              ignore_auto_number_generation: true,
               line_items: zohoLineItems,
               notes: zohoNotes,
               terms: zohoTerms,
