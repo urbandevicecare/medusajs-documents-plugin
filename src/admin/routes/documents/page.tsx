@@ -116,6 +116,32 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     ],
   },
   {
+    id: "trade_in",
+    name: "Device Trade-In Agreement",
+    icon: "🔄",
+    badge: "Trade-In & Transfer",
+    title: "Device Trade-In & Buyback Agreement",
+    subject: "Device Trade-In & Buyback Agreement - Urban Device Care",
+    body_text: `This agreement confirms the valuation, transfer of title, and trade-in credit for the listed customer hardware. Customer verifies legal ownership and consents to complete data sanitation and ownership transfer.`,
+    items: [
+      { title: "Trade-In Device Valuation & Credit", description: "Assessed Grade A condition allowance", quantity: 1, unit_price: 25000 },
+      { title: "Data Sanitization & Ownership Transfer", description: "Certified NIST 800-88 cryptographic wipe", quantity: 1, unit_price: 0 },
+    ],
+  },
+  {
+    id: "destruction",
+    name: "Certificate of Destruction & Disposal",
+    icon: "♻️",
+    badge: "Eco & Compliance",
+    title: "Certificate of Destruction & Eco-Disposal",
+    subject: "Certificate of Hardware Destruction & Eco-Disposal",
+    body_text: `This certificate confirms that the decommissioned hardware listed below has been safely demanufactured, shredded, or recycled in full compliance with WEEE and environmental data destruction standards.`,
+    items: [
+      { title: "Hardware Demanufacturing & Shredding", description: "Certified environmental destruction", quantity: 1, unit_price: 0 },
+      { title: "Hazardous Materials Recycling", description: "Zero-landfill lithium battery reclamation", quantity: 1, unit_price: 0 },
+    ],
+  },
+  {
     id: "blank",
     name: "Blank Custom Document",
     icon: "📝",
@@ -138,10 +164,11 @@ export const DocumentsPage = () => {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("invoice");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [zohoLiveDocs, setZohoLiveDocs] = useState<any[]>([]);
   const [loadingZoho, setLoadingZoho] = useState(false);
+  const [isSyncingRepairs, setIsSyncingRepairs] = useState(false);
 
   // Grouping state
   const [groupByJob, setGroupByJob] = useState(true);
@@ -226,6 +253,7 @@ export const DocumentsPage = () => {
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewStyle, setPreviewStyle] = useState("modern");
   const [previewType, setPreviewType] = useState("invoice");
+  const [previewPreset, setPreviewPreset] = useState<string | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [isPreviewModalLoading, setIsPreviewModalLoading] = useState(false);
   const [isGeneratingManual, setIsGeneratingManual] = useState(false);
@@ -474,10 +502,11 @@ export const DocumentsPage = () => {
   };
 
   // Template Preview Logic (Live In-App Modal + Controls)
-  const loadPreviewBlob = async (style: string, type: string) => {
+  const loadPreviewBlob = async (style: string, type: string, preset?: string | null) => {
     setIsPreviewModalLoading(true);
     try {
-      const res = await fetch(`/admin/documents/templates/preview?style=${style}&type=${type}`, {
+      const presetParam = preset ? `&preset=${preset}` : "";
+      const res = await fetch(`/admin/documents/templates/preview?style=${style}&type=${type}${presetParam}`, {
         credentials: "include",
       });
       if (!res.ok) {
@@ -499,33 +528,56 @@ export const DocumentsPage = () => {
     }
   };
 
-  const handlePreviewTemplate = async (style: string, type: string) => {
-    const key = `${style}-${type}`;
+  const handlePreviewTemplate = async (style: string, type: string, preset?: string) => {
+    const key = preset ? `${style}-${type}-${preset}` : `${style}-${type}`;
     setPreviewLoading(key);
     setPreviewStyle(style);
     setPreviewType(type);
+    setPreviewPreset(preset || null);
     setPreviewModalOpen(true);
-    await loadPreviewBlob(style, type);
+    await loadPreviewBlob(style, type, preset);
   };
 
   const switchPreview = async (style: string, type: string) => {
     setPreviewStyle(style);
     setPreviewType(type);
-    await loadPreviewBlob(style, type);
+    await loadPreviewBlob(style, type, previewPreset);
   };
 
   const handleOpenPreviewNewTab = () => {
-    window.open(`/admin/documents/templates/preview?style=${previewStyle}&type=${previewType}`, "_blank");
+    const presetParam = previewPreset ? `&preset=${previewPreset}` : "";
+    window.open(`/admin/documents/templates/preview?style=${previewStyle}&type=${previewType}${presetParam}`, "_blank");
   };
 
   const handleDownloadPreview = () => {
     if (!previewBlobUrl) return;
     const a = document.createElement("a");
     a.href = previewBlobUrl;
-    a.download = `preview-${previewStyle}-${previewType}.pdf`;
+    a.download = `preview-${previewStyle}-${previewPreset || previewType}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleSyncRepairs = async () => {
+    setIsSyncingRepairs(true);
+    try {
+      const res = await fetch("/admin/documents/sync", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        alert(data.message || `Successfully synced ${data.synced_tickets || 0} repairs!`);
+        loadDocuments();
+      } else {
+        alert(`Sync failed: ${data.message || "Unknown error"}`);
+      }
+    } catch (e: any) {
+      alert(`Error syncing repairs: ${e.message}`);
+    } finally {
+      setIsSyncingRepairs(false);
+    }
   };
 
   // View Document PDF (Direct native browser stream without popup blocker restriction)
@@ -697,6 +749,15 @@ export const DocumentsPage = () => {
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="small"
+            onClick={handleSyncRepairs}
+            isLoading={isSyncingRepairs}
+            title="Scan and synchronize all repair tickets and Zoho documents"
+          >
+            <ArrowPath className={`w-4 h-4 mr-1 ${isSyncingRepairs ? "animate-spin" : ""}`} /> Sync Repairs & Zoho
+          </Button>
           <Button variant="secondary" size="small" onClick={() => setManualModalOpen(true)}>
             <Plus className="w-4 h-4 mr-1" /> Create Invoice
           </Button>
@@ -792,8 +853,8 @@ export const DocumentsPage = () => {
                   <Select.Value placeholder="Document Type" />
                 </Select.Trigger>
                 <Select.Content>
-                  <Select.Item value="invoice">Invoices (Default)</Select.Item>
-                  <Select.Item value="all">All Types</Select.Item>
+                  <Select.Item value="all">All Types (Default)</Select.Item>
+                  <Select.Item value="invoice">Invoices</Select.Item>
                   <Select.Item value="receipt">Receipts</Select.Item>
                   <Select.Item value="estimate">Estimates / Quotes</Select.Item>
                   <Select.Item value="job_card">Job Cards</Select.Item>
@@ -1423,203 +1484,531 @@ export const DocumentsPage = () => {
       {/* TAB 2: PDF TEMPLATES SELECTION & PREVIEW                 */}
       {/* ========================================================= */}
       {activeTab === "templates" && (
-        <div className="p-6 max-w-4xl flex flex-col gap-6">
-          <div>
-            <Heading level="h2" className="text-base font-semibold">PDFKit Fallback Templates</Heading>
+        <div className="p-6 max-w-6xl flex flex-col gap-6">
+          <div className="flex flex-col gap-1">
+            <Heading level="h2" className="text-lg font-semibold">Document Templates & Live Previews</Heading>
             <Text className="text-xs text-ui-fg-subtle">
-              Configure different styling templates for each document type when generated locally via PDFKit.
+              Configure styling templates and preview official customer, workshop, and compliance documents. Zoho-backed documents match official Zoho Books layouts; workshop and custom certificates use dedicated professional formats with consistent company headers.
             </Text>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Invoice Template */}
-            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* 1. Tax Invoice */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
               <div>
-                <Label className="font-semibold text-sm">Invoice Template</Label>
-                <Text className="text-xs text-ui-fg-subtle mb-3">Used for standard customer order & repair invoices.</Text>
-                <Select
-                  value={settings.invoice_template || "zoho_exact"}
-                  onValueChange={(v) => updateSettingField("invoice_template", v)}
-                >
-                  <Select.Trigger size="small">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
-                    <Select.Item value="modern">Modern Minimalist</Select.Item>
-                    <Select.Item value="classic">Classic Corporate</Select.Item>
-                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
-                  </Select.Content>
-                </Select>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🧾</span>
+                    <Label className="font-semibold text-sm">Tax Invoice</Label>
+                  </div>
+                  <Badge color="orange" size="small">Zoho Exact</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Official invoice matching Zoho Books layout with itemized parts & labor, balance due highlight, online payment shortlink, QR tracking, and KRA PIN.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.invoice_template || "zoho_exact"}
+                    onValueChange={(v) => updateSettingField("invoice_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="zoho_exact">Zoho Books Exact Format</Select.Item>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Type: invoice</Text>
                 <Button
                   variant="secondary"
                   size="small"
                   onClick={() => handlePreviewTemplate(settings.invoice_template || "zoho_exact", "invoice")}
                   isLoading={previewLoading === `${settings.invoice_template || "zoho_exact"}-invoice`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Invoice Template
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Invoice
                 </Button>
               </div>
             </div>
 
-            {/* Packing Slip Template */}
-            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
+            {/* 2. Repair Estimate / Quotation */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
               <div>
-                <Label className="font-semibold text-sm">Packing Slip Template</Label>
-                <Text className="text-xs text-ui-fg-subtle mb-3">Used for warehouse fulfillment & shipping packing slips.</Text>
-                <Select
-                  value={settings.packing_slip_template || "modern"}
-                  onValueChange={(v) => updateSettingField("packing_slip_template", v)}
-                >
-                  <Select.Trigger size="small">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="modern">Modern Minimalist</Select.Item>
-                    <Select.Item value="classic">Classic Corporate</Select.Item>
-                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
-                  </Select.Content>
-                </Select>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💼</span>
+                    <Label className="font-semibold text-sm">Repair Estimate / Quote</Label>
+                  </div>
+                  <Badge color="orange" size="small">Zoho Exact</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Itemized repair quotation matching Zoho Books with validity period, customer approval links, and workshop labor breakdown.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.estimate_template || "zoho_exact"}
+                    onValueChange={(v) => updateSettingField("estimate_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="zoho_exact">Zoho Books Exact Format</Select.Item>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => handlePreviewTemplate(settings.packing_slip_template || "modern", "packing_slip")}
-                  isLoading={previewLoading === `${settings.packing_slip_template || "modern"}-packing_slip`}
-                >
-                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Packing Slip Template
-                </Button>
-              </div>
-            </div>
-
-            {/* Receipt Template */}
-            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
-              <div>
-                <Label className="font-semibold text-sm">Payment Receipt Template</Label>
-                <Text className="text-xs text-ui-fg-subtle mb-3">Issued when orders or repairs are captured and paid in full.</Text>
-                <Select
-                  value={settings.receipt_template || "zoho_exact"}
-                  onValueChange={(v) => updateSettingField("receipt_template", v)}
-                >
-                  <Select.Trigger size="small">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
-                    <Select.Item value="modern">Modern Minimalist</Select.Item>
-                    <Select.Item value="classic">Classic Corporate</Select.Item>
-                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
-                  </Select.Content>
-                </Select>
-              </div>
-              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => handlePreviewTemplate(settings.receipt_template || "zoho_exact", "receipt")}
-                  isLoading={previewLoading === `${settings.receipt_template || "zoho_exact"}-receipt`}
-                >
-                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Receipt Template
-                </Button>
-              </div>
-            </div>
-
-            {/* Estimate / Quotation Template */}
-            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
-              <div>
-                <Label className="font-semibold text-sm">Estimate / Quotation Template</Label>
-                <Text className="text-xs text-ui-fg-subtle mb-3">Issued for customer repair quotations, diagnostics, and price estimates.</Text>
-                <Select
-                  value={settings.estimate_template || "zoho_exact"}
-                  onValueChange={(v) => updateSettingField("estimate_template", v)}
-                >
-                  <Select.Trigger size="small">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
-                    <Select.Item value="modern">Modern Minimalist</Select.Item>
-                    <Select.Item value="classic">Classic Corporate</Select.Item>
-                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
-                  </Select.Content>
-                </Select>
-              </div>
-              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Type: quote</Text>
                 <Button
                   variant="secondary"
                   size="small"
                   onClick={() => handlePreviewTemplate(settings.estimate_template || "zoho_exact", "estimate")}
                   isLoading={previewLoading === `${settings.estimate_template || "zoho_exact"}-estimate`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Estimate Template
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Estimate
                 </Button>
               </div>
             </div>
 
-            {/* Custom Document Template */}
-            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
+            {/* 3. Payment Receipt */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
               <div>
-                <Label className="font-semibold text-sm">Custom Document Template</Label>
-                <Text className="text-xs text-ui-fg-subtle mb-3">Used for certificates, agreements, and customized memos.</Text>
-                <Select
-                  value={settings.custom_doc_template || "modern"}
-                  onValueChange={(v) => updateSettingField("custom_doc_template", v)}
-                >
-                  <Select.Trigger size="small">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="modern">Modern Minimalist</Select.Item>
-                    <Select.Item value="classic">Classic Corporate</Select.Item>
-                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
-                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
-                  </Select.Content>
-                </Select>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💳</span>
+                    <Label className="font-semibold text-sm">Payment Receipt</Label>
+                  </div>
+                  <Badge color="orange" size="small">Zoho Exact</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Official payment receipt issued upon payment capture with green PAID watermark stamp, payment reference, and receipt details.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.receipt_template || "zoho_exact"}
+                    onValueChange={(v) => updateSettingField("receipt_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="zoho_exact">Zoho Books Exact Format</Select.Item>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Type: receipt</Text>
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom")}
-                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom`}
+                  onClick={() => handlePreviewTemplate(settings.receipt_template || "zoho_exact", "receipt")}
+                  isLoading={previewLoading === `${settings.receipt_template || "zoho_exact"}-receipt`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Custom Doc Template
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Receipt
                 </Button>
               </div>
             </div>
 
-            {/* Repair Job Card Template */}
-            <div className="p-4 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between">
+            {/* 4. Repair Job Card */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
               <div>
-                <Label className="font-semibold text-sm">Repair Job Card Template</Label>
-                <Text className="text-xs text-ui-fg-subtle mb-3">Workshop intake job card with device specs, inspection checklist & technician sign-off.</Text>
-                <Select
-                  value={settings.job_card_template || "standard"}
-                  onValueChange={(v) => updateSettingField("job_card_template", v)}
-                >
-                  <Select.Trigger size="small">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="standard">Workshop Intake Job Card (Standard)</Select.Item>
-                    <Select.Item value="zoho_exact">Zoho Books Exact Layout</Select.Item>
-                    <Select.Item value="modern">Modern Minimalist</Select.Item>
-                    <Select.Item value="classic">Classic Corporate</Select.Item>
-                    <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
-                  </Select.Content>
-                </Select>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">📋</span>
+                    <Label className="font-semibold text-sm">Repair Job Card</Label>
+                  </div>
+                  <Badge color="blue" size="small">Workshop Intake</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Customer intake job card featuring asset specifications, serial/IMEI, intake condition, checklist tasks, and technician sign-off.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.job_card_template || "standard"}
+                    onValueChange={(v) => updateSettingField("job_card_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="standard">Standard Workshop Intake</Select.Item>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-ui-border-base flex justify-end">
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Type: job_card</Text>
                 <Button
                   variant="secondary"
                   size="small"
                   onClick={() => handlePreviewTemplate(settings.job_card_template || "standard", "job_card")}
                   isLoading={previewLoading === `${settings.job_card_template || "standard"}-job_card`}
                 >
-                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Job Card Template
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Job Card
+                </Button>
+              </div>
+            </div>
+
+            {/* 5. Packing Slip */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">📦</span>
+                    <Label className="font-semibold text-sm">Packing Slip</Label>
+                  </div>
+                  <Badge color="purple" size="small">Order Fulfillment</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Used for warehouse fulfillment, package tracking, and shipping dispatch verification with itemized manifest.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.packing_slip_template || "modern"}
+                    onValueChange={(v) => updateSettingField("packing_slip_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Type: packing_slip</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.packing_slip_template || "modern", "packing_slip")}
+                  isLoading={previewLoading === `${settings.packing_slip_template || "modern"}-packing_slip`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Packing Slip
+                </Button>
+              </div>
+            </div>
+
+            {/* 6. Warranty Certificate */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🛡️</span>
+                    <Label className="font-semibold text-sm">Warranty Certificate</Label>
+                  </div>
+                  <Badge color="green" size="small">90-Day Coverage</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Official certificate verifying professional repair with OEM-specification components and 90-day parts and labor coverage.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.custom_doc_template || "modern"}
+                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: warranty</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "warranty")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-warranty`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Certificate
+                </Button>
+              </div>
+            </div>
+
+            {/* 7. Diagnostic & Inspection Report */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🔬</span>
+                    <Label className="font-semibold text-sm">Diagnostic & Inspection</Label>
+                  </div>
+                  <Badge color="purple" size="small">Hardware Findings</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Technical diagnostic report featuring component voltage checks, TrueTone / digitizer measurements, and technician notes.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.custom_doc_template || "modern"}
+                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: diagnostic</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "diagnostic")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-diagnostic`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Report
+                </Button>
+              </div>
+            </div>
+
+            {/* 8. Service Completion Certificate */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">📜</span>
+                    <Label className="font-semibold text-sm">Service Completion</Label>
+                  </div>
+                  <Badge color="green" size="small">QC Cleared</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Certificate verifying that maintenance, repair overhaul, and 100% bench functional test criteria have been passed.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.custom_doc_template || "modern"}
+                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: service_completion</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "service_completion")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-service_completion`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Certificate
+                </Button>
+              </div>
+            </div>
+
+            {/* 9. IT Asset Handover & Release */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🤝</span>
+                    <Label className="font-semibold text-sm">Asset Handover & Custody</Label>
+                  </div>
+                  <Badge color="blue" size="small">Custody Release</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Official physical custody and equipment return agreement acknowledging customer receipt in verified working condition.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.custom_doc_template || "modern"}
+                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: handover</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "handover")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-handover`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Handover
+                </Button>
+              </div>
+            </div>
+
+            {/* 10. Commercial Quotation (Proforma) */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💼</span>
+                    <Label className="font-semibold text-sm">Commercial Proforma Quote</Label>
+                  </div>
+                  <Badge color="orange" size="small">Cost Estimate</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Itemized corporate repair quotation with workshop turnaround estimate, OEM part warranties, and 14-day validity period.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.custom_doc_template || "modern"}
+                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: proforma</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "proforma")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-proforma`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Proforma
+                </Button>
+              </div>
+            </div>
+
+            {/* 11. Device Trade-In Agreement */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🔄</span>
+                    <Label className="font-semibold text-sm">Device Trade-In Agreement</Label>
+                  </div>
+                  <Badge color="green" size="small">Trade-In & Transfer</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Official contract confirming hardware valuation, title handover, and trade-in store credit with verified ownership transfer.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.custom_doc_template || "modern"}
+                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: trade_in</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "trade_in")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-trade_in`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Trade-In
+                </Button>
+              </div>
+            </div>
+
+            {/* 12. Certificate of Destruction & Disposal */}
+            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">♻️</span>
+                    <Label className="font-semibold text-sm">Destruction & Disposal</Label>
+                  </div>
+                  <Badge color="red" size="small">Eco & Compliance</Badge>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle mb-4">
+                  Certificate verifying compliant electronic demanufacturing, physical shredding, and WEEE eco-friendly recycling.
+                </Text>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium">Template Style</Label>
+                  <Select
+                    value={settings.custom_doc_template || "modern"}
+                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
+                  >
+                    <Select.Trigger size="small">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="modern">Modern Minimalist</Select.Item>
+                      <Select.Item value="classic">Classic Corporate</Select.Item>
+                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
+                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: destruction</Text>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "destruction")}
+                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-destruction`}
+                >
+                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Disposal
                 </Button>
               </div>
             </div>

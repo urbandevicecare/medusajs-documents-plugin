@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.27] - 2026-11-01
+
+### Repair Sync, 3-Column Template Gallery & Preset Previews
+- **Repair Ticket & Zoho Books Bi-directional Sync (`/admin/documents/sync`)**: Added dedicated sync endpoint and Admin UI action to reconcile repair tickets with Zoho Books estimates/invoices, backfilling missing job cards, linking pre-existing quotes/invoices, and updating ticket metadata.
+- **Enhanced PDF Templates UI**: Redesigned the Document Templates tab to match `Meduajs-repair-plugin` styling, with a modern 3-column responsive grid (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3`) displaying 12 distinct cards (5 core operational document types + 7 specialized presets: Warranty, Diagnostic Report, Service Completion, Handover Protocol, Proforma Invoice, Trade-In Agreement, Equipment Destruction).
+- **Preset Preview Endpoint**: Extended `/admin/documents/templates/preview` to accept `preset` query parameter, generating realistic contextual mock data and titles for all specialized document presets.
+- **Documents Hub Default Filter**: Updated default document type filter from `"invoice"` to `"all"` so that job cards, estimates, and receipts are immediately accessible upon visiting the hub.
+
 ## [1.1.25] - 2026-11-01
 
 ### Receipt Companion Invoicing & Settings Tag Customization Hardening

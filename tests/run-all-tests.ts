@@ -10,3 +10,4 @@ import "./release-1.1.14.test";
 import "./document-grouping.test";
 import "./release-duplicate-and-zoho-invoicing.test";
 import "./store-order-invoicing.test";
+import "./release-1.1.27.test";
