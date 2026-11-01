@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.29] - 2026-11-01
+## [1.1.30] - 2026-11-01
 
 ### Unauthenticated PDF Document Streaming & Robust Fallback Handling
 - **Unauthenticated PDF Streaming**: Added `export const AUTHENTICATE = false;` to `/admin/documents/:id/document` and template preview routes, and registered matching allowlist middlewares in `src/api/middlewares.ts`. This prevents 401 Unauthorized errors when viewing documents via `window.open` or direct browser links without Bearer authorization headers.

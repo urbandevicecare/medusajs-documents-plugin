@@ -7,14 +7,14 @@ import * as publicDocRoute from "../src/api/documents/[id]/document/route";
 import * as publicPreviewRoute from "../src/api/documents/templates/preview/route";
 import middlewaresConfig from "../src/api/middlewares";
 
-test("Release 1.1.29 - Route files export AUTHENTICATE = false to prevent 401 on browser PDF loading", () => {
+test("Release 1.1.30 - Route files export AUTHENTICATE = false to prevent 401 on browser PDF loading", () => {
   assert.strictEqual(adminDocRoute.AUTHENTICATE, false, "adminDocRoute must export AUTHENTICATE = false");
   assert.strictEqual(adminPreviewRoute.AUTHENTICATE, false, "adminPreviewRoute must export AUTHENTICATE = false");
   assert.strictEqual(publicDocRoute.AUTHENTICATE, false, "publicDocRoute must export AUTHENTICATE = false");
   assert.strictEqual(publicPreviewRoute.AUTHENTICATE, false, "publicPreviewRoute must export AUTHENTICATE = false");
 });
 
-test("Release 1.1.29 - middlewares.ts registers unauthenticated allowlist for admin document & preview endpoints", () => {
+test("Release 1.1.30 - middlewares.ts registers unauthenticated allowlist for admin document & preview endpoints", () => {
   assert.ok(middlewaresConfig, "middlewaresConfig must be defined");
   const routes = (middlewaresConfig as any).routes || [];
   const matchers = routes.map((r: any) => r.matcher);
@@ -22,14 +22,14 @@ test("Release 1.1.29 - middlewares.ts registers unauthenticated allowlist for ad
   assert.ok(matchers.includes("/admin/documents/templates/preview"), "Must include /admin/documents/templates/preview in middlewares");
 });
 
-test("Release 1.1.29 - PDFKitGenerator.formatCurrency handles undefined, null, and NaN amounts without throwing", () => {
+test("Release 1.1.30 - PDFKitGenerator.formatCurrency handles undefined, null, and NaN amounts without throwing", () => {
   assert.ok(PDFKitGenerator.formatCurrency(undefined, "KES").includes("0.00"));
   assert.ok(PDFKitGenerator.formatCurrency(null, "KES").includes("0.00"));
   assert.ok(PDFKitGenerator.formatCurrency(NaN, "KES").includes("0.00"));
   assert.ok(PDFKitGenerator.formatCurrency(3500, "KES").includes("3,500.00"));
 });
 
-test("Release 1.1.29 - PDFKitGenerator generates valid PDF with zero items across all templates", async () => {
+test("Release 1.1.30 - PDFKitGenerator generates valid PDF with zero items across all templates", async () => {
   const emptyData: DocumentData = {
     display_id: "INV-EMPTY-001",
     title: "Empty Document",
@@ -51,7 +51,7 @@ test("Release 1.1.29 - PDFKitGenerator generates valid PDF with zero items acros
   }
 });
 
-test("Release 1.1.29 - PDFKitGenerator generates valid PDF with missing items and incomplete item fields", async () => {
+test("Release 1.1.30 - PDFKitGenerator generates valid PDF with missing items and incomplete item fields", async () => {
   const missingItemsData: any = {
     display_id: "RT-1793466012168-TS9RXZ",
     title: "Repair Invoice",

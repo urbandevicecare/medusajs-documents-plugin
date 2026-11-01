@@ -11,4 +11,4 @@ import "./document-grouping.test";
 import "./release-duplicate-and-zoho-invoicing.test";
 import "./store-order-invoicing.test";
 import "./release-1.1.27.test";
-import "./release-1.1.29.test";
+import "./release-1.1.30.test";
