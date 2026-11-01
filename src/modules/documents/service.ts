@@ -563,6 +563,13 @@ export class DocumentModuleService extends MedusaService({
       shortPaymentLink = await this.getOrGenerateShortUrl(input.payment_link, storeUrl);
     }
 
+    const backendUrl = (process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "");
+    const documentPublicUrl = `${backendUrl}/documents/${displayId}/document`;
+    let shortPdfLink: string | undefined = undefined;
+    try {
+      shortPdfLink = await this.getOrGenerateShortUrl(documentPublicUrl, storeUrl);
+    } catch (_) {}
+
     let source: "zoho" | "pdfkit" = "pdfkit";
     let zohoDocumentId: string | null = null;
     let pdfBuffer: Buffer | null = null;
@@ -726,8 +733,9 @@ export class DocumentModuleService extends MedusaService({
           zohoDocumentId = targetEstId;
           source = "zoho";
           const rawBuffer = await zoho.getDocumentPdf(targetEstId, "estimate");
+          const quoteDocUrl = shortPdfLink || documentPublicUrl;
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
-            qrUrl: shortPaymentLink || input.payment_link,
+            qrUrl: quoteDocUrl,
             obscureZohoFooter: true,
           });
         } else if (input.type === "receipt") {
@@ -822,8 +830,9 @@ export class DocumentModuleService extends MedusaService({
           source = "zoho";
 
           const rawBuffer = await zoho.getPaymentReceiptPdf(paymentId);
+          const receiptDocUrl = shortPdfLink || documentPublicUrl;
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
-            qrUrl: shortPaymentLink || input.payment_link,
+            qrUrl: receiptDocUrl,
             obscureZohoFooter: true,
           });
         }
@@ -876,17 +885,17 @@ export class DocumentModuleService extends MedusaService({
         total: input.total != null ? input.total : 0,
         currency_code: input.currency_code || "kes",
         payment_status: input.payment_status || "unpaid",
-        payment_link: shortPaymentLink || input.payment_link,
-        qr_url: shortPaymentLink || input.payment_link,
+        payment_link: input.type === "invoice" ? (shortPaymentLink || input.payment_link || null) : null,
+        qr_url: input.type === "invoice"
+          ? (shortPaymentLink || input.payment_link || null)
+          : (shortPdfLink || documentPublicUrl),
         notes: input.notes,
         body_text: input.body_text,
         custom_fields: input.custom_fields,
       };
 
       const rawBuffer = await PDFKitGenerator.generate(docData, templateName);
-      pdfBuffer = await postProcessPdf(rawBuffer, {
-        qrUrl: shortPaymentLink || input.payment_link,
-      });
+      pdfBuffer = rawBuffer;
     }
 
     // Save Record to Database (update existing if present for repair ticket to avoid duplicates)
@@ -1052,9 +1061,8 @@ export class DocumentModuleService extends MedusaService({
     }
 
     // Update with real public URL and short URL for document
-    const backendUrl = (process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "");
     const realPdfUrl = `${backendUrl}/documents/${record.id}/document`;
-    const shortPdfLink = await this.getOrGenerateShortUrl(realPdfUrl, storeUrl);
+    shortPdfLink = await this.getOrGenerateShortUrl(realPdfUrl, storeUrl);
 
     try {
       await this.updateDocumentRecords({
@@ -1233,8 +1241,10 @@ export class DocumentModuleService extends MedusaService({
       total: Number(record.total_amount || 0) || 0,
       currency_code: record.currency_code || "kes",
       payment_status: record.payment_status,
-      payment_link: record.short_payment_link || record.payment_link,
-      qr_url: record.short_payment_link || record.payment_link,
+      payment_link: record.type === "invoice" ? (record.short_payment_link || record.payment_link || null) : null,
+      qr_url: record.type === "invoice"
+        ? (record.short_payment_link || record.payment_link || null)
+        : (record.short_pdf_link || record.pdf_url || `${(process.env.MEDUSA_BACKEND_URL || process.env.BACKEND_URL || process.env.MEDUSA_URL || "http://localhost:9000").replace(/\/$/, "")}/documents/${record.id}/document`),
       notes: meta?.notes,
       body_text: meta?.body_text,
       custom_fields: meta?.custom_fields,
@@ -1252,13 +1262,7 @@ export class DocumentModuleService extends MedusaService({
       rawBuffer = await PDFKitGenerator.generate(docData, "modern");
     }
 
-    try {
-      return await postProcessPdf(rawBuffer, {
-        qrUrl: record.short_payment_link || record.payment_link,
-      });
-    } catch (_) {
-      return rawBuffer;
-    }
+    return rawBuffer;
   }
 
   /**

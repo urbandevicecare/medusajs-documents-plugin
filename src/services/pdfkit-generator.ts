@@ -1751,20 +1751,12 @@ export class PDFKitGenerator {
         doc.fontSize(8.5).font("Courier").fillColor("#64748b").text(`ID: #${data.display_id}`, 350, 58, { align: "right" });
         doc.text(`DATE: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 70, { align: "right" });
 
-        // QR Code
-        if (data.qr_url) {
-          try {
-            const qrBuf = await QRCode.toBuffer(data.qr_url, { width: 45, margin: 0 });
-            doc.image(qrBuf, 510, 85, { width: 45, height: 45 });
-          } catch (e) {}
-        }
-
         // 1D Barcode
         if (data.display_id) {
           try {
             const barcodeBuf = await PDFKitGenerator.generateBarcode(String(data.display_id));
             if (barcodeBuf) {
-              doc.image(barcodeBuf, 390, 90, { width: 105, height: 20 });
+              doc.image(barcodeBuf, 445, 88, { width: 110, height: 20 });
             }
           } catch (e) {}
         }
@@ -1836,11 +1828,39 @@ export class PDFKitGenerator {
         doc.text("TOTAL:", 410, sumY, { width: 60, align: "right" });
         doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 485, sumY, { width: 65, align: "right" });
 
+        const isInvoice = data.type === "invoice";
+        const isReceipt = data.type === "receipt";
+
+        let qrBuffer: Buffer | null = null;
+        if (data.qr_url) {
+          try {
+            qrBuffer = await QRCode.toBuffer(data.qr_url, { errorCorrectionLevel: "H", type: "png", margin: 1, width: 45 });
+          } catch (_) {}
+        }
+
+        let noteY = sumY + 22;
+        if (isInvoice && data.payment_link) {
+          doc.font("Courier-Bold").fontSize(8).fillColor("#111827").text(`PAY ONLINE: ${data.payment_link}`, 40, noteY, { width: 440 });
+          noteY += 14;
+        }
+
         if (data.notes) {
-          doc.font("Courier").fontSize(7.5).fillColor("#64748b").text(`NOTE: ${data.notes}`, 40, sumY + 25, { width: 300 });
+          doc.font("Courier").fontSize(7.5).fillColor("#64748b").text(`NOTE: ${data.notes}`, 40, noteY, { width: 440 });
+          noteY += 12;
         }
         if (data.body_text) {
-          doc.font("Courier").fontSize(7.5).fillColor("#64748b").text(data.body_text, 40, sumY + 45, { width: 300 });
+          doc.font("Courier").fontSize(7.5).fillColor("#64748b").text(data.body_text, 40, noteY, { width: 440 });
+        }
+
+        if (qrBuffer) {
+          try {
+            const qrSize = 44;
+            const qrX = 505;
+            const qrY = doc.page.height - 65;
+            doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+            const qrLabel = isInvoice ? "SCAN TO PAY" : isReceipt ? "SCAN TO VERIFY" : "SCAN TO VIEW";
+            doc.fontSize(5).font("Courier-Bold").fillColor("#111827").text(qrLabel, qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+          } catch (_) {}
         }
 
         doc.end();

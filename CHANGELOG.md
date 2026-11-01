@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.37] - 2026-11-01
+
+### Invoice Payment Links, Document QR Codes on Bottom-Right, and Layout Overlap Elimination
+- **Invoice Payment Link Inclusion**: Ensured all invoices consistently display `Pay Online: <payment_link>` in bold in the payment & banking details and render a dedicated payment QR code on the bottom right with a clear "Scan to Pay Online" sub-label.
+- **Non-Payment Document QR Codes**: Configured non-payment documents (Job Cards, Quotes/Estimates, Certificates, IT Asset Handover, Service & Diagnostic Reports) to display the public document/tracking link QR code on the bottom right with appropriate sub-labels ("Scan to Track Repair", "Scan to View Quote", "Scan to Verify Document") and strictly omitted all payment links.
+- **Elimination of Data Overlaps & Conflicting Stamps**:
+  - Removed duplicate header QR codes from Modern, Classic, and Minimal templates so only one QR code appears on the bottom right.
+  - Eliminated duplicate `postProcessPdf` stamping over PDFKit outputs.
+  - Constrained all footer notes, payment instructions, terms, and signature lines to `width: 440pt` (stopping before `x = 485pt`), leaving the bottom-right QR column (`490..555pt`) completely clear.
+- **Preview Endpoints Alignment**: Updated both admin and store template preview endpoints to reflect correct payment links and specific QR codes per document preset.
+
 ## [1.1.35] - 2026-11-01
 
 ### Repair Ticket Linking, Customer Personal Name Preservation, Multi-Page Certificate Support & Dynamic Sizing

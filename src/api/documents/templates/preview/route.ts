@@ -272,8 +272,14 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       total: (isJobCard || isPackingSlip || (isCustom && !activePreset?.items.some((i: any) => i.unit_price > 0))) ? 0 : 24500.0,
       currency_code: "kes",
       payment_status: isReceipt ? "paid" : "unpaid",
-      payment_link: (type === "invoice" || isEstimate) ? "https://urbandevicecare.co.uk/r/sample-preview" : undefined,
-      qr_url: (type === "invoice" || isEstimate || isJobCard) ? "https://urbandevicecare.co.uk/r/sample-preview" : undefined,
+      payment_link: type === "invoice" ? "https://urbandevicecare.co.uk/r/sample-preview-pay" : undefined,
+      qr_url: type === "invoice"
+        ? "https://urbandevicecare.co.uk/r/sample-preview-pay"
+        : isJobCard
+        ? "https://urbandevicecare.co.uk/r/sample-preview-job-card"
+        : isEstimate
+        ? "https://urbandevicecare.co.uk/r/sample-preview-quote"
+        : "https://urbandevicecare.co.uk/r/sample-preview-document",
       notes: isJobCard
         ? "Customer acknowledges device physical intake condition and workshop repair terms."
         : isReceipt
