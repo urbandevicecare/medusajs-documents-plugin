@@ -6,6 +6,7 @@ import { ZohoBooksService } from "../../services/zoho-books";
 import { PDFKitGenerator, DocumentData, LineItem } from "../../services/pdfkit-generator";
 import { postProcessPdf } from "../../services/pdf-post-processor";
 import { NotificationSender } from "../../services/notification-sender";
+import { sanitizePhoneNumber } from "../../utils/phone-sanitizer";
 
 export interface GenerateDocumentInput {
   display_id?: string;
@@ -244,39 +245,44 @@ export class DocumentModuleService extends MedusaService({
    * Applies inherited settings from repair_settings into target document_settings
    */
   private applyInheritedRepairSettings(targetSettings: any, repSettings: any): any {
-    if (!repSettings || !targetSettings) return targetSettings;
-    if (!targetSettings.zoho_client_id && repSettings.zoho_client_id) {
-      targetSettings.zoho_books_enabled = Boolean(repSettings.zoho_books_enabled);
-      targetSettings.zoho_client_id = repSettings.zoho_client_id;
-      targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
-      targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
-      targetSettings.zoho_organization_id = repSettings.zoho_organization_id;
-      targetSettings.zoho_domain = repSettings.zoho_domain || targetSettings.zoho_domain || "com";
-      if (repSettings.zoho_tax_inclusive != null) targetSettings.zoho_tax_inclusive = repSettings.zoho_tax_inclusive;
-      if (repSettings.zoho_invoice_notes && !targetSettings.zoho_invoice_notes) targetSettings.zoho_invoice_notes = repSettings.zoho_invoice_notes;
-      if (repSettings.zoho_invoice_terms && !targetSettings.zoho_invoice_terms) targetSettings.zoho_invoice_terms = repSettings.zoho_invoice_terms;
+    if (!targetSettings) return targetSettings;
+    if (repSettings) {
+      if (!targetSettings.zoho_client_id && repSettings.zoho_client_id) {
+        targetSettings.zoho_books_enabled = Boolean(repSettings.zoho_books_enabled);
+        targetSettings.zoho_client_id = repSettings.zoho_client_id;
+        targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
+        targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
+        targetSettings.zoho_organization_id = repSettings.zoho_organization_id;
+        targetSettings.zoho_domain = repSettings.zoho_domain || targetSettings.zoho_domain || "com";
+        if (repSettings.zoho_tax_inclusive != null) targetSettings.zoho_tax_inclusive = repSettings.zoho_tax_inclusive;
+        if (repSettings.zoho_invoice_notes && !targetSettings.zoho_invoice_notes) targetSettings.zoho_invoice_notes = repSettings.zoho_invoice_notes;
+        if (repSettings.zoho_invoice_terms && !targetSettings.zoho_invoice_terms) targetSettings.zoho_invoice_terms = repSettings.zoho_invoice_terms;
+      }
+      if (!targetSettings.pdf_logo_url && repSettings.pdf_logo_url) targetSettings.pdf_logo_url = repSettings.pdf_logo_url;
+      if (!targetSettings.pdf_address && repSettings.pdf_address) targetSettings.pdf_address = repSettings.pdf_address;
+      if (!targetSettings.pdf_phone && repSettings.pdf_phone) targetSettings.pdf_phone = repSettings.pdf_phone;
+      if (!targetSettings.pdf_email && repSettings.pdf_email) targetSettings.pdf_email = repSettings.pdf_email;
+      if (!targetSettings.pdf_website && repSettings.pdf_website) targetSettings.pdf_website = repSettings.pdf_website;
+      if (!targetSettings.pdf_payment_details && repSettings.pdf_payment_details) targetSettings.pdf_payment_details = repSettings.pdf_payment_details;
+      if (!targetSettings.pdf_terms && repSettings.pdf_terms) targetSettings.pdf_terms = repSettings.pdf_terms;
+      if (!targetSettings.company_name || targetSettings.company_name === "Company Store" || targetSettings.company_name === "Store") {
+        if (repSettings.company_name) targetSettings.company_name = repSettings.company_name;
+      }
+      if (repSettings.invoice_template && (!targetSettings.invoice_template || targetSettings.invoice_template === "modern")) {
+        targetSettings.invoice_template = repSettings.invoice_template;
+      }
+      if (repSettings.estimate_template && (!targetSettings.estimate_template || targetSettings.estimate_template === "modern")) {
+        targetSettings.estimate_template = repSettings.estimate_template;
+      }
+      if (repSettings.receipt_template && (!targetSettings.receipt_template || targetSettings.receipt_template === "modern")) {
+        targetSettings.receipt_template = repSettings.receipt_template;
+      }
+      if (repSettings.job_card_template && (!targetSettings.job_card_template || targetSettings.job_card_template === "modern")) {
+        targetSettings.job_card_template = repSettings.job_card_template;
+      }
     }
-    if (!targetSettings.pdf_logo_url && repSettings.pdf_logo_url) targetSettings.pdf_logo_url = repSettings.pdf_logo_url;
-    if (!targetSettings.pdf_address && repSettings.pdf_address) targetSettings.pdf_address = repSettings.pdf_address;
-    if (!targetSettings.pdf_phone && repSettings.pdf_phone) targetSettings.pdf_phone = repSettings.pdf_phone;
-    if (!targetSettings.pdf_email && repSettings.pdf_email) targetSettings.pdf_email = repSettings.pdf_email;
-    if (!targetSettings.pdf_website && repSettings.pdf_website) targetSettings.pdf_website = repSettings.pdf_website;
-    if (!targetSettings.pdf_payment_details && repSettings.pdf_payment_details) targetSettings.pdf_payment_details = repSettings.pdf_payment_details;
-    if (!targetSettings.pdf_terms && repSettings.pdf_terms) targetSettings.pdf_terms = repSettings.pdf_terms;
-    if (!targetSettings.company_name || targetSettings.company_name === "Company Store" || targetSettings.company_name === "Store") {
-      if (repSettings.company_name) targetSettings.company_name = repSettings.company_name;
-    }
-    if (repSettings.invoice_template && (!targetSettings.invoice_template || targetSettings.invoice_template === "modern")) {
-      targetSettings.invoice_template = repSettings.invoice_template;
-    }
-    if (repSettings.estimate_template && (!targetSettings.estimate_template || targetSettings.estimate_template === "modern")) {
-      targetSettings.estimate_template = repSettings.estimate_template;
-    }
-    if (repSettings.receipt_template && (!targetSettings.receipt_template || targetSettings.receipt_template === "modern")) {
-      targetSettings.receipt_template = repSettings.receipt_template;
-    }
-    if (repSettings.job_card_template && (!targetSettings.job_card_template || targetSettings.job_card_template === "modern")) {
-      targetSettings.job_card_template = repSettings.job_card_template;
+    if (targetSettings.pdf_phone) {
+      targetSettings.pdf_phone = sanitizePhoneNumber(targetSettings.pdf_phone);
     }
     return targetSettings;
   }
@@ -604,18 +610,19 @@ export class DocumentModuleService extends MedusaService({
             contactId = await zoho.syncContact({
               first_name: input.customer.name,
               email: input.customer.email,
-              phone: input.customer.phone,
+              phone: sanitizePhoneNumber(input.customer.phone),
             });
           }
           return contactId || "";
         };
 
         // 2. Prepare Zoho Notes & Terms (including payment link if unpaid)
-        let zohoNotes = input.notes || settings.zoho_invoice_notes || "Thank you for your business.";
-        if (shortPaymentLink) {
-          zohoNotes += `\n\nPay Online: ${shortPaymentLink}`;
+        let zohoNotes = settings.zoho_invoice_notes || settings.pdf_payment_details || input.notes || "Thank you for your business.";
+        const pLink = shortPaymentLink || input.payment_link;
+        if (pLink && !zohoNotes.includes("Pay Online:")) {
+          zohoNotes += `\n\nPay Online: ${pLink}`;
         }
-        const zohoTerms = settings.zoho_invoice_terms || "";
+        const zohoTerms = settings.zoho_invoice_terms || settings.pdf_terms || "";
 
         const zohoLineItems = (input.items || []).map((it) => ({
           name: it.title,
@@ -667,7 +674,20 @@ export class DocumentModuleService extends MedusaService({
             }
           }
 
-          if (!targetInvoiceId) {
+          if (targetInvoiceId) {
+            try {
+              await zoho.updateInvoice(targetInvoiceId, {
+                line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
+                notes: zohoNotes,
+                terms: zohoTerms,
+                custom_fields: customFields.length > 0 ? customFields : undefined,
+              });
+            } catch (err: any) {
+              try {
+                container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[documents-service] Failed to update existing Zoho invoice ${targetInvoiceId}: ${err?.message || err}`);
+              } catch (_) {}
+            }
+          } else {
             const cid = await ensureContactId();
             const res = await zoho.createInvoice(cid, {
               reference_number: displayId,
@@ -690,6 +710,8 @@ export class DocumentModuleService extends MedusaService({
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
             qrUrl: qrUrlToEmbed,
             obscureZohoFooter: true,
+            isInvoice: true,
+            paymentLink: shortPaymentLink || input.payment_link,
           });
         } else if (input.type === "estimate") {
           let targetEstId: string | null = input.zoho_document_id || (repairTicket?.metadata as any)?.zoho_estimate_id || null;
@@ -716,7 +738,20 @@ export class DocumentModuleService extends MedusaService({
             }
           }
 
-          if (!targetEstId) {
+          if (targetEstId) {
+            try {
+              await zoho.updateEstimate(targetEstId, {
+                line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
+                notes: zohoNotes,
+                terms: zohoTerms,
+                custom_fields: customFields.length > 0 ? customFields : undefined,
+              });
+            } catch (err: any) {
+              try {
+                container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[documents-service] Failed to update existing Zoho estimate ${targetEstId}: ${err?.message || err}`);
+              } catch (_) {}
+            }
+          } else {
             const cid = await ensureContactId();
             const res = await zoho.createEstimate(cid, {
               reference_number: displayId,
@@ -737,6 +772,7 @@ export class DocumentModuleService extends MedusaService({
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
             qrUrl: quoteDocUrl,
             obscureZohoFooter: true,
+            isInvoice: false,
           });
         } else if (input.type === "receipt") {
           // Implement Zoho Books payment registration in service.ts for input.type === "receipt" using zoho.registerPayment
@@ -1190,6 +1226,8 @@ export class DocumentModuleService extends MedusaService({
             return await postProcessPdf(buf, {
               qrUrl: record.short_payment_link || record.payment_link,
               obscureZohoFooter: true,
+              isInvoice: record.type === "invoice",
+              paymentLink: record.short_payment_link || record.payment_link,
             });
           }
         }

@@ -6,6 +6,7 @@ import DocumentModuleService, {
   isUndefinedTableError,
   DEFAULT_DOCUMENT_SETTINGS,
 } from "../../../../modules/documents/service";
+import { sanitizePhoneNumber } from "../../../../utils/phone-sanitizer";
 
 // GET /admin/documents/settings
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -89,6 +90,9 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
 
     if (cleanData.zoho_payment_terms_days !== undefined) {
       cleanData.zoho_payment_terms_days = Number(cleanData.zoho_payment_terms_days || 0);
+    }
+    if (cleanData.pdf_phone !== undefined) {
+      cleanData.pdf_phone = sanitizePhoneNumber(cleanData.pdf_phone);
     }
 
     let settings: any = null;

@@ -252,6 +252,50 @@ export class ZohoBooksService {
     };
   }
 
+  async updateInvoice(invoiceId: string, invoiceData: {
+    customer_id?: string;
+    reference_number?: string;
+    invoice_number?: string;
+    line_items?: any[];
+    notes?: string;
+    terms?: string;
+    payment_terms?: number;
+    is_inclusive_tax?: boolean;
+    due_date?: string;
+    custom_fields?: Array<{ label: string; value: string }>;
+  }): Promise<{ invoice_id: string; invoice_number: string }> {
+    const payload: any = {};
+    if (invoiceData.customer_id) payload.customer_id = invoiceData.customer_id;
+    if (invoiceData.reference_number) payload.reference_number = invoiceData.reference_number;
+    if (invoiceData.invoice_number) payload.invoice_number = invoiceData.invoice_number;
+    if (invoiceData.due_date) payload.due_date = invoiceData.due_date;
+    if (invoiceData.payment_terms !== undefined) payload.payment_terms = invoiceData.payment_terms;
+    if (invoiceData.line_items && invoiceData.line_items.length > 0) payload.line_items = invoiceData.line_items;
+    if (invoiceData.notes !== undefined) payload.notes = invoiceData.notes;
+    if (invoiceData.terms !== undefined) payload.terms = invoiceData.terms;
+    if (invoiceData.is_inclusive_tax !== undefined) payload.is_inclusive_tax = invoiceData.is_inclusive_tax;
+    if (invoiceData.custom_fields && invoiceData.custom_fields.length > 0) {
+      payload.custom_fields = invoiceData.custom_fields;
+    }
+
+    let res: any;
+    try {
+      res = await this.request("PUT", `/invoices/${invoiceId}`, payload);
+    } catch (err: any) {
+      if (payload.custom_fields && (err.message?.includes("custom field") || err.message?.includes("120129"))) {
+        delete payload.custom_fields;
+        res = await this.request("PUT", `/invoices/${invoiceId}`, payload);
+      } else {
+        throw err;
+      }
+    }
+
+    return {
+      invoice_id: res?.invoice?.invoice_id || invoiceId,
+      invoice_number: res?.invoice?.invoice_number || invoiceData.invoice_number || "",
+    };
+  }
+
   async getInvoiceByNumber(invoiceNumber: string): Promise<{ invoice_id: string; invoice_number: string } | null> {
     try {
       const cleanNum = String(invoiceNumber || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
@@ -366,6 +410,46 @@ export class ZohoBooksService {
     return {
       estimate_id: res.estimate.estimate_id,
       estimate_number: res.estimate.estimate_number,
+    };
+  }
+
+  async updateEstimate(estimateId: string, estimateData: {
+    customer_id?: string;
+    reference_number?: string;
+    estimate_number?: string;
+    line_items?: any[];
+    notes?: string;
+    terms?: string;
+    is_inclusive_tax?: boolean;
+    custom_fields?: Array<{ label: string; value: string }>;
+  }): Promise<{ estimate_id: string; estimate_number: string }> {
+    const payload: any = {};
+    if (estimateData.customer_id) payload.customer_id = estimateData.customer_id;
+    if (estimateData.reference_number) payload.reference_number = estimateData.reference_number;
+    if (estimateData.estimate_number) payload.estimate_number = estimateData.estimate_number;
+    if (estimateData.line_items && estimateData.line_items.length > 0) payload.line_items = estimateData.line_items;
+    if (estimateData.notes !== undefined) payload.notes = estimateData.notes;
+    if (estimateData.terms !== undefined) payload.terms = estimateData.terms;
+    if (estimateData.is_inclusive_tax !== undefined) payload.is_inclusive_tax = estimateData.is_inclusive_tax;
+    if (estimateData.custom_fields && estimateData.custom_fields.length > 0) {
+      payload.custom_fields = estimateData.custom_fields;
+    }
+
+    let res: any;
+    try {
+      res = await this.request("PUT", `/estimates/${estimateId}`, payload);
+    } catch (err: any) {
+      if (payload.custom_fields && (err.message?.includes("custom field") || err.message?.includes("120129"))) {
+        delete payload.custom_fields;
+        res = await this.request("PUT", `/estimates/${estimateId}`, payload);
+      } else {
+        throw err;
+      }
+    }
+
+    return {
+      estimate_id: res?.estimate?.estimate_id || estimateId,
+      estimate_number: res?.estimate?.estimate_number || estimateData.estimate_number || "",
     };
   }
 

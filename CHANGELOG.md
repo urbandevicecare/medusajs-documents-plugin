@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.40] - 2026-11-01
+
+### Single-Page Layout Safety, Phone Unicode Normalization & Zoho Custom Sync
+- **Elimination of Accidental Extra Blank / 1-Line Pages**:
+  - Identified root cause of accidental 2nd pages: PDFKit default 40pt/25pt bottom margins combined with footers rendered near `doc.page.height - 60..80` caused sub-labels to trigger auto-page breaks.
+  - Set `doc.page.margins.bottom = 0` right before all footers and added `{ lineBreak: false }` across all bottom QR labels, preventing automatic page overflows.
+  - Compacted vertical spacing across `zoho_exact`, `job_card`, `service_report`, `handover`, `certificate`, `modern`, `classic`, and `minimal` templates so all standard documents fit comfortably on a single A4 page.
+  - Fixed unresolved promises in `renderServiceReportDocument` and `renderHandoverReportDocument` where `doc.on("end")` handlers were missing.
+- **Phone Number Invisible Unicode Sanitization**:
+  - Discovered root cause of leading hyphen (`-0720 702 537`): database string contained invisible Unicode Left-to-Right Override control characters `\u202D` and `\u202C` which standard PDFKit Helvetica renders as hyphens.
+  - Created `sanitizePhoneNumber` utility to strip bidi/directional control characters, trim leading hyphens, and normalize formatting across PDFKit generator, documents service, and preview routes.
+  - Cleaned remote database records in `document_settings` and `repair_settings`.
+- **Zoho Books Notes, Existing Document Update & Post-Processing**:
+  - Added `updateInvoice` and `updateEstimate` in `ZohoBooksService` and invoked them during document sync when documents already exist in Zoho.
+  - Formatted Zoho invoice notes to include custom notes and `Pay Online: <link>`.
+  - Stamped payment link and QR code cleanly on Zoho PDFs without obscuring content while obscuring only the Zoho footer badge.
+
 ## [1.1.39] - 2026-11-01
 
 ### Full-Width Responsive Template Cards Layout

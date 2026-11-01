@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
+import { sanitizePhoneNumber } from "../utils/phone-sanitizer";
 
 export interface LineItem {
   title: string;
@@ -180,7 +181,7 @@ export class PDFKitGenerator {
       company_name: data.company?.name || "URBAN DEVICE CARE LTD",
       pdf_logo_url: data.company?.logo_url,
       pdf_address: data.company?.address || "Bekim House, Westlands Crossway Road\nNairobi 00800, Kenya",
-      pdf_phone: data.company?.phone || "0729436660 / 0794700241",
+      pdf_phone: sanitizePhoneNumber(data.company?.phone) || "0729 436 660 / 0794 700 241",
       pdf_email: data.company?.email || "info@urbandevicecare.co.uk",
       pdf_website: data.company?.website || "www.urbandevicecare.co.uk",
       pdf_payment_details: data.company?.payment_details,
@@ -212,82 +213,82 @@ export class PDFKitGenerator {
     const leftX = 45;
     const rightX = 330;
     const rightW = 220;
-    let topY = 40;
+    let topY = 32;
 
     // 1. Logo or Brand Name on Top-Left
     if (logoBuffer) {
       try {
-        doc.image(logoBuffer, leftX, topY, { fit: [155, 54] });
+        doc.image(logoBuffer, leftX, topY, { fit: [145, 46] });
       } catch (e) {
-        doc.fontSize(16).font("Helvetica-Bold").fillColor("#111827").text(settings?.company_name || "URBAN DEVICE CARE LTD", leftX, topY);
+        doc.fontSize(15).font("Helvetica-Bold").fillColor("#111827").text(settings?.company_name || "URBAN DEVICE CARE LTD", leftX, topY);
       }
     } else {
-      doc.fontSize(16).font("Helvetica-Bold").fillColor("#111827").text(settings?.company_name || "URBAN DEVICE CARE LTD", leftX, topY);
+      doc.fontSize(15).font("Helvetica-Bold").fillColor("#111827").text(settings?.company_name || "URBAN DEVICE CARE LTD", leftX, topY);
     }
 
     // 2. Company Details below Logo
-    let detailsY = topY + 58;
-    doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#111827").text((settings?.company_name || "Urban Device Care Ltd").toUpperCase(), leftX, detailsY);
-    detailsY += 12;
+    let detailsY = topY + 50;
+    doc.fontSize(8).font("Helvetica-Bold").fillColor("#111827").text((settings?.company_name || "Urban Device Care Ltd").toUpperCase(), leftX, detailsY);
+    detailsY += 11;
 
-    doc.fontSize(8).font("Helvetica").fillColor("#4b5563");
+    doc.fontSize(7.5).font("Helvetica").fillColor("#4b5563");
     const address = settings?.pdf_address || "Bekim House, Westlands Crossway Road\nNairobi 00800, Kenya";
     doc.text(address, leftX, detailsY, { width: 230 });
-    detailsY += doc.heightOfString(address, { width: 230 }) + 2;
+    detailsY += doc.heightOfString(address, { width: 230 }) + 1;
 
-    const phone = settings?.pdf_phone || "0729436660 / 0794700241";
+    const phone = sanitizePhoneNumber(settings?.pdf_phone || "0729 436 660 / 0794 700 241");
     doc.text(`Tel: ${phone}`, leftX, detailsY);
-    detailsY += 11;
+    detailsY += 9.5;
 
     const email = settings?.pdf_email || "info@urbandevicecare.co.uk";
     doc.text(`Email: ${email}`, leftX, detailsY);
-    detailsY += 11;
+    detailsY += 9.5;
 
     if (settings?.pdf_website) {
       doc.text(`Web: ${settings.pdf_website}`, leftX, detailsY);
-      detailsY += 11;
+      detailsY += 9.5;
     }
 
     const kraPin = settings?.kra_pin || "P052534849N";
     doc.font("Helvetica-Bold").fillColor("#111827").text(`KRA PIN: ${kraPin}`, leftX, detailsY);
-    detailsY += 14;
+    detailsY += 12;
 
     // 3. Right Header Block (Document title, number, date, badges)
     let rightY = topY;
     if (titleConfig.subtitle) {
-      doc.fontSize(10).font("Helvetica-Bold").fillColor("#6b7280").text(titleConfig.subtitle, rightX, rightY, { width: rightW, align: "right" });
-      rightY += 13;
+      doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#6b7280").text(titleConfig.subtitle, rightX, rightY, { width: rightW, align: "right" });
+      rightY += 12;
     }
 
-    const titleFontSize = titleConfig.title.length > 25 ? 13 : titleConfig.title.length > 16 ? 15 : 20;
+    const titleFontSize = titleConfig.title.length > 25 ? 12 : titleConfig.title.length > 16 ? 14 : 18;
     doc.fontSize(titleFontSize).font("Helvetica-Bold").fillColor("#111827");
     const titleHeight = doc.heightOfString(titleConfig.title, { width: rightW });
     doc.text(titleConfig.title, rightX, rightY, { width: rightW, align: "right" });
-    rightY += titleHeight + 4;
+    rightY += titleHeight + 3;
 
     if (titleConfig.docNumber) {
-      doc.fontSize(9).font("Helvetica-Bold").fillColor("#374151").text(titleConfig.docNumber, rightX, rightY, { width: rightW, align: "right" });
-      rightY += 13;
+      doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#374151").text(titleConfig.docNumber, rightX, rightY, { width: rightW, align: "right" });
+      rightY += 12;
     }
 
     if (titleConfig.badgeText) {
-      doc.fontSize(10).font("Helvetica-Bold").fillColor(titleConfig.badgeColor || "#dc2626").text(titleConfig.badgeText, rightX, rightY, { width: rightW, align: "right" });
-      rightY += 14;
-    }
-
-    if (titleConfig.amountLabel && titleConfig.amountValue) {
-      doc.fontSize(8.5).font("Helvetica").fillColor("#6b7280").text(titleConfig.amountLabel, rightX, rightY, { width: rightW, align: "right" });
-      rightY += 11;
-      doc.fontSize(13.5).font("Helvetica-Bold").fillColor(titleConfig.amountColor || "#111827").text(titleConfig.amountValue, rightX, rightY, { width: rightW, align: "right" });
-      rightY += 18;
-    }
-
-    if (titleConfig.dateLabel && titleConfig.dateValue) {
-      doc.fontSize(8.5).font("Helvetica").fillColor("#4b5563").text(`${titleConfig.dateLabel}:  ${titleConfig.dateValue}`, rightX, rightY, { width: rightW, align: "right" });
+      doc.fontSize(9.5).font("Helvetica-Bold").fillColor(titleConfig.badgeColor || "#dc2626").text(titleConfig.badgeText, rightX, rightY, { width: rightW, align: "right" });
       rightY += 13;
     }
 
-    return Math.max(detailsY, rightY) + 10;
+    if (titleConfig.amountLabel && titleConfig.amountValue) {
+      doc.fontSize(8).font("Helvetica").fillColor("#6b7280").text(titleConfig.amountLabel, rightX, rightY, { width: rightW, align: "right" });
+      rightY += 10;
+      doc.fontSize(12.5).font("Helvetica-Bold").fillColor(titleConfig.amountColor || "#111827").text(titleConfig.amountValue, rightX, rightY, { width: rightW, align: "right" });
+      rightY += 16;
+    }
+
+    if (titleConfig.dateLabel && titleConfig.dateValue) {
+      doc.fontSize(8).font("Helvetica").fillColor("#4b5563").text(`${titleConfig.dateLabel}:  ${titleConfig.dateValue}`, rightX, rightY, { width: rightW, align: "right" });
+      rightY += 12;
+    }
+
+    return Math.max(detailsY, rightY) + 6;
   }
 
   // ---------------------------------------------------------------------------------
@@ -297,7 +298,7 @@ export class PDFKitGenerator {
     return new Promise(async (resolve, reject) => {
       try {
         const doc = new PDFDocument({
-          margins: { top: 35, bottom: 25, left: 45, right: 45 },
+          margins: { top: 30, bottom: 20, left: 45, right: 45 },
           size: "A4",
         });
         const buffers: Buffer[] = [];
@@ -355,18 +356,18 @@ export class PDFKitGenerator {
         // Thin separator
         let currentY = nextY;
         doc.rect(45, currentY, 505, 1).fill("#e5e7eb");
-        currentY += 12;
+        currentY += 8;
 
         // Bill To & Meta Data
         const metaY = currentY;
         doc.fontSize(8).font("Helvetica-Bold").fillColor("#9ca3af").text(isReceipt ? "PAID BY" : "BILL TO", 45, metaY);
-        doc.fontSize(10).font("Helvetica-Bold").fillColor("#111827").text(customerName || "Customer", 45, metaY + 11);
+        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#111827").text(customerName || "Customer", 45, metaY + 10);
 
-        let cY = metaY + 24;
-        doc.fontSize(8.5).font("Helvetica").fillColor("#4b5563");
-        if (data.customer?.email) { doc.text(data.customer.email, 45, cY); cY += 11; }
-        if (data.customer?.phone) { doc.text(data.customer.phone, 45, cY); cY += 11; }
-        if (data.customer?.address) { doc.text(data.customer.address, 45, cY); cY += 11; }
+        let cY = metaY + 21;
+        doc.fontSize(8).font("Helvetica").fillColor("#4b5563");
+        if (data.customer?.email) { doc.text(data.customer.email, 45, cY); cY += 9.5; }
+        if (data.customer?.phone) { doc.text(sanitizePhoneNumber(data.customer.phone), 45, cY); cY += 9.5; }
+        if (data.customer?.address) { doc.text(data.customer.address, 45, cY); cY += 9.5; }
 
         // Right Meta
         const rightMetaX = 330;
@@ -374,41 +375,41 @@ export class PDFKitGenerator {
         let rmY = metaY;
 
         const addMetaRow = (label: string, value: string) => {
-          doc.fontSize(8.5).font("Helvetica").fillColor("#6b7280").text(label, rightMetaX, rmY, { width: 90, align: "left" });
-          doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#111827").text(value, rightMetaX + 90, rmY, { width: rightMetaW - 90, align: "right" });
-          rmY += 14;
+          doc.fontSize(8).font("Helvetica").fillColor("#6b7280").text(label, rightMetaX, rmY, { width: 90, align: "left" });
+          doc.fontSize(8).font("Helvetica-Bold").fillColor("#111827").text(value, rightMetaX + 90, rmY, { width: rightMetaW - 90, align: "right" });
+          rmY += 12;
         };
 
         addMetaRow("Reference No :", data.display_id);
         addMetaRow(isReceipt ? "Payment Date :" : isInvoice ? "Invoice Date :" : "Estimate Date :", PDFKitGenerator.formatDate(data.date));
         addMetaRow("Terms :", isReceipt ? "Paid in Full" : isInvoice ? "Due on Receipt" : "Valid for 14 Days");
 
-        currentY = Math.max(cY, rmY) + 16;
+        currentY = Math.max(cY, rmY) + 10;
 
         // Table Header
-        doc.rect(45, currentY, 505, 20).fill("#374151");
-        doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8.5);
+        doc.rect(45, currentY, 505, 18).fill("#374151");
+        doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
         doc.text("#", 50, currentY + 5, { width: 25 });
         doc.text("Description", 78, currentY + 5, { width: 255 });
         doc.text("Qty", 335, currentY + 5, { width: 35, align: "center" });
         doc.text("Rate", 375, currentY + 5, { width: 70, align: "right" });
         doc.text("Amount", 455, currentY + 5, { width: 90, align: "right" });
 
-        currentY += 26;
+        currentY += 22;
 
         // Items
-        doc.fillColor("#111827").font("Helvetica").fontSize(8.5);
+        doc.fillColor("#111827").font("Helvetica").fontSize(8);
         let idx = 1;
         const items = data.items || [];
         if (items.length === 0) {
-          doc.font("Helvetica-Oblique").fillColor("#9ca3af").fontSize(8.5).text("No itemized charges listed", 78, currentY, { width: 255 });
-          currentY += 20;
-          doc.rect(45, currentY - 3, 505, 0.5).fill("#f3f4f6");
+          doc.font("Helvetica-Oblique").fillColor("#9ca3af").fontSize(8).text("No itemized charges listed", 78, currentY, { width: 255 });
+          currentY += 18;
+          doc.rect(45, currentY - 2, 505, 0.5).fill("#f3f4f6");
         } else {
           for (const item of items) {
-            if (currentY > doc.page.height - 130) {
+            if (currentY > doc.page.height - 110) {
               doc.addPage();
-              currentY = 45;
+              currentY = 40;
             }
 
             const itemTitle = item?.title ? String(item.title) : "Item";
@@ -419,25 +420,25 @@ export class PDFKitGenerator {
             let descH = 0;
             if (item?.description) {
               const itemDesc = String(item.description);
-              doc.font("Helvetica").fillColor("#6b7280").fontSize(7.5).text(itemDesc, 78, currentY + titleH + 2, { width: 255 });
-              descH = doc.heightOfString(itemDesc, { width: 255 }) + 2;
+              doc.font("Helvetica").fillColor("#6b7280").fontSize(7).text(itemDesc, 78, currentY + titleH + 1, { width: 255 });
+              descH = doc.heightOfString(itemDesc, { width: 255 }) + 1;
             }
 
             const unitP = Number(item?.unit_price || 0);
             const totalP = Number(item?.total != null ? item.total : unitP * Number(item?.quantity || 1));
 
-            doc.font("Helvetica").fillColor("#111827").fontSize(8.5);
+            doc.font("Helvetica").fillColor("#111827").fontSize(8);
             doc.text(Number(item?.quantity || 1).toFixed(2), 335, currentY, { width: 35, align: "center" });
             doc.text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unitP), 375, currentY, { width: 70, align: "right" });
             doc.text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP), 455, currentY, { width: 90, align: "right" });
 
-            currentY += Math.max(16, titleH + descH + 4);
-            doc.rect(45, currentY - 3, 505, 0.5).fill("#f3f4f6");
+            currentY += Math.max(14, titleH + descH + 2);
+            doc.rect(45, currentY - 2, 505, 0.5).fill("#f3f4f6");
             idx++;
           }
         }
 
-        currentY += 8;
+        currentY += 6;
 
         // Summary Table
         const sumW = 220;
@@ -445,12 +446,12 @@ export class PDFKitGenerator {
 
         const addSummaryRow = (label: string, value: string, isBold: boolean = false, isBg: boolean = false, valColor: string = "#111827") => {
           if (isBg) {
-            doc.rect(sumX - 10, currentY - 3, sumW + 10, 20).fill("#f3f4f6");
+            doc.rect(sumX - 10, currentY - 2, sumW + 10, 17).fill("#f3f4f6");
           }
-          doc.font(isBold ? "Helvetica-Bold" : "Helvetica").fillColor("#4b5563").fontSize(8.5);
+          doc.font(isBold ? "Helvetica-Bold" : "Helvetica").fillColor("#4b5563").fontSize(8);
           doc.text(label, sumX, currentY + 1, { width: 100, align: "left" });
           doc.font(isBold ? "Helvetica-Bold" : "Helvetica").fillColor(valColor).text(value, sumX + 100, currentY + 1, { width: sumW - 100, align: "right" });
-          currentY += 18;
+          currentY += 15;
         };
 
         const fmtTot = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totals.totalEstimate);
@@ -465,11 +466,11 @@ export class PDFKitGenerator {
 
         // Terms and conditions
         if (settings?.pdf_terms) {
-          currentY += 16;
-          if (currentY > doc.page.height - 110) { doc.addPage(); currentY = 45; }
-          doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#111827").text("Terms & Conditions", 45, currentY);
-          currentY += 11;
-          doc.fontSize(7.5).font("Helvetica").fillColor("#6b7280").text(settings.pdf_terms, 45, currentY, { width: 505 });
+          currentY += 10;
+          if (currentY > doc.page.height - 95) { doc.addPage(); currentY = 40; }
+          doc.fontSize(8).font("Helvetica-Bold").fillColor("#111827").text("Terms & Conditions", 45, currentY);
+          currentY += 9;
+          doc.fontSize(7).font("Helvetica").fillColor("#6b7280").text(settings.pdf_terms, 45, currentY, { width: 505, lineGap: 1.5 });
         }
 
         // Watermark
@@ -500,10 +501,10 @@ export class PDFKitGenerator {
 
         // Footer
         doc.page.margins.bottom = 0;
-        const footerDividerY = doc.page.height - 75;
+        const footerDividerY = doc.page.height - 66;
         doc.rect(45, footerDividerY, 505, 0.5).fill("#e5e7eb");
 
-        const footerY = footerDividerY + 8;
+        const footerY = footerDividerY + 6;
         const paymentLinkText = isInvoice && data.payment_link ? `Pay Online: ${data.payment_link}\n` : "";
         const payInstructions = isInvoice
           ? (settings?.pdf_payment_details ? settings.pdf_payment_details.replace(/\n/g, " | ") : "Paybill: 880100 - Acc: PAYURBANDEVICE")
@@ -515,20 +516,20 @@ export class PDFKitGenerator {
         if (paymentLinkText) {
           doc.text(paymentLinkText, 45, footerY, { width: 440, lineBreak: false });
         }
-        const payInstrY = footerY + (paymentLinkText ? 11 : 0);
+        const payInstrY = footerY + (paymentLinkText ? 10 : 0);
         doc.fontSize(7).font("Helvetica").fillColor("#4b5563").text(payInstructions, 45, payInstrY, { width: 440, lineBreak: false });
 
-        doc.fontSize(7).font("Helvetica").fillColor("#9ca3af");
-        doc.text(`POWERED BY ${(settings?.company_name || "URBAN DEVICE CARE LTD").toUpperCase()}  •  #${data.display_id}`, 45, footerDividerY + 54, { width: 440, lineBreak: false });
+        doc.fontSize(6.5).font("Helvetica").fillColor("#9ca3af");
+        doc.text(`POWERED BY ${(settings?.company_name || "URBAN DEVICE CARE LTD").toUpperCase()}  •  #${data.display_id}`, 45, footerDividerY + 48, { width: 440, lineBreak: false });
 
         if (qrBuffer) {
           try {
-            const qrSize = 48;
+            const qrSize = 42;
             const qrX = 502;
-            const qrY = footerDividerY + 6;
+            const qrY = footerDividerY + 4;
             doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
             const qrLabel = isInvoice ? "Scan to Pay Online" : isReceipt ? "Scan to Verify" : "Scan to View Quote";
-            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text(qrLabel, qrX - 8, qrY + qrSize + 2, { width: qrSize + 16, align: "center" });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text(qrLabel, qrX - 8, qrY + qrSize + 1, { width: qrSize + 16, align: "center", lineBreak: false });
           } catch (e) {}
         }
 
@@ -546,7 +547,7 @@ export class PDFKitGenerator {
     return new Promise(async (resolve, reject) => {
       try {
         const doc = new PDFDocument({
-          margins: { top: 35, bottom: 25, left: 45, right: 45 },
+          margins: { top: 30, bottom: 20, left: 45, right: 45 },
           size: "A4",
         });
         const buffers: Buffer[] = [];
@@ -581,11 +582,11 @@ export class PDFKitGenerator {
 
         let currentY = nextY;
         doc.rect(45, currentY, 505, 1).fill("#e2e8f0");
-        currentY += 15;
+        currentY += 10;
 
         // SECTION 1: CLIENT & ASSET DETAILS
-        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0f172a").text("CLIENT & ASSET DETAILS", 45, currentY);
-        currentY += 14;
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#0f172a").text("CLIENT & ASSET DETAILS", 45, currentY);
+        currentY += 12;
 
         const col1X = 45;
         const col2X = 300;
@@ -594,90 +595,96 @@ export class PDFKitGenerator {
         // Left Column
         let leftY = boxTop;
         const drawField = (label: string, value: string, xPos: number, yPos: number, isRight: boolean = false) => {
-          doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#334155").text(`${label}:`, xPos, yPos);
+          doc.fontSize(8).font("Helvetica-Bold").fillColor("#334155").text(`${label}:`, xPos, yPos);
           doc.font("Helvetica").fillColor("#0f172a").text(value || "N/A", xPos + (isRight ? 95 : 85), yPos, { width: isRight ? 150 : 160 });
         };
 
-        drawField("Client Name", customerName, col1X, leftY); leftY += 15;
-        drawField("Phone", data.customer?.phone || "N/A", col1X, leftY); leftY += 15;
-        drawField("Email", data.customer?.email || "N/A", col1X, leftY); leftY += 15;
+        drawField("Client Name", customerName, col1X, leftY); leftY += 13;
+        drawField("Phone", sanitizePhoneNumber(data.customer?.phone) || "N/A", col1X, leftY); leftY += 13;
+        drawField("Email", data.customer?.email || "N/A", col1X, leftY); leftY += 13;
 
         // Right Column
         let rightY = boxTop;
         const brandModel = `${ticket.device?.brand || ""} ${ticket.device?.model_name || "General Device"}`.trim();
-        drawField("Item / Asset", brandModel, col2X, rightY, true); rightY += 15;
-        drawField("Serial/Model", ticket.device?.serial_number || "N/A", col2X, rightY, true); rightY += 15;
-        drawField("Status", String(ticket.status || "In Progress").replace(/_/g, " ").toUpperCase(), col2X, rightY, true); rightY += 15;
-        drawField("Accessories", ticket.accessories || "None", col2X, rightY, true); rightY += 15;
+        drawField("Item / Asset", brandModel, col2X, rightY, true); rightY += 13;
+        drawField("Serial/Model", ticket.device?.serial_number || "N/A", col2X, rightY, true); rightY += 13;
+        drawField("Status", String(ticket.status || "In Progress").replace(/_/g, " ").toUpperCase(), col2X, rightY, true); rightY += 13;
+        drawField("Accessories", ticket.accessories || "None", col2X, rightY, true); rightY += 13;
 
-        currentY = Math.max(leftY, rightY) + 12;
+        currentY = Math.max(leftY, rightY) + 8;
 
         // SECTION 2: JOB DESCRIPTION & DIAGNOSTICS
         doc.rect(45, currentY, 505, 0.5).fill("#e2e8f0");
-        currentY += 10;
-        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0f172a").text("JOB DESCRIPTION & DIAGNOSTICS", 45, currentY);
-        currentY += 14;
+        currentY += 8;
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#0f172a").text("JOB DESCRIPTION & DIAGNOSTICS", 45, currentY);
+        currentY += 12;
 
-        doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#334155").text("Reported Issue:", 45, currentY);
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#334155").text("Reported Issue:", 45, currentY);
         doc.font("Helvetica").fillColor("#0f172a").text(ticket.issue_description || "Customer reported hardware failure / service required.", 140, currentY, { width: 410 });
-        currentY += doc.heightOfString(ticket.issue_description || "Customer reported hardware failure.", { width: 410 }) + 8;
+        currentY += doc.heightOfString(ticket.issue_description || "Customer reported hardware failure.", { width: 410 }) + 6;
 
         if (ticket.device?.condition) {
-          doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#334155").text("Intake Condition:", 45, currentY);
+          doc.fontSize(8).font("Helvetica-Bold").fillColor("#334155").text("Intake Condition:", 45, currentY);
           doc.font("Helvetica").fillColor("#0f172a").text(ticket.device.condition, 140, currentY, { width: 410 });
-          currentY += doc.heightOfString(ticket.device.condition, { width: 410 }) + 10;
+          currentY += doc.heightOfString(ticket.device.condition, { width: 410 }) + 6;
         }
 
         // SECTION 3: SERVICE WORK & PARTS
         doc.rect(45, currentY, 505, 0.5).fill("#e2e8f0");
-        currentY += 10;
-        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0f172a").text("SERVICE WORK & PARTS", 45, currentY);
-        currentY += 14;
+        currentY += 8;
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#0f172a").text("SERVICE WORK & PARTS", 45, currentY);
+        currentY += 12;
 
         doc.rect(45, currentY, 505, 1.5).fill("#334155");
         currentY += 4;
-        doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(8.5);
+        doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(8);
         doc.text("Task / Service / Part Description", 48, currentY, { width: 440 });
         doc.text("Qty", 495, currentY, { width: 50, align: "center" });
-        currentY += 14;
+        currentY += 12;
         doc.rect(45, currentY, 505, 0.5).fill("#94a3b8");
-        currentY += 6;
+        currentY += 4;
 
         const items = data.items || [];
         if (items.length === 0) {
-          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8.5).text("No itemized intake tasks listed", 48, currentY, { width: 440 });
-          currentY += 20;
-          doc.rect(45, currentY - 3, 505, 0.5).fill("#f1f5f9");
+          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8).text("No itemized intake tasks listed", 48, currentY, { width: 440 });
+          currentY += 16;
+          doc.rect(45, currentY - 2, 505, 0.5).fill("#f1f5f9");
         } else {
           for (const item of items) {
-            if (currentY > doc.page.height - 120) {
+            if (currentY > doc.page.height - 110) {
               doc.addPage();
-              currentY = 50;
+              currentY = 40;
             }
 
             const itemTitle = item?.title ? String(item.title) : "Intake Item";
 
-            doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5);
+            doc.font("Helvetica").fillColor("#0f172a").fontSize(8);
             doc.text(itemTitle, 48, currentY, { width: 440 });
             doc.text(Number(item?.quantity || 1).toString(), 495, currentY, { width: 50, align: "center" });
             const titleH = doc.heightOfString(itemTitle, { width: 440 });
-            const rowH = Math.max(16, titleH + 4);
+            const rowH = Math.max(13, titleH + 2);
             currentY += rowH;
-            doc.rect(45, currentY - 3, 505, 0.5).fill("#f1f5f9");
+            doc.rect(45, currentY - 2, 505, 0.5).fill("#f1f5f9");
           }
         }
 
-        currentY += 10;
+        currentY += 8;
 
         // SECTION 4: DUAL SIGNATURES
-        if (currentY > doc.page.height - 135) { doc.addPage(); currentY = 50; }
-        const sigY = currentY + 25;
+        const minSigSpace = 55;
+        if (currentY + minSigSpace > doc.page.height - 50) {
+          doc.addPage();
+          currentY = 45;
+        } else {
+          currentY = Math.max(currentY + 10, doc.page.height - 100);
+        }
+        const sigY = currentY + 15;
         doc.rect(45, sigY, 190, 0.75).fill("#0f172a");
         doc.rect(265, sigY, 190, 0.75).fill("#0f172a");
 
-        doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#0f172a");
-        doc.text("Technician Signature", 45, sigY + 5);
-        doc.text("Customer Signature", 265, sigY + 5);
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#0f172a");
+        doc.text("Technician Signature", 45, sigY + 4, { lineBreak: false });
+        doc.text("Customer Signature", 265, sigY + 4, { lineBreak: false });
 
         doc.page.margins.bottom = 0;
         const footerY = doc.page.height - 48;
@@ -687,11 +694,11 @@ export class PDFKitGenerator {
 
         if (qrBuffer) {
           try {
-            const qrSize = 42;
+            const qrSize = 38;
             const qrX = 504;
-            const qrY = footerY - 2;
+            const qrY = footerY - 4;
             doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
-            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to Track", qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to Track", qrX - 6, qrY + qrSize + 1, { width: qrSize + 12, align: "center", lineBreak: false });
           } catch (e) {}
         }
 
@@ -709,11 +716,12 @@ export class PDFKitGenerator {
     return new Promise(async (resolve, reject) => {
       try {
         const doc = new PDFDocument({
-          margins: { top: 35, bottom: 25, left: 45, right: 45 },
+          margins: { top: 30, bottom: 20, left: 45, right: 45 },
           size: "A4",
         });
         const buffers: Buffer[] = [];
         doc.on("data", (chunk) => buffers.push(chunk));
+        doc.on("end", () => resolve(Buffer.concat(buffers)));
         let qrBuffer: Buffer | null = null;
         if (data.qr_url) {
           try {
@@ -743,111 +751,111 @@ export class PDFKitGenerator {
         let currentY = nextY;
 
         // Target Device Box
-        doc.rect(45, currentY, 505, 40).fill("#f8fafc");
-        doc.rect(45, currentY, 3.5, 40).fill("#1e293b");
+        doc.rect(45, currentY, 505, 34).fill("#f8fafc");
+        doc.rect(45, currentY, 3.5, 34).fill("#1e293b");
 
         const brandModel = `${ticket.device?.brand || ""} ${ticket.device?.model_name || "General Device"}`.trim();
-        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0f172a").text(customerName ? `${customerName} — Hardware Diagnostic Proposal` : "Device Diagnostic Proposal", 55, currentY + 7);
-        doc.fontSize(8.5).font("Helvetica").fillColor("#475569").text(`Model: ${brandModel}  •  Serial Number: ${ticket.device?.serial_number || "N/A"}  •  Status: ${String(ticket.status || "Diagnosed").replace(/_/g, " ").toUpperCase()}`, 55, currentY + 22);
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#0f172a").text(customerName ? `${customerName} — Hardware Diagnostic Proposal` : "Device Diagnostic Proposal", 55, currentY + 6);
+        doc.fontSize(8).font("Helvetica").fillColor("#475569").text(`Model: ${brandModel}  •  Serial Number: ${ticket.device?.serial_number || "N/A"}  •  Status: ${String(ticket.status || "Diagnosed").replace(/_/g, " ").toUpperCase()}`, 55, currentY + 18);
 
-        currentY += 50;
+        currentY += 40;
 
         // Table Header
-        doc.rect(45, currentY, 505, 20).fill("#1e293b");
+        doc.rect(45, currentY, 505, 18).fill("#1e293b");
         doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
-        doc.text("QTY", 48, currentY + 6, { width: 30, align: "center" });
-        doc.text("SERVICE / ITEM", 85, currentY + 6, { width: 145 });
-        doc.text("SCOPE & SPECIFICATIONS", 235, currentY + 6, { width: 195 });
-        doc.text("AMOUNT (KES)", 435, currentY + 6, { width: 110, align: "right" });
+        doc.text("QTY", 48, currentY + 5, { width: 30, align: "center" });
+        doc.text("SERVICE / ITEM", 85, currentY + 5, { width: 145 });
+        doc.text("SCOPE & SPECIFICATIONS", 235, currentY + 5, { width: 195 });
+        doc.text("AMOUNT (KES)", 435, currentY + 5, { width: 110, align: "right" });
 
-        currentY += 25;
+        currentY += 22;
 
         const items = data.items || [];
         if (items.length === 0) {
-          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8.5).text("No itemized items listed", 85, currentY, { width: 145 });
-          currentY += 20;
-          doc.rect(45, currentY - 3, 505, 0.5).fill("#e2e8f0");
+          doc.font("Helvetica-Oblique").fillColor("#64748b").fontSize(8).text("No itemized items listed", 85, currentY, { width: 145 });
+          currentY += 16;
+          doc.rect(45, currentY - 2, 505, 0.5).fill("#e2e8f0");
         } else {
           for (const item of items) {
-            if (currentY > doc.page.height - 180) { doc.addPage(); currentY = 45; }
+            if (currentY > doc.page.height - 150) { doc.addPage(); currentY = 40; }
 
             const totalP = Number(item?.total != null ? item.total : Number(item?.unit_price || 0) * Number(item?.quantity || 1));
             const itemTitle = item?.title ? String(item.title) : "Service Item";
 
-            doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5);
+            doc.font("Helvetica").fillColor("#0f172a").fontSize(8);
             doc.text(Number(item?.quantity || 1).toString(), 48, currentY, { width: 30, align: "center" });
 
             doc.font("Helvetica-Bold").text(itemTitle, 85, currentY, { width: 145 });
             const titleHeight = doc.heightOfString(itemTitle, { width: 145 });
 
             const specText = item?.description || "Full OEM disassembly, component replacement, thermal validation, adhesive resealing, and stress testing.";
-            doc.font("Helvetica").fillColor("#475569").fontSize(7.5).text(specText, 235, currentY, { width: 195 });
+            doc.font("Helvetica").fillColor("#475569").fontSize(7).text(specText, 235, currentY, { width: 195 });
             const specHeight = doc.heightOfString(specText, { width: 195 });
 
-            doc.font("Helvetica").fillColor("#0f172a").fontSize(8.5).text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP), 435, currentY, { width: 110, align: "right" });
+            doc.font("Helvetica").fillColor("#0f172a").fontSize(8).text(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalP), 435, currentY, { width: 110, align: "right" });
 
-            const rowHeight = Math.max(18, titleHeight + 8, specHeight + 8);
+            const rowHeight = Math.max(15, titleHeight + 3, specHeight + 3);
             currentY += rowHeight;
-            doc.rect(45, currentY - 3, 505, 0.5).fill("#e2e8f0");
+            doc.rect(45, currentY - 2, 505, 0.5).fill("#e2e8f0");
           }
         }
 
         // Total Box
-        doc.rect(45, currentY + 2, 505, 20).fill("#f8fafc");
-        doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f172a");
-        doc.text("Total Estimated Cost:", 300, currentY + 7, { width: 120, align: "right" });
-        doc.text(`KES ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(data.total || 0))}`, 435, currentY + 7, { width: 110, align: "right" });
+        doc.rect(45, currentY + 2, 505, 18).fill("#f8fafc");
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0f172a");
+        doc.text("Total Estimated Cost:", 300, currentY + 6, { width: 120, align: "right" });
+        doc.text(`KES ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(data.total || 0))}`, 435, currentY + 6, { width: 110, align: "right" });
 
-        currentY += 34;
+        currentY += 26;
 
         // DIAGNOSTICS & TECHNICAL SUMMARY CARD
-        if (currentY > doc.page.height - 160) { doc.addPage(); currentY = 45; }
+        if (currentY > doc.page.height - 130) { doc.addPage(); currentY = 40; }
         const diagCardY = currentY;
-        const diagH = 75;
+        const diagH = 55;
         doc.rect(45, diagCardY, 505, diagH).fill("#f8fafc");
         doc.rect(45, diagCardY, 3.5, diagH).fill("#1e3a8a");
 
-        doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#1e3a8a").text("DIAGNOSTICS & TECHNICAL SUMMARY", 55, diagCardY + 8);
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#1e3a8a").text("DIAGNOSTICS & TECHNICAL SUMMARY", 55, diagCardY + 6);
 
-        let bY = diagCardY + 22;
+        let bY = diagCardY + 18;
         const drawBullet = (titleText: string, bodyText: string) => {
-          doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#0f172a").text(`• ${titleText}: `, 55, bY, { continued: true });
+          doc.fontSize(7).font("Helvetica-Bold").fillColor("#0f172a").text(`• ${titleText}: `, 55, bY, { continued: true });
           doc.font("Helvetica").fillColor("#475569").text(bodyText, { width: 480 });
-          bY += 16;
+          bY += 12;
         };
 
         drawBullet("Hardware Assessment", ticket.issue_description || "Inspection confirmed hardware malfunction requiring bench service.");
         drawBullet("Bench & Component Measurements", "Thermal dissipation profile, logic rail voltages, and sub-assembly continuity verified.");
         drawBullet("Clearance Plan", "Component replacement and workshop clean-room installation under 90-day warranty.");
 
-        currentY += diagH + 12;
+        currentY += diagH + 8;
 
         // LONG-TERM RECOMMENDATION CARD
-        if (currentY > doc.page.height - 120) { doc.addPage(); currentY = 45; }
+        if (currentY > doc.page.height - 100) { doc.addPage(); currentY = 40; }
         const recCardY = currentY;
-        const recH = 65;
+        const recH = 46;
         doc.rect(45, recCardY, 505, recH).fill("#f0f7ff");
         doc.rect(45, recCardY, 3.5, recH).fill("#2563eb");
 
-        doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#2563eb").text("LONG-TERM INFRASTRUCTURE RECOMMENDATION", 55, recCardY + 8);
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#2563eb").text("LONG-TERM INFRASTRUCTURE RECOMMENDATION", 55, recCardY + 6);
         const recText = "While scheduled maintenance and OEM component replacement restores peak stability and operational hygiene, older hardware architectures face natural component obsolescence. We recommend periodic thermal de-dusting and evaluating phased upgrades to modern platforms.";
-        doc.fontSize(7.5).font("Helvetica").fillColor("#1e293b").text(recText, 55, recCardY + 22, { width: 485, lineGap: 2 });
+        doc.fontSize(7).font("Helvetica").fillColor("#1e293b").text(recText, 55, recCardY + 18, { width: 485, lineGap: 1.5 });
 
-        currentY += recH + 14;
+        currentY += recH + 8;
 
         doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 48;
+        const footerY = doc.page.height - 46;
         doc.rect(45, footerY - 6, 505, 0.5).fill("#e2e8f0");
         doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
         doc.text(`Official Diagnostic & Scope Report — ${(settings?.company_name || "Urban Device Care Ltd")}  •  Page 1 of 1`, 45, footerY, { width: 440, lineBreak: false });
 
         if (qrBuffer) {
           try {
-            const qrSize = 42;
+            const qrSize = 38;
             const qrX = 504;
-            const qrY = footerY - 2;
+            const qrY = footerY - 4;
             doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
-            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to View", qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to View", qrX - 6, qrY + qrSize + 1, { width: qrSize + 12, align: "center", lineBreak: false });
           } catch (e) {}
         }
 
@@ -865,11 +873,12 @@ export class PDFKitGenerator {
     return new Promise(async (resolve, reject) => {
       try {
         const doc = new PDFDocument({
-          margins: { top: 35, bottom: 25, left: 45, right: 45 },
+          margins: { top: 30, bottom: 20, left: 45, right: 45 },
           size: "A4",
         });
         const buffers: Buffer[] = [];
         doc.on("data", (chunk) => buffers.push(chunk));
+        doc.on("end", () => resolve(Buffer.concat(buffers)));
         let qrBuffer: Buffer | null = null;
         if (data.qr_url) {
           try {
@@ -993,18 +1002,18 @@ export class PDFKitGenerator {
         doc.font("Helvetica").fontSize(7.5).fillColor("#64748b").text("Date & Official Stamp", 265, currentY + 16);
 
         doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 48;
+        const footerY = doc.page.height - 46;
         doc.rect(45, footerY - 6, 505, 0.5).fill("#e2e8f0");
         doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
         doc.text(`${(settings?.company_name || "Urban Device Care Ltd")} — Device Clearance Report  •  Page 1 of 1`, 45, footerY, { width: 440, lineBreak: false });
 
         if (qrBuffer) {
           try {
-            const qrSize = 42;
+            const qrSize = 38;
             const qrX = 504;
-            const qrY = footerY - 2;
+            const qrY = footerY - 4;
             doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
-            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to View", qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor("#4b5563").text("Scan to View", qrX - 6, qrY + qrSize + 1, { width: qrSize + 12, align: "center", lineBreak: false });
           } catch (e) {}
         }
 
@@ -1022,7 +1031,7 @@ export class PDFKitGenerator {
     return new Promise(async (resolve, reject) => {
       try {
         const doc = new PDFDocument({
-          margins: { top: 35, bottom: 25, left: 45, right: 45 },
+          margins: { top: 30, bottom: 20, left: 45, right: 45 },
           size: "A4",
           bufferPages: true,
         });
@@ -1058,7 +1067,7 @@ export class PDFKitGenerator {
 
         // Divider
         doc.strokeColor("#cbd5e1").lineWidth(0.75).moveTo(45, currentY).lineTo(550, currentY).stroke();
-        currentY += 12;
+        currentY += 8;
 
         // Two-column metadata block: Recipient (Left) & Specifications (Right)
         const startMetaY = currentY;
@@ -1067,24 +1076,24 @@ export class PDFKitGenerator {
         const rightColWidth = 255;
 
         // Left Column: Recipient
-        doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#475569").text("CERTIFICATE ISSUED TO / BILLED TO:", 45, startMetaY);
-        let leftY = startMetaY + 13;
-        doc.fontSize(10).font("Helvetica-Bold").fillColor("#0f172a").text(customerName || "Valued Client", 45, leftY, { width: leftColWidth });
-        leftY += doc.heightOfString(customerName || "Valued Client", { width: leftColWidth }) + 3;
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#475569").text("CERTIFICATE ISSUED TO / BILLED TO:", 45, startMetaY);
+        let leftY = startMetaY + 11;
+        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0f172a").text(customerName || "Valued Client", 45, leftY, { width: leftColWidth });
+        leftY += doc.heightOfString(customerName || "Valued Client", { width: leftColWidth }) + 2;
 
-        doc.fontSize(8).font("Helvetica").fillColor("#475569");
+        doc.fontSize(7.5).font("Helvetica").fillColor("#475569");
         if (data.customer?.company_name && data.customer.name && data.customer.name !== data.customer.company_name) {
           doc.text(`Contact: ${data.customer.name}`, 45, leftY, { width: leftColWidth });
-          leftY += 11;
+          leftY += 9.5;
         }
         if (data.customer?.address) {
           doc.text(data.customer.address, 45, leftY, { width: leftColWidth });
-          leftY += doc.heightOfString(data.customer.address, { width: leftColWidth }) + 2;
+          leftY += doc.heightOfString(data.customer.address, { width: leftColWidth }) + 1;
         }
-        const clientContacts = [data.customer?.phone, data.customer?.email].filter(Boolean).join("  •  ");
+        const clientContacts = [sanitizePhoneNumber(data.customer?.phone), data.customer?.email].filter(Boolean).join("  •  ");
         if (clientContacts) {
           doc.text(clientContacts, 45, leftY, { width: leftColWidth });
-          leftY += 12;
+          leftY += 9.5;
         }
 
         // Right Column: Specifications / Asset Details
@@ -1210,35 +1219,35 @@ export class PDFKitGenerator {
 
         // Notes & Terms
         if (data.notes && data.notes.trim().length > 0) {
-          if (currentY > 660) {
+          if (currentY > 690) {
             doc.addPage();
             currentY = 40;
           }
           currentY += 4;
           doc.fontSize(8).font("Helvetica-Bold").fillColor("#475569").text("TERMS & CONDITIONS / IMPORTANT NOTES:", 45, currentY);
-          currentY += 10;
-          doc.fontSize(7.5).font("Helvetica").fillColor("#64748b").text(data.notes.trim(), 45, currentY, { width: 505, lineGap: 2 });
-          currentY += doc.heightOfString(data.notes.trim(), { width: 505, lineGap: 2 }) + 10;
+          currentY += 9;
+          doc.fontSize(7).font("Helvetica").fillColor("#64748b").text(data.notes.trim(), 45, currentY, { width: 505, lineGap: 1.5 });
+          currentY += doc.heightOfString(data.notes.trim(), { width: 505, lineGap: 1.5 }) + 8;
         }
 
         // Signatures Block
-        const minSigSpace = 65;
-        if (currentY + minSigSpace > doc.page.height - 45) {
+        const minSigSpace = 55;
+        if (currentY + minSigSpace > doc.page.height - 40) {
           doc.addPage();
-          currentY = 50;
+          currentY = 40;
         } else {
-          currentY = Math.max(currentY + 12, doc.page.height - 110);
+          currentY = Math.max(currentY + 10, doc.page.height - 90);
         }
 
         doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(45, currentY).lineTo(235, currentY).stroke();
         doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(360, currentY).lineTo(550, currentY).stroke();
 
         doc.fontSize(8).font("Helvetica-Bold").fillColor("#0f172a");
-        doc.text(settings?.company_name ? `${settings.company_name} — Authorized Signatory` : "Urban Device Care Ltd — Authorized Signatory", 45, currentY + 4);
-        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Certified Hardware Specialist  •  Official Seal", 45, currentY + 14);
+        doc.text(settings?.company_name ? `${settings.company_name} — Authorized Signatory` : "Urban Device Care Ltd — Authorized Signatory", 45, currentY + 4, { lineBreak: false });
+        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Certified Hardware Specialist  •  Official Seal", 45, currentY + 14, { lineBreak: false });
 
-        doc.font("Helvetica-Bold").fontSize(8).fillColor("#0f172a").text("Customer / Authorized Representative", 360, currentY + 4);
-        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Signature & Acceptance Date", 360, currentY + 14);
+        doc.font("Helvetica-Bold").fontSize(8).fillColor("#0f172a").text("Customer / Authorized Representative", 360, currentY + 4, { lineBreak: false });
+        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Signature & Acceptance Date", 360, currentY + 14, { lineBreak: false });
 
         // Bottom Page Footer across all pages
         const pages = doc.bufferedPageRange();
@@ -1264,7 +1273,7 @@ export class PDFKitGenerator {
   private static async generateModern(data: DocumentData, logoBuffer: Buffer | null = null): Promise<Buffer> {
     return new Promise(async (resolve, reject) => {
       try {
-        const doc = new PDFDocument({ margin: 40, size: "A4" });
+        const doc = new PDFDocument({ margin: 35, size: "A4" });
         const buffers: Buffer[] = [];
 
         doc.on("data", buffers.push.bind(buffers));
@@ -1277,29 +1286,29 @@ export class PDFKitGenerator {
         const borderColor = "#e2e8f0";
 
         // Top Accent Bar
-        doc.rect(0, 0, doc.page.width, 6).fill(primaryColor);
+        doc.rect(0, 0, doc.page.width, 5).fill(primaryColor);
 
         // Header
-        const headerY = 35;
+        const headerY = 32;
         const compName = data.company?.name || "Company Store";
 
         if (logoBuffer) {
           try {
-            doc.image(logoBuffer, 40, headerY - 5, { fit: [155, 52] });
+            doc.image(logoBuffer, 40, headerY - 4, { fit: [145, 48] });
           } catch (_) {
-            doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(20).text(compName, 40, headerY);
+            doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(18).text(compName, 40, headerY);
           }
         } else {
-          doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(20).text(compName, 40, headerY);
+          doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(18).text(compName, 40, headerY);
         }
 
-        let subY = headerY + (logoBuffer ? 48 : 26);
-        doc.font("Helvetica").fontSize(8).fillColor(subtleColor);
+        let subY = headerY + (logoBuffer ? 46 : 24);
+        doc.font("Helvetica").fontSize(7.5).fillColor(subtleColor);
         if (data.company?.address) {
           doc.text(data.company.address, 40, subY);
-          subY += 12;
+          subY += 10;
         }
-        const contactLine = [data.company?.phone, data.company?.email, data.company?.website].filter(Boolean).join("  •  ");
+        const contactLine = [sanitizePhoneNumber(data.company?.phone), data.company?.email, data.company?.website].filter(Boolean).join("  •  ");
         if (contactLine) {
           doc.text(contactLine, 40, subY);
         }
@@ -1313,12 +1322,12 @@ export class PDFKitGenerator {
           data.type === "estimate" ? "QUOTATION" : "DOCUMENT"
         );
 
-        doc.fontSize(16).font("Helvetica-Bold").fillColor(primaryColor).text(docTitle, 350, headerY, { align: "right" });
-        doc.fontSize(9).font("Helvetica-Bold").fillColor(darkColor).text(`#${data.display_id}`, 350, headerY + 22, { align: "right" });
-        doc.font("Helvetica").fontSize(8).fillColor(subtleColor);
-        doc.text(`Date: ${data.date || new Date().toISOString().split("T")[0]}`, 350, headerY + 36, { align: "right" });
+        doc.fontSize(15).font("Helvetica-Bold").fillColor(primaryColor).text(docTitle, 350, headerY, { align: "right" });
+        doc.fontSize(8.5).font("Helvetica-Bold").fillColor(darkColor).text(`#${data.display_id}`, 350, headerY + 20, { align: "right" });
+        doc.font("Helvetica").fontSize(7.5).fillColor(subtleColor);
+        doc.text(`Date: ${data.date || new Date().toISOString().split("T")[0]}`, 350, headerY + 32, { align: "right" });
         if (data.due_date && data.type === "invoice") {
-          doc.text(`Due Date: ${data.due_date}`, 350, headerY + 48, { align: "right" });
+          doc.text(`Due Date: ${data.due_date}`, 350, headerY + 44, { align: "right" });
         }
 
         // 1D Barcode (Code 128)
@@ -1326,96 +1335,96 @@ export class PDFKitGenerator {
           try {
             const barcodeBuf = await PDFKitGenerator.generateBarcode(String(data.display_id));
             if (barcodeBuf) {
-              doc.image(barcodeBuf, 440, headerY + 62, { width: 115, height: 22 });
+              doc.image(barcodeBuf, 445, headerY + 56, { width: 110, height: 20 });
             }
           } catch (e) {}
         }
 
         // Horizontal Divider
-        const dividerY = Math.max(130, subY + 10);
+        const dividerY = Math.max(118, subY + 8);
         doc.strokeColor(borderColor).lineWidth(1).moveTo(40, dividerY).lineTo(555, dividerY).stroke();
 
         // Bill To / Customer details block
-        const billToY = dividerY + 15;
+        const billToY = dividerY + 12;
         const recipientLabel = data.type === "job_card" ? "CUSTOMER INTAKE DETAILS:" : "RECIPIENT / BILLED TO:";
-        doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(9).text(recipientLabel, 40, billToY);
+        doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(8.5).text(recipientLabel, 40, billToY);
         const customerDisplayName = data.customer.company_name || data.customer.name;
-        doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(11).text(customerDisplayName, 40, billToY + 14);
+        doc.fillColor(darkColor).font("Helvetica-Bold").fontSize(10).text(customerDisplayName, 40, billToY + 12);
 
-        let cY = billToY + 28;
-        doc.font("Helvetica").fontSize(8).fillColor(subtleColor);
+        let cY = billToY + 24;
+        doc.font("Helvetica").fontSize(7.5).fillColor(subtleColor);
         if (data.customer.company_name && data.customer.name && data.customer.name !== data.customer.company_name) {
           doc.text(`Attn: ${data.customer.name}`, 40, cY);
-          cY += 12;
+          cY += 10;
         }
         if (data.customer.address) {
           doc.text(data.customer.address, 40, cY);
-          cY += 12;
+          cY += 10;
         }
-        const custContact = [data.customer.phone, data.customer.email].filter(Boolean).join("  •  ");
+        const custContact = [sanitizePhoneNumber(data.customer.phone), data.customer.email].filter(Boolean).join("  •  ");
         if (custContact) {
           doc.text(custContact, 40, cY);
-          cY += 12;
+          cY += 10;
         }
 
         // Payment status badge
         const badgeText = data.payment_status === "paid" ? "PAID IN FULL" : "PAYMENT PENDING";
         const badgeColor = data.payment_status === "paid" ? "#16a34a" : "#ca8a04";
-        doc.rect(400, billToY, 155, 24).fill(lightBg);
-        doc.rect(400, billToY, 3, 24).fill(badgeColor);
-        doc.font("Helvetica-Bold").fontSize(9).fillColor(badgeColor).text(badgeText, 412, billToY + 7);
+        doc.rect(400, billToY, 155, 22).fill(lightBg);
+        doc.rect(400, billToY, 3, 22).fill(badgeColor);
+        doc.font("Helvetica-Bold").fontSize(8.5).fillColor(badgeColor).text(badgeText, 412, billToY + 6);
 
         // Custom Fields
-        let customY = Math.max(cY + 10, billToY + 36);
+        let customY = Math.max(cY + 8, billToY + 30);
         if (data.custom_fields && Object.keys(data.custom_fields).length > 0) {
-          doc.rect(40, customY, 515, 22).fill(lightBg);
-          doc.font("Helvetica-Bold").fontSize(8).fillColor(subtleColor).text("SPECIFICATIONS / SERVICE ASSET:", 46, customY + 6);
+          doc.rect(40, customY, 515, 20).fill(lightBg);
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(subtleColor).text("SPECIFICATIONS / SERVICE ASSET:", 46, customY + 5);
           let fieldText = Object.entries(data.custom_fields)
             .map(([k, v]) => `${k}: ${v}`)
             .join("   |   ");
-          doc.font("Helvetica").fontSize(8).fillColor(darkColor).text(fieldText, 210, customY + 6, { width: 335, ellipsis: true });
-          customY += 30;
+          doc.font("Helvetica").fontSize(7.5).fillColor(darkColor).text(fieldText, 210, customY + 5, { width: 335, ellipsis: true });
+          customY += 26;
         }
 
         // Line Items Table
-        let tableTop = customY + 5;
-        doc.rect(40, tableTop, 515, 24).fill(darkColor);
+        let tableTop = customY + 4;
+        doc.rect(40, tableTop, 515, 20).fill(darkColor);
         doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff");
-        doc.text("ITEM & DESCRIPTION", 50, tableTop + 8);
-        doc.text("QTY", 340, tableTop + 8, { width: 40, align: "center" });
-        doc.text("UNIT PRICE", 390, tableTop + 8, { width: 70, align: "right" });
-        doc.text("AMOUNT", 470, tableTop + 8, { width: 75, align: "right" });
+        doc.text("ITEM & DESCRIPTION", 50, tableTop + 6);
+        doc.text("QTY", 340, tableTop + 6, { width: 40, align: "center" });
+        doc.text("UNIT PRICE", 390, tableTop + 6, { width: 70, align: "right" });
+        doc.text("AMOUNT", 470, tableTop + 6, { width: 75, align: "right" });
 
-        let itemY = tableTop + 24;
+        let itemY = tableTop + 20;
         let isAlt = false;
 
         const modernItems = data.items || [];
         if (modernItems.length === 0) {
-          doc.font("Helvetica-Oblique").fontSize(8).fillColor(subtleColor).text("No itemized charges listed", 50, itemY + 6, { width: 280 });
-          itemY += 24;
+          doc.font("Helvetica-Oblique").fontSize(8).fillColor(subtleColor).text("No itemized charges listed", 50, itemY + 5, { width: 280 });
+          itemY += 20;
         } else {
           for (const item of modernItems) {
-            if (itemY > 680) {
+            if (itemY > 690) {
               doc.addPage();
-              itemY = 50;
+              itemY = 45;
             }
             if (isAlt) {
-              doc.rect(40, itemY, 515, 28).fill(lightBg);
+              doc.rect(40, itemY, 515, 22).fill(lightBg);
             }
 
             const itemTitle = item?.title ? String(item.title) : "Item";
-            doc.font("Helvetica-Bold").fontSize(8).fillColor(darkColor).text(itemTitle, 50, itemY + 6, { width: 280 });
+            doc.font("Helvetica-Bold").fontSize(8).fillColor(darkColor).text(itemTitle, 50, itemY + 4, { width: 280 });
             if (item?.description) {
-              doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(String(item.description), 50, itemY + 16, { width: 280, ellipsis: true });
+              doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(String(item.description), 50, itemY + 12, { width: 280, ellipsis: true });
             }
 
             doc.font("Helvetica").fontSize(8).fillColor(darkColor);
-            doc.text(String(item?.quantity || 1), 340, itemY + 8, { width: 40, align: "center" });
-            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 390, itemY + 8, { width: 70, align: "right" });
+            doc.text(String(item?.quantity || 1), 340, itemY + 6, { width: 40, align: "center" });
+            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 390, itemY + 6, { width: 70, align: "right" });
             const lineTotal = item?.total != null ? item.total : (Number(item?.quantity || 1) * Number(item?.unit_price || 0));
-            doc.font("Helvetica-Bold").text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 470, itemY + 8, { width: 75, align: "right" });
+            doc.font("Helvetica-Bold").text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 470, itemY + 6, { width: 75, align: "right" });
 
-            itemY += 28;
+            itemY += 22;
             isAlt = !isAlt;
           }
         }
@@ -1423,15 +1432,15 @@ export class PDFKitGenerator {
         doc.strokeColor(borderColor).lineWidth(1).moveTo(40, itemY).lineTo(555, itemY).stroke();
 
         // Totals & Notes Section
-        let totalsY = itemY + 15;
+        let totalsY = itemY + 10;
         const notesWidth = 260;
 
         if (data.notes) {
-          doc.font("Helvetica-Bold").fontSize(8).fillColor(subtleColor).text("SPECIAL NOTES & INSTRUCTIONS:", 40, totalsY);
-          doc.font("Helvetica").fontSize(8).fillColor(darkColor).text(data.notes, 40, totalsY + 12, { width: notesWidth });
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(subtleColor).text("SPECIAL NOTES & INSTRUCTIONS:", 40, totalsY);
+          doc.font("Helvetica").fontSize(7.5).fillColor(darkColor).text(data.notes, 40, totalsY + 10, { width: notesWidth });
         }
         if (data.body_text) {
-          doc.font("Helvetica").fontSize(8).fillColor(darkColor).text(data.body_text, 40, totalsY + 45, { width: notesWidth });
+          doc.font("Helvetica").fontSize(7.5).fillColor(darkColor).text(data.body_text, 40, totalsY + 35, { width: notesWidth });
         }
 
         // Totals Box
@@ -1441,29 +1450,30 @@ export class PDFKitGenerator {
         if (data.subtotal != null) {
           doc.text("Subtotal:", totalsLeft, totalsY);
           doc.text(PDFKitGenerator.formatCurrency(data.subtotal, data.currency_code), 470, totalsY, { width: 75, align: "right" });
-          totalsY += 15;
+          totalsY += 13;
         }
         if (data.tax_total != null && data.tax_total > 0) {
           doc.text("Tax (VAT):", totalsLeft, totalsY);
           doc.text(PDFKitGenerator.formatCurrency(data.tax_total, data.currency_code), 470, totalsY, { width: 75, align: "right" });
-          totalsY += 15;
+          totalsY += 13;
         }
         if (data.discount_total != null && data.discount_total > 0) {
           doc.text("Discount:", totalsLeft, totalsY);
           doc.text(`-${PDFKitGenerator.formatCurrency(data.discount_total, data.currency_code)}`, 470, totalsY, { width: 75, align: "right" });
-          totalsY += 15;
+          totalsY += 13;
         }
 
-        doc.rect(totalsLeft - 10, totalsY, 215, 26).fill(primaryColor);
-        doc.font("Helvetica-Bold").fontSize(10).fillColor("#ffffff");
-        doc.text("TOTAL DUE", totalsLeft, totalsY + 8);
-        doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 440, totalsY + 8, { width: 95, align: "right" });
+        doc.rect(totalsLeft - 10, totalsY, 215, 22).fill(primaryColor);
+        doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#ffffff");
+        doc.text("TOTAL DUE", totalsLeft, totalsY + 6);
+        doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 440, totalsY + 6, { width: 95, align: "right" });
 
         // Footer & Payment Information
-        if (totalsY > 670) {
+        if (totalsY > 700) {
           doc.addPage();
         }
-        const footerY = doc.page.height - 85;
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 68;
         doc.strokeColor(borderColor).lineWidth(1).moveTo(40, footerY).lineTo(555, footerY).stroke();
 
         const isInvoice = data.type === "invoice";
@@ -1472,7 +1482,7 @@ export class PDFKitGenerator {
         let qrBuffer: Buffer | null = null;
         if (data.qr_url) {
           try {
-            qrBuffer = await QRCode.toBuffer(data.qr_url, { errorCorrectionLevel: "H", type: "png", margin: 1, width: 50 });
+            qrBuffer = await QRCode.toBuffer(data.qr_url, { errorCorrectionLevel: "H", type: "png", margin: 1, width: 45 });
           } catch (_) {}
         }
 
@@ -1483,26 +1493,26 @@ export class PDFKitGenerator {
           ? "Payment received in full. Thank you for your business."
           : "Thank you for choosing Urban Device Care.";
 
-        doc.font("Helvetica-Bold").fontSize(8).fillColor(subtleColor).text(isInvoice ? "PAYMENT & BANKING DETAILS" : "NOTES & DETAILS", 40, footerY + 8);
-        doc.font("Helvetica").fontSize(7.5).fillColor(darkColor).text(payDetails, 40, footerY + 20, { width: 280 });
+        doc.font("Helvetica-Bold").fontSize(7.5).fillColor(subtleColor).text(isInvoice ? "PAYMENT & BANKING DETAILS" : "NOTES & DETAILS", 40, footerY + 6, { lineBreak: false });
+        doc.font("Helvetica").fontSize(7).fillColor(darkColor).text(payDetails, 40, footerY + 16, { width: 280, height: 26, ellipsis: true });
 
         if (data.company.terms) {
-          doc.font("Helvetica-Bold").fontSize(8).fillColor(subtleColor).text("TERMS & CONDITIONS", 330, footerY + 8);
-          doc.font("Helvetica").fontSize(7).fillColor(darkColor).text(data.company.terms, 330, footerY + 20, { width: 155 });
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(subtleColor).text("TERMS & CONDITIONS", 330, footerY + 6, { lineBreak: false });
+          doc.font("Helvetica").fontSize(7).fillColor(darkColor).text(data.company.terms, 330, footerY + 16, { width: 155, height: 26, ellipsis: true });
         }
 
         if (qrBuffer) {
           try {
-            const qrSize = 46;
-            const qrX = 502;
-            const qrY = footerY + 6;
+            const qrSize = 40;
+            const qrX = 504;
+            const qrY = footerY + 4;
             doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
             const qrLabel = isInvoice ? "Scan to Pay Online" : isReceipt ? "Scan to Verify" : data.type === "job_card" ? "Scan to Track" : "Scan to View";
-            doc.fontSize(5.5).font("Helvetica-Bold").fillColor(subtleColor).text(qrLabel, qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+            doc.fontSize(5.5).font("Helvetica-Bold").fillColor(subtleColor).text(qrLabel, qrX - 6, qrY + qrSize + 1, { width: qrSize + 12, align: "center", lineBreak: false });
           } catch (_) {}
         }
 
-        doc.font("Helvetica").fontSize(7).fillColor(subtleColor).text(`Generated by Urban Device Care Document Hub  •  #${data.display_id}`, 40, footerY + 66, { width: 440 });
+        doc.font("Helvetica").fontSize(6.5).fillColor(subtleColor).text(`Generated by Urban Device Care Document Hub  •  #${data.display_id}`, 40, footerY + 48, { width: 440, lineBreak: false });
 
         doc.end();
       } catch (e) {
@@ -1517,7 +1527,7 @@ export class PDFKitGenerator {
   private static async generateClassic(data: DocumentData, logoBuffer: Buffer | null = null): Promise<Buffer> {
     return new Promise(async (resolve, reject) => {
       try {
-        const doc = new PDFDocument({ margin: 40, size: "A4" });
+        const doc = new PDFDocument({ margin: 35, size: "A4" });
         const buffers: Buffer[] = [];
 
         doc.on("data", buffers.push.bind(buffers));
@@ -1527,19 +1537,20 @@ export class PDFKitGenerator {
 
         if (logoBuffer) {
           try {
-            doc.image(logoBuffer, 40, 40, { fit: [140, 45] });
+            doc.image(logoBuffer, 35, 35, { fit: [140, 42] });
           } catch (_) {
-            doc.fontSize(20).font("Times-Bold").fillColor("#111827").text(compName, 40, 45);
+            doc.fontSize(18).font("Times-Bold").fillColor("#111827").text(compName, 35, 40);
           }
         } else {
-          doc.fontSize(20).font("Times-Bold").fillColor("#111827").text(compName, 40, 45);
+          doc.fontSize(18).font("Times-Bold").fillColor("#111827").text(compName, 35, 40);
         }
 
-        const topSubY = logoBuffer ? 92 : 70;
-        doc.fontSize(8.5).font("Times-Roman").fillColor("#4b5563");
-        if (data.company?.address) doc.text(data.company.address, 40, topSubY);
-        const contact = [data.company?.phone, data.company?.email, data.company?.website].filter(Boolean).join(" | ");
-        if (contact) doc.text(contact, 40, topSubY + 12);
+        const topSubY = logoBuffer ? 82 : 65;
+        doc.fontSize(8).font("Times-Roman").fillColor("#4b5563");
+        if (data.company?.address) doc.text(data.company.address, 35, topSubY);
+        const compPhone = sanitizePhoneNumber(data.company?.phone);
+        const contact = [compPhone, data.company?.email, data.company?.website].filter(Boolean).join(" | ");
+        if (contact) doc.text(contact, 35, topSubY + 11);
 
         // Document Details (Right side)
         const docTitle = data.title || (
@@ -1549,11 +1560,11 @@ export class PDFKitGenerator {
           data.type === "packing_slip" ? "PACKING SLIP" :
           data.type === "estimate" ? "ESTIMATE" : "DOCUMENT"
         );
-        doc.fontSize(18).font("Times-Bold").fillColor("#1e3a8a").text(docTitle, 350, 45, { align: "right" });
-        doc.fontSize(9).font("Times-Bold").fillColor("#111827").text(`No. ${data.display_id}`, 350, 70, { align: "right" });
-        doc.fontSize(8.5).font("Times-Roman").fillColor("#4b5563").text(`Date: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 83, { align: "right" });
+        doc.fontSize(18).font("Times-Bold").fillColor("#1e3a8a").text(docTitle, 350, 35, { align: "right" });
+        doc.fontSize(9).font("Times-Bold").fillColor("#111827").text(`No. ${data.display_id}`, 350, 58, { align: "right" });
+        doc.fontSize(8).font("Times-Roman").fillColor("#4b5563").text(`Date: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 71, { align: "right" });
         if (data.due_date && data.type === "invoice") {
-          doc.text(`Due Date: ${data.due_date}`, 350, 96, { align: "right" });
+          doc.text(`Due Date: ${data.due_date}`, 350, 83, { align: "right" });
         }
 
         // 1D Barcode
@@ -1561,118 +1572,120 @@ export class PDFKitGenerator {
           try {
             const barcodeBuf = await PDFKitGenerator.generateBarcode(String(data.display_id));
             if (barcodeBuf) {
-              doc.image(barcodeBuf, 440, 115, { width: 115, height: 22 });
+              doc.image(barcodeBuf, 445, 98, { width: 115, height: 20 });
             }
           } catch (e) {}
         }
 
         // Double Horizontal Line Separator
-        doc.strokeColor("#94a3b8").lineWidth(1).moveTo(40, 168).lineTo(555, 168).stroke();
-        doc.strokeColor("#cbd5e1").lineWidth(0.5).moveTo(40, 171).lineTo(555, 171).stroke();
+        doc.strokeColor("#94a3b8").lineWidth(1).moveTo(35, 155).lineTo(560, 155).stroke();
+        doc.strokeColor("#cbd5e1").lineWidth(0.5).moveTo(35, 158).lineTo(560, 158).stroke();
 
         // Client Details
-        doc.font("Times-Bold").fontSize(10).fillColor("#1e3a8a").text(data.type === "job_card" ? "CLIENT / ASSET REGISTRATION" : "BILLED TO:", 40, 185);
+        doc.font("Times-Bold").fontSize(9.5).fillColor("#1e3a8a").text(data.type === "job_card" ? "CLIENT / ASSET REGISTRATION" : "BILLED TO:", 35, 168);
         const customerDisplayName = data.customer.company_name || data.customer.name;
-        doc.font("Times-Bold").fontSize(11).fillColor("#111827").text(customerDisplayName, 40, 198);
+        doc.font("Times-Bold").fontSize(10.5).fillColor("#111827").text(customerDisplayName, 35, 180);
 
-        let curY = 211;
-        doc.font("Times-Roman").fontSize(8.5).fillColor("#374151");
+        let curY = 193;
+        doc.font("Times-Roman").fontSize(8).fillColor("#374151");
         if (data.customer.company_name && data.customer.name && data.customer.name !== data.customer.company_name) {
-          doc.text(`Attn: ${data.customer.name}`, 40, curY);
-          curY += 12;
+          doc.text(`Attn: ${data.customer.name}`, 35, curY);
+          curY += 11;
         }
-        if (data.customer.address) { doc.text(data.customer.address, 40, curY); curY += 12; }
-        const cPhoneMail = [data.customer.phone, data.customer.email].filter(Boolean).join("  •  ");
-        if (cPhoneMail) { doc.text(cPhoneMail, 40, curY); curY += 12; }
+        if (data.customer.address) { doc.text(data.customer.address, 35, curY); curY += 11; }
+        const custPhone = sanitizePhoneNumber(data.customer.phone);
+        const cPhoneMail = [custPhone, data.customer.email].filter(Boolean).join("  •  ");
+        if (cPhoneMail) { doc.text(cPhoneMail, 35, curY); curY += 11; }
 
         // Custom Fields
         if (data.custom_fields && Object.keys(data.custom_fields).length > 0) {
-          curY += 6;
-          doc.font("Times-Bold").fontSize(8.5).fillColor("#1e3a8a").text("Device & Repair Specifications:", 40, curY);
-          curY += 12;
+          curY += 4;
+          doc.font("Times-Bold").fontSize(8).fillColor("#1e3a8a").text("Device & Repair Specifications:", 35, curY);
+          curY += 11;
           for (const [k, v] of Object.entries(data.custom_fields)) {
-            doc.font("Times-Bold").fontSize(8).fillColor("#374151").text(`${k}: `, 45, curY, { continued: true });
+            doc.font("Times-Bold").fontSize(7.5).fillColor("#374151").text(`${k}: `, 40, curY, { continued: true });
             doc.font("Times-Roman").fillColor("#111827").text(String(v));
-            curY += 11;
+            curY += 10;
           }
         }
 
         // Line Items Table
-        let tableTop = Math.max(curY + 12, 260);
-        doc.rect(40, tableTop, 515, 20).fill("#1e3a8a");
-        doc.font("Times-Bold").fontSize(8.5).fillColor("#ffffff");
-        doc.text("Description", 50, tableTop + 5);
-        doc.text("Qty", 350, tableTop + 5, { width: 35, align: "center" });
-        doc.text("Unit Price", 400, tableTop + 5, { width: 65, align: "right" });
-        doc.text("Total", 480, tableTop + 5, { width: 65, align: "right" });
+        let tableTop = Math.max(curY + 8, 235);
+        doc.rect(35, tableTop, 525, 18).fill("#1e3a8a");
+        doc.font("Times-Bold").fontSize(8).fillColor("#ffffff");
+        doc.text("Description", 45, tableTop + 4);
+        doc.text("Qty", 350, tableTop + 4, { width: 35, align: "center" });
+        doc.text("Unit Price", 400, tableTop + 4, { width: 65, align: "right" });
+        doc.text("Total", 485, tableTop + 4, { width: 65, align: "right" });
 
-        let rowY = tableTop + 20;
-        doc.font("Times-Roman").fontSize(8.5).fillColor("#111827");
+        let rowY = tableTop + 18;
+        doc.font("Times-Roman").fontSize(8).fillColor("#111827");
 
         const classicItems = data.items || [];
         if (classicItems.length === 0) {
-          doc.font("Times-Italic").fontSize(8.5).fillColor("#64748b").text("No itemized charges listed", 50, rowY + 5, { width: 285 });
-          rowY += 26;
+          doc.font("Times-Italic").fontSize(8).fillColor("#64748b").text("No itemized charges listed", 45, rowY + 4, { width: 285 });
+          rowY += 20;
         } else {
           for (const item of classicItems) {
-            if (rowY > 680) {
+            if (rowY > 670) {
               doc.addPage();
-              rowY = 50;
+              rowY = 40;
             }
             const itemTitle = item?.title ? String(item.title) : "Item";
-            doc.font("Times-Bold").text(itemTitle, 50, rowY + 5, { width: 285 });
+            doc.font("Times-Bold").text(itemTitle, 45, rowY + 4, { width: 285 });
             if (item?.description) {
-              doc.font("Times-Italic").fontSize(7.5).fillColor("#64748b").text(String(item.description), 50, rowY + 15, { width: 285, ellipsis: true });
-              doc.font("Times-Roman").fontSize(8.5).fillColor("#111827");
+              doc.font("Times-Italic").fontSize(7).fillColor("#64748b").text(String(item.description), 45, rowY + 13, { width: 285, ellipsis: true });
+              doc.font("Times-Roman").fontSize(8).fillColor("#111827");
             }
 
-            doc.text(String(item?.quantity || 1), 350, rowY + 6, { width: 35, align: "center" });
-            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 400, rowY + 6, { width: 65, align: "right" });
+            doc.text(String(item?.quantity || 1), 350, rowY + 4, { width: 35, align: "center" });
+            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 400, rowY + 4, { width: 65, align: "right" });
             const lineTotal = item?.total != null ? item.total : (Number(item?.quantity || 1) * Number(item?.unit_price || 0));
-            doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 480, rowY + 6, { width: 65, align: "right" });
+            doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 485, rowY + 4, { width: 65, align: "right" });
 
-            rowY += 26;
-            doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(40, rowY).lineTo(555, rowY).stroke();
+            rowY += 20;
+            doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(35, rowY).lineTo(560, rowY).stroke();
           }
         }
 
         // Summary Rows
-        let sumY = rowY + 10;
+        let sumY = rowY + 8;
         const sumLeft = 360;
 
         if (data.notes) {
-          doc.font("Times-Bold").fontSize(8.5).fillColor("#1e3a8a").text("Remarks / Notes:", 40, sumY);
-          doc.font("Times-Roman").fontSize(8).fillColor("#374151").text(data.notes, 40, sumY + 12, { width: 280 });
+          doc.font("Times-Bold").fontSize(8).fillColor("#1e3a8a").text("Remarks / Notes:", 35, sumY);
+          doc.font("Times-Roman").fontSize(7.5).fillColor("#374151").text(data.notes, 35, sumY + 11, { width: 280, height: 30, ellipsis: true });
         }
         if (data.body_text) {
-          doc.font("Times-Roman").fontSize(8).fillColor("#374151").text(data.body_text, 40, sumY + 40, { width: 280 });
+          doc.font("Times-Roman").fontSize(7.5).fillColor("#374151").text(data.body_text, 35, sumY + 35, { width: 280, height: 25, ellipsis: true });
         }
 
         if (data.subtotal != null) {
           doc.font("Times-Roman").text("Subtotal:", sumLeft, sumY);
-          doc.text(PDFKitGenerator.formatCurrency(data.subtotal, data.currency_code), 480, sumY, { width: 65, align: "right" });
-          sumY += 14;
+          doc.text(PDFKitGenerator.formatCurrency(data.subtotal, data.currency_code), 485, sumY, { width: 65, align: "right" });
+          sumY += 12;
         }
         if (data.tax_total != null && data.tax_total > 0) {
           doc.font("Times-Roman").text("VAT:", sumLeft, sumY);
-          doc.text(PDFKitGenerator.formatCurrency(data.tax_total, data.currency_code), 480, sumY, { width: 65, align: "right" });
-          sumY += 14;
+          doc.text(PDFKitGenerator.formatCurrency(data.tax_total, data.currency_code), 485, sumY, { width: 65, align: "right" });
+          sumY += 12;
         }
 
-        doc.strokeColor("#1e3a8a").lineWidth(1).moveTo(sumLeft, sumY + 2).lineTo(555, sumY + 2).stroke();
-        doc.font("Times-Bold").fontSize(10).fillColor("#1e3a8a").text("Grand Total:", sumLeft, sumY + 7);
-        doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 460, sumY + 7, { width: 85, align: "right" });
+        doc.strokeColor("#1e3a8a").lineWidth(1).moveTo(sumLeft, sumY + 2).lineTo(560, sumY + 2).stroke();
+        doc.font("Times-Bold").fontSize(9.5).fillColor("#1e3a8a").text("Grand Total:", sumLeft, sumY + 5);
+        doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 460, sumY + 5, { width: 90, align: "right" });
 
         // Footer
-        const footerY = 740;
-        doc.strokeColor("#94a3b8").lineWidth(0.5).moveTo(40, footerY).lineTo(555, footerY).stroke();
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 68;
+        doc.strokeColor("#94a3b8").lineWidth(0.5).moveTo(35, footerY).lineTo(560, footerY).stroke();
         const isInvoice = data.type === "invoice";
         const isReceipt = data.type === "receipt";
 
         let qrBuffer: Buffer | null = null;
         if (data.qr_url) {
           try {
-            qrBuffer = await QRCode.toBuffer(data.qr_url, { errorCorrectionLevel: "H", type: "png", margin: 1, width: 50 });
+            qrBuffer = await QRCode.toBuffer(data.qr_url, { errorCorrectionLevel: "H", type: "png", margin: 1, width: 45 });
           } catch (_) {}
         }
 
@@ -1683,22 +1696,22 @@ export class PDFKitGenerator {
           ? "Payment received in full. Thank you for your business."
           : "Thank you for choosing Urban Device Care.";
 
-        doc.font("Times-Bold").fontSize(8).fillColor("#1e3a8a").text(isInvoice ? "Payment Instructions:" : "Notes & Details:", 40, footerY + 8);
-        doc.font("Times-Roman").fontSize(7.5).fillColor("#374151").text(payDetails, 40, footerY + 18, { width: 280 });
+        doc.font("Times-Bold").fontSize(7.5).fillColor("#1e3a8a").text(isInvoice ? "Payment Instructions:" : "Notes & Details:", 35, footerY + 6, { lineBreak: false });
+        doc.font("Times-Roman").fontSize(7).fillColor("#374151").text(payDetails, 35, footerY + 16, { width: 280, height: 35, ellipsis: true });
 
         if (data.company.terms) {
-          doc.font("Times-Bold").fontSize(8).fillColor("#1e3a8a").text("Terms & Conditions:", 330, footerY + 8);
-          doc.font("Times-Roman").fontSize(7).fillColor("#374151").text(data.company.terms, 330, footerY + 18, { width: 155 });
+          doc.font("Times-Bold").fontSize(7.5).fillColor("#1e3a8a").text("Terms & Conditions:", 325, footerY + 6, { lineBreak: false });
+          doc.font("Times-Roman").fontSize(6.5).fillColor("#374151").text(data.company.terms, 325, footerY + 16, { width: 165, height: 35, ellipsis: true });
         }
 
         if (qrBuffer) {
           try {
-            const qrSize = 46;
-            const qrX = 502;
-            const qrY = footerY + 6;
+            const qrSize = 40;
+            const qrX = 505;
+            const qrY = footerY + 4;
             doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
             const qrLabel = isInvoice ? "Scan to Pay Online" : isReceipt ? "Scan to Verify" : data.type === "job_card" ? "Scan to Track" : "Scan to View";
-            doc.fontSize(5.5).font("Times-Bold").fillColor("#1e3a8a").text(qrLabel, qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+            doc.fontSize(5.5).font("Times-Bold").fillColor("#1e3a8a").text(qrLabel, qrX - 6, qrY + qrSize + 1, { width: qrSize + 12, align: "center", lineBreak: false });
           } catch (_) {}
         }
 
@@ -1715,7 +1728,7 @@ export class PDFKitGenerator {
   private static async generateMinimal(data: DocumentData, logoBuffer: Buffer | null = null): Promise<Buffer> {
     return new Promise(async (resolve, reject) => {
       try {
-        const doc = new PDFDocument({ margin: 40, size: "A4" });
+        const doc = new PDFDocument({ margin: 35, size: "A4" });
         const buffers: Buffer[] = [];
 
         doc.on("data", buffers.push.bind(buffers));
@@ -1725,19 +1738,20 @@ export class PDFKitGenerator {
 
         if (logoBuffer) {
           try {
-            doc.image(logoBuffer, 40, 40, { fit: [120, 35] });
+            doc.image(logoBuffer, 35, 35, { fit: [120, 35] });
           } catch (_) {
-            doc.fontSize(14).font("Courier-Bold").fillColor("#111827").text(compName.toUpperCase(), 40, 40);
+            doc.fontSize(13).font("Courier-Bold").fillColor("#111827").text(compName.toUpperCase(), 35, 35);
           }
         } else {
-          doc.fontSize(14).font("Courier-Bold").fillColor("#111827").text(compName.toUpperCase(), 40, 40);
+          doc.fontSize(13).font("Courier-Bold").fillColor("#111827").text(compName.toUpperCase(), 35, 35);
         }
 
-        const topSubY = logoBuffer ? 82 : 58;
-        doc.fontSize(8).font("Courier").fillColor("#64748b");
-        if (data.company?.address) doc.text(data.company.address, 40, topSubY);
-        const contact = [data.company?.phone, data.company?.email].filter(Boolean).join(" | ");
-        if (contact) doc.text(contact, 40, topSubY + 10);
+        const topSubY = logoBuffer ? 76 : 52;
+        doc.fontSize(7.5).font("Courier").fillColor("#64748b");
+        if (data.company?.address) doc.text(data.company.address, 35, topSubY);
+        const compPhone = sanitizePhoneNumber(data.company?.phone);
+        const contact = [compPhone, data.company?.email, data.company?.website].filter(Boolean).join(" | ");
+        if (contact) doc.text(contact, 35, topSubY + 9);
 
         // Document Details (Right)
         const docTitle = data.title || (
@@ -1747,84 +1761,85 @@ export class PDFKitGenerator {
           data.type === "packing_slip" ? "PACKING SLIP" :
           data.type === "estimate" ? "ESTIMATE" : "DOCUMENT"
         );
-        doc.fontSize(14).font("Courier-Bold").fillColor("#111827").text(docTitle, 350, 40, { align: "right" });
-        doc.fontSize(8.5).font("Courier").fillColor("#64748b").text(`ID: #${data.display_id}`, 350, 58, { align: "right" });
-        doc.text(`DATE: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 70, { align: "right" });
+        doc.fontSize(13).font("Courier-Bold").fillColor("#111827").text(docTitle, 350, 35, { align: "right" });
+        doc.fontSize(8).font("Courier").fillColor("#64748b").text(`ID: #${data.display_id}`, 350, 52, { align: "right" });
+        doc.text(`DATE: ${data.date || new Date().toISOString().split("T")[0]}`, 350, 63, { align: "right" });
 
         // 1D Barcode
         if (data.display_id) {
           try {
             const barcodeBuf = await PDFKitGenerator.generateBarcode(String(data.display_id));
             if (barcodeBuf) {
-              doc.image(barcodeBuf, 445, 88, { width: 110, height: 20 });
+              doc.image(barcodeBuf, 445, 78, { width: 110, height: 18 });
             }
           } catch (e) {}
         }
 
         // Minimal Rule
-        doc.strokeColor("#111827").lineWidth(0.75).moveTo(40, 140).lineTo(555, 140).stroke();
+        doc.strokeColor("#111827").lineWidth(0.75).moveTo(35, 125).lineTo(560, 125).stroke();
 
         // Customer
-        doc.font("Courier-Bold").fontSize(8.5).fillColor("#111827").text(data.type === "job_card" ? "INTAKE / CLIENT:" : "CUSTOMER:", 40, 150);
+        doc.font("Courier-Bold").fontSize(8).fillColor("#111827").text(data.type === "job_card" ? "INTAKE / CLIENT:" : "CUSTOMER:", 35, 134);
         const customerDisplayName = data.customer.company_name || data.customer.name;
-        doc.font("Courier").fontSize(9).text(customerDisplayName, 40, 162);
-        let custY = 174;
+        doc.font("Courier").fontSize(8.5).text(customerDisplayName, 35, 145);
+        let custY = 156;
         if (data.customer.company_name && data.customer.name && data.customer.name !== data.customer.company_name) {
-          doc.text(`ATTN: ${data.customer.name}`, 40, custY);
-          custY += 10;
+          doc.text(`ATTN: ${data.customer.name}`, 35, custY);
+          custY += 9;
         }
-        if (data.customer.address) { doc.text(data.customer.address, 40, custY); custY += 10; }
-        const cDetails = [data.customer.phone, data.customer.email].filter(Boolean).join("  •  ");
-        if (cDetails) { doc.text(cDetails, 40, custY); custY += 10; }
+        if (data.customer.address) { doc.text(data.customer.address, 35, custY); custY += 9; }
+        const custPhone = sanitizePhoneNumber(data.customer.phone);
+        const cDetails = [custPhone, data.customer.email].filter(Boolean).join("  •  ");
+        if (cDetails) { doc.text(cDetails, 35, custY); custY += 9; }
 
         // Custom Fields
         if (data.custom_fields && Object.keys(data.custom_fields).length > 0) {
-          custY += 4;
+          custY += 3;
           for (const [k, v] of Object.entries(data.custom_fields)) {
-            doc.font("Courier-Bold").fontSize(7.5).text(`${k.toUpperCase()}: `, 40, custY, { continued: true });
+            doc.font("Courier-Bold").fontSize(7).text(`${k.toUpperCase()}: `, 35, custY, { continued: true });
             doc.font("Courier").text(String(v));
-            custY += 9;
+            custY += 8.5;
           }
         }
 
         // Table
-        let tableTop = Math.max(custY + 10, 220);
-        doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(40, tableTop).lineTo(555, tableTop).stroke();
-        doc.font("Courier-Bold").fontSize(8).fillColor("#111827");
-        doc.text("ITEM", 45, tableTop + 5);
-        doc.text("QTY", 360, tableTop + 5, { width: 30, align: "center" });
-        doc.text("PRICE", 410, tableTop + 5, { width: 60, align: "right" });
-        doc.text("TOTAL", 485, tableTop + 5, { width: 65, align: "right" });
-        doc.strokeColor("#111827").lineWidth(0.5).moveTo(40, tableTop + 18).lineTo(555, tableTop + 18).stroke();
+        let tableTop = Math.max(custY + 8, 205);
+        doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(35, tableTop).lineTo(560, tableTop).stroke();
+        doc.font("Courier-Bold").fontSize(7.5).fillColor("#111827");
+        doc.text("ITEM", 40, tableTop + 4);
+        doc.text("QTY", 360, tableTop + 4, { width: 30, align: "center" });
+        doc.text("PRICE", 410, tableTop + 4, { width: 60, align: "right" });
+        doc.text("TOTAL", 485, tableTop + 4, { width: 65, align: "right" });
+        doc.strokeColor("#111827").lineWidth(0.5).moveTo(35, tableTop + 16).lineTo(560, tableTop + 16).stroke();
 
-        let rowY = tableTop + 24;
-        doc.font("Courier").fontSize(8).fillColor("#111827");
+        let rowY = tableTop + 20;
+        doc.font("Courier").fontSize(7.5).fillColor("#111827");
 
         const minimalItems = data.items || [];
         if (minimalItems.length === 0) {
-          doc.font("Courier-Oblique").fontSize(8).fillColor("#64748b").text("No itemized charges listed", 45, rowY, { width: 300 });
-          rowY += 18;
+          doc.font("Courier-Oblique").fontSize(7.5).fillColor("#64748b").text("No itemized charges listed", 40, rowY, { width: 300 });
+          rowY += 16;
         } else {
           for (const item of minimalItems) {
-            if (rowY > 700) {
+            if (rowY > 690) {
               doc.addPage();
-              rowY = 50;
+              rowY = 40;
             }
             const itemTitle = item?.title ? String(item.title) : "Item";
-            doc.text(itemTitle, 45, rowY, { width: 300 });
+            doc.text(itemTitle, 40, rowY, { width: 300 });
             doc.text(String(item?.quantity || 1), 360, rowY, { width: 30, align: "center" });
             doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 410, rowY, { width: 60, align: "right" });
             const lineTotal = item?.total != null ? item.total : (Number(item?.quantity || 1) * Number(item?.unit_price || 0));
             doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 485, rowY, { width: 65, align: "right" });
-            rowY += 18;
+            rowY += 16;
           }
         }
 
-        doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(40, rowY).lineTo(555, rowY).stroke();
+        doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(35, rowY).lineTo(560, rowY).stroke();
 
         // Totals
-        let sumY = rowY + 10;
-        doc.font("Courier-Bold").fontSize(9);
+        let sumY = rowY + 8;
+        doc.font("Courier-Bold").fontSize(8.5);
         doc.text("TOTAL:", 410, sumY, { width: 60, align: "right" });
         doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 485, sumY, { width: 65, align: "right" });
 
@@ -1834,32 +1849,35 @@ export class PDFKitGenerator {
         let qrBuffer: Buffer | null = null;
         if (data.qr_url) {
           try {
-            qrBuffer = await QRCode.toBuffer(data.qr_url, { errorCorrectionLevel: "H", type: "png", margin: 1, width: 45 });
+            qrBuffer = await QRCode.toBuffer(data.qr_url, { errorCorrectionLevel: "H", type: "png", margin: 1, width: 42 });
           } catch (_) {}
         }
 
-        let noteY = sumY + 22;
-        if (isInvoice && data.payment_link) {
-          doc.font("Courier-Bold").fontSize(8).fillColor("#111827").text(`PAY ONLINE: ${data.payment_link}`, 40, noteY, { width: 440 });
-          noteY += 14;
-        }
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 56;
 
-        if (data.notes) {
-          doc.font("Courier").fontSize(7.5).fillColor("#64748b").text(`NOTE: ${data.notes}`, 40, noteY, { width: 440 });
+        let noteY = sumY + 16;
+        if (isInvoice && data.payment_link) {
+          doc.font("Courier-Bold").fontSize(7.5).fillColor("#111827").text(`PAY ONLINE: ${data.payment_link}`, 35, noteY, { width: 440, lineBreak: false });
           noteY += 12;
         }
-        if (data.body_text) {
-          doc.font("Courier").fontSize(7.5).fillColor("#64748b").text(data.body_text, 40, noteY, { width: 440 });
+
+        if (data.notes && noteY < footerY - 12) {
+          doc.font("Courier").fontSize(7).fillColor("#64748b").text(`NOTE: ${data.notes}`, 35, noteY, { width: 440, height: 18, ellipsis: true });
+          noteY += 10;
+        }
+        if (data.body_text && noteY < footerY - 12) {
+          doc.font("Courier").fontSize(7).fillColor("#64748b").text(data.body_text, 35, noteY, { width: 440, height: 18, ellipsis: true });
         }
 
         if (qrBuffer) {
           try {
-            const qrSize = 44;
-            const qrX = 505;
-            const qrY = doc.page.height - 65;
+            const qrSize = 38;
+            const qrX = 510;
+            const qrY = footerY;
             doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
             const qrLabel = isInvoice ? "SCAN TO PAY" : isReceipt ? "SCAN TO VERIFY" : "SCAN TO VIEW";
-            doc.fontSize(5).font("Courier-Bold").fillColor("#111827").text(qrLabel, qrX - 6, qrY + qrSize + 2, { width: qrSize + 12, align: "center" });
+            doc.fontSize(5).font("Courier-Bold").fillColor("#111827").text(qrLabel, qrX - 6, qrY + qrSize + 1, { width: qrSize + 12, align: "center", lineBreak: false });
           } catch (_) {}
         }
 
@@ -1896,7 +1914,7 @@ export class PDFKitGenerator {
         name: data?.company?.name || "Company Store",
         logo_url: data?.company?.logo_url,
         address: data?.company?.address,
-        phone: data?.company?.phone,
+        phone: sanitizePhoneNumber(data?.company?.phone) || undefined,
         email: data?.company?.email,
         website: data?.company?.website,
         payment_details: data?.company?.payment_details,
@@ -1907,7 +1925,7 @@ export class PDFKitGenerator {
         name: data?.customer?.name || "Valued Customer",
         company_name: data?.customer?.company_name,
         email: data?.customer?.email,
-        phone: data?.customer?.phone,
+        phone: sanitizePhoneNumber(data?.customer?.phone) || undefined,
         address: data?.customer?.address,
       },
     };

@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../modules/documents";
 import DocumentModuleService from "../../../../modules/documents/service";
 import { PDFKitGenerator, DocumentData } from "../../../../services/pdfkit-generator";
+import { sanitizePhoneNumber } from "../../../../utils/phone-sanitizer";
 
 export const AUTHENTICATE = false;
 
@@ -227,7 +228,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         name: companyName,
         logo_url: settings.pdf_logo_url,
         address: settings.pdf_address || "Bekim House, 04 Westlands Crossway Rd, Westlands, Nairobi, Kenya",
-        phone: settings.pdf_phone || "0729 436 660 / 0794 700 241",
+        phone: sanitizePhoneNumber(settings.pdf_phone) || "0729 436 660 / 0794 700 241",
         email: settings.pdf_email || "urbandevice.care@gmail.com",
         website: settings.pdf_website || "www.urbandevicecare.co.uk",
         payment_details: settings.pdf_payment_details || "Paybill: 400200 | Acc: 1039764",
