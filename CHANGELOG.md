@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.39] - 2026-11-01
+
+### Full-Width Responsive Template Cards Layout
+- **Full Width Stretch in Templates Tab**: Removed the restrictive `max-w-6xl` container wrapper from the PDF Templates tab, allowing template cards to stretch and fill 100% of the available admin layout area (`w-full`), matching the All Documents Hub layout.
+- **Enhanced Responsive Grid**: Upgraded the template card grid to `grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5 w-full`, ensuring balanced card proportions and eliminating the empty gap on the right on widescreen and desktop displays.
+
 ## [1.1.37] - 2026-11-01
 
 ### Invoice Payment Links, Document QR Codes on Bottom-Right, and Layout Overlap Elimination

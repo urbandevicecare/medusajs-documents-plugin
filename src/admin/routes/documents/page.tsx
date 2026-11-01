@@ -1779,7 +1779,7 @@ export const DocumentsPage = () => {
       {/* TAB 2: PDF TEMPLATES SELECTION & PREVIEW                 */}
       {/* ========================================================= */}
       {activeTab === "templates" && (
-        <div className="p-6 max-w-6xl flex flex-col gap-6">
+        <div className="p-6 w-full flex flex-col gap-6">
           <div className="flex flex-col gap-1">
             <Heading level="h2" className="text-lg font-semibold">Document Templates & Live Previews</Heading>
             <Text className="text-xs text-ui-fg-subtle">
@@ -1787,7 +1787,7 @@ export const DocumentsPage = () => {
             </Text>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5 w-full">
             {/* 1. Tax Invoice */}
             <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
               <div>
