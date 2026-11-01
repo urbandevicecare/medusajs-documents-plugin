@@ -440,9 +440,10 @@ export class PDFKitGenerator {
 
         currentY += 6;
 
-        // Summary Table
+        // Summary Table (Right) & Notes / Terms (Left)
         const sumW = 220;
         const sumX = 330;
+        const sumStartY = currentY;
 
         const addSummaryRow = (label: string, value: string, isBold: boolean = false, isBg: boolean = false, valColor: string = "#111827") => {
           if (isBg) {
@@ -464,13 +465,20 @@ export class PDFKitGenerator {
           addSummaryRow("Balance Due", `KES ${fmtDue}`, true, true, "#111827");
         }
 
-        // Terms and conditions
+        // Notes and Terms & Conditions on the left side (x = 45..310) alongside Summary Table (x = 330..550)
+        let leftInfoY = sumStartY;
+        const leftInfoW = 265;
+        if (data.notes && data.notes.trim().length > 0) {
+          doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#374151").text("Notes", 45, leftInfoY, { lineBreak: false });
+          leftInfoY += 9;
+          doc.fontSize(7).font("Helvetica").fillColor("#6b7280").text(data.notes.trim(), 45, leftInfoY, { width: leftInfoW, lineGap: 1, ellipsis: true });
+          leftInfoY += Math.min(22, doc.heightOfString(data.notes.trim(), { width: leftInfoW, lineGap: 1 })) + 4;
+        }
+
         if (settings?.pdf_terms) {
-          currentY += 10;
-          if (currentY > doc.page.height - 95) { doc.addPage(); currentY = 40; }
-          doc.fontSize(8).font("Helvetica-Bold").fillColor("#111827").text("Terms & Conditions", 45, currentY);
-          currentY += 9;
-          doc.fontSize(7).font("Helvetica").fillColor("#6b7280").text(settings.pdf_terms, 45, currentY, { width: 505, lineGap: 1.5 });
+          doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#374151").text("Terms & Conditions", 45, leftInfoY, { lineBreak: false });
+          leftInfoY += 9;
+          doc.fontSize(6.8).font("Helvetica").fillColor("#6b7280").text(settings.pdf_terms, 45, leftInfoY, { width: leftInfoW, lineGap: 1, ellipsis: true });
         }
 
         // Watermark
@@ -671,23 +679,19 @@ export class PDFKitGenerator {
         currentY += 8;
 
         // SECTION 4: DUAL SIGNATURES
-        const minSigSpace = 55;
-        if (currentY + minSigSpace > doc.page.height - 50) {
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 48;
+        if (currentY > footerY - 32) {
           doc.addPage();
-          currentY = 45;
-        } else {
-          currentY = Math.max(currentY + 10, doc.page.height - 100);
+          currentY = 40;
         }
-        const sigY = currentY + 15;
+        const sigY = Math.min(Math.max(currentY + 10, footerY - 40), footerY - 22);
         doc.rect(45, sigY, 190, 0.75).fill("#0f172a");
         doc.rect(265, sigY, 190, 0.75).fill("#0f172a");
 
         doc.fontSize(8).font("Helvetica-Bold").fillColor("#0f172a");
         doc.text("Technician Signature", 45, sigY + 4, { lineBreak: false });
         doc.text("Customer Signature", 265, sigY + 4, { lineBreak: false });
-
-        doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 48;
         doc.rect(45, footerY - 6, 505, 0.5).fill("#e2e8f0");
         doc.fontSize(7).font("Helvetica").fillColor("#64748b");
         doc.text("Intake Agreement: Diagnostics & component repairs carry standard 90-day warranty coverage. Customer accepts custody release terms.", 45, footerY, { width: 440, lineBreak: false });
@@ -809,42 +813,45 @@ export class PDFKitGenerator {
         currentY += 26;
 
         // DIAGNOSTICS & TECHNICAL SUMMARY CARD
-        if (currentY > doc.page.height - 130) { doc.addPage(); currentY = 40; }
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 46;
+        const diagH = 48;
+        const recH = 40;
+        if (currentY + diagH + recH > footerY - 10) {
+          doc.addPage();
+          currentY = 40;
+        }
+
         const diagCardY = currentY;
-        const diagH = 55;
         doc.rect(45, diagCardY, 505, diagH).fill("#f8fafc");
         doc.rect(45, diagCardY, 3.5, diagH).fill("#1e3a8a");
 
-        doc.fontSize(8).font("Helvetica-Bold").fillColor("#1e3a8a").text("DIAGNOSTICS & TECHNICAL SUMMARY", 55, diagCardY + 6);
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#1e3a8a").text("DIAGNOSTICS & TECHNICAL SUMMARY", 55, diagCardY + 5);
 
-        let bY = diagCardY + 18;
+        let bY = diagCardY + 16;
         const drawBullet = (titleText: string, bodyText: string) => {
           doc.fontSize(7).font("Helvetica-Bold").fillColor("#0f172a").text(`• ${titleText}: `, 55, bY, { continued: true });
           doc.font("Helvetica").fillColor("#475569").text(bodyText, { width: 480 });
-          bY += 12;
+          bY += 10.5;
         };
 
         drawBullet("Hardware Assessment", ticket.issue_description || "Inspection confirmed hardware malfunction requiring bench service.");
         drawBullet("Bench & Component Measurements", "Thermal dissipation profile, logic rail voltages, and sub-assembly continuity verified.");
         drawBullet("Clearance Plan", "Component replacement and workshop clean-room installation under 90-day warranty.");
 
-        currentY += diagH + 8;
+        currentY += diagH + 6;
 
         // LONG-TERM RECOMMENDATION CARD
-        if (currentY > doc.page.height - 100) { doc.addPage(); currentY = 40; }
         const recCardY = currentY;
-        const recH = 46;
         doc.rect(45, recCardY, 505, recH).fill("#f0f7ff");
         doc.rect(45, recCardY, 3.5, recH).fill("#2563eb");
 
-        doc.fontSize(8).font("Helvetica-Bold").fillColor("#2563eb").text("LONG-TERM INFRASTRUCTURE RECOMMENDATION", 55, recCardY + 6);
+        doc.fontSize(8).font("Helvetica-Bold").fillColor("#2563eb").text("LONG-TERM INFRASTRUCTURE RECOMMENDATION", 55, recCardY + 5);
         const recText = "While scheduled maintenance and OEM component replacement restores peak stability and operational hygiene, older hardware architectures face natural component obsolescence. We recommend periodic thermal de-dusting and evaluating phased upgrades to modern platforms.";
-        doc.fontSize(7).font("Helvetica").fillColor("#1e293b").text(recText, 55, recCardY + 18, { width: 485, lineGap: 1.5 });
+        doc.fontSize(6.8).font("Helvetica").fillColor("#1e293b").text(recText, 55, recCardY + 16, { width: 485, lineGap: 1 });
 
-        currentY += recH + 8;
+        currentY += recH + 6;
 
-        doc.page.margins.bottom = 0;
-        const footerY = doc.page.height - 46;
         doc.rect(45, footerY - 6, 505, 0.5).fill("#e2e8f0");
         doc.fontSize(7).font("Helvetica").fillColor("#94a3b8");
         doc.text(`Official Diagnostic & Scope Report — ${(settings?.company_name || "Urban Device Care Ltd")}  •  Page 1 of 1`, 45, footerY, { width: 440, lineBreak: false });
@@ -1163,7 +1170,7 @@ export class PDFKitGenerator {
 
           let isAlt = false;
           for (const item of certItems) {
-            if (currentY > 680) {
+            if (currentY > 725) {
               doc.addPage();
               currentY = 40;
               doc.rect(45, currentY, 505, 20).fill("#0f172a");
@@ -1219,7 +1226,7 @@ export class PDFKitGenerator {
 
         // Notes & Terms
         if (data.notes && data.notes.trim().length > 0) {
-          if (currentY > 690) {
+          if (currentY > 735) {
             doc.addPage();
             currentY = 40;
           }
@@ -1231,23 +1238,23 @@ export class PDFKitGenerator {
         }
 
         // Signatures Block
-        const minSigSpace = 55;
-        if (currentY + minSigSpace > doc.page.height - 40) {
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 46;
+        if (currentY > footerY - 32) {
           doc.addPage();
           currentY = 40;
-        } else {
-          currentY = Math.max(currentY + 10, doc.page.height - 90);
         }
+        const sigY = Math.min(Math.max(currentY + 10, footerY - 42), footerY - 24);
 
-        doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(45, currentY).lineTo(235, currentY).stroke();
-        doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(360, currentY).lineTo(550, currentY).stroke();
+        doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(45, sigY).lineTo(235, sigY).stroke();
+        doc.strokeColor("#94a3b8").lineWidth(0.75).moveTo(360, sigY).lineTo(550, sigY).stroke();
 
         doc.fontSize(8).font("Helvetica-Bold").fillColor("#0f172a");
-        doc.text(settings?.company_name ? `${settings.company_name} — Authorized Signatory` : "Urban Device Care Ltd — Authorized Signatory", 45, currentY + 4, { lineBreak: false });
-        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Certified Hardware Specialist  •  Official Seal", 45, currentY + 14, { lineBreak: false });
+        doc.text(settings?.company_name ? `${settings.company_name} — Authorized Signatory` : "Urban Device Care Ltd — Authorized Signatory", 45, sigY + 4, { lineBreak: false });
+        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Certified Hardware Specialist  •  Official Seal", 45, sigY + 14, { lineBreak: false });
 
-        doc.font("Helvetica-Bold").fontSize(8).fillColor("#0f172a").text("Customer / Authorized Representative", 360, currentY + 4, { lineBreak: false });
-        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Signature & Acceptance Date", 360, currentY + 14, { lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(8).fillColor("#0f172a").text("Customer / Authorized Representative", 360, sigY + 4, { lineBreak: false });
+        doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Signature & Acceptance Date", 360, sigY + 14, { lineBreak: false });
 
         // Bottom Page Footer across all pages
         const pages = doc.bufferedPageRange();
@@ -1469,9 +1476,6 @@ export class PDFKitGenerator {
         doc.text(PDFKitGenerator.formatCurrency(data.total, data.currency_code), 440, totalsY + 6, { width: 95, align: "right" });
 
         // Footer & Payment Information
-        if (totalsY > 700) {
-          doc.addPage();
-        }
         doc.page.margins.bottom = 0;
         const footerY = doc.page.height - 68;
         doc.strokeColor(borderColor).lineWidth(1).moveTo(40, footerY).lineTo(555, footerY).stroke();
@@ -1627,23 +1631,23 @@ export class PDFKitGenerator {
           rowY += 20;
         } else {
           for (const item of classicItems) {
-            if (rowY > 670) {
+            if (rowY > 710) {
               doc.addPage();
               rowY = 40;
             }
             const itemTitle = item?.title ? String(item.title) : "Item";
-            doc.font("Times-Bold").text(itemTitle, 45, rowY + 4, { width: 285 });
+            doc.font("Times-Bold").text(itemTitle, 45, rowY + 3, { width: 285 });
             if (item?.description) {
-              doc.font("Times-Italic").fontSize(7).fillColor("#64748b").text(String(item.description), 45, rowY + 13, { width: 285, ellipsis: true });
+              doc.font("Times-Italic").fontSize(7).fillColor("#64748b").text(String(item.description), 45, rowY + 12, { width: 285, ellipsis: true });
               doc.font("Times-Roman").fontSize(8).fillColor("#111827");
             }
 
-            doc.text(String(item?.quantity || 1), 350, rowY + 4, { width: 35, align: "center" });
-            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 400, rowY + 4, { width: 65, align: "right" });
+            doc.text(String(item?.quantity || 1), 350, rowY + 3, { width: 35, align: "center" });
+            doc.text(PDFKitGenerator.formatCurrency(item?.unit_price, data.currency_code), 400, rowY + 3, { width: 65, align: "right" });
             const lineTotal = item?.total != null ? item.total : (Number(item?.quantity || 1) * Number(item?.unit_price || 0));
-            doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 485, rowY + 4, { width: 65, align: "right" });
+            doc.text(PDFKitGenerator.formatCurrency(lineTotal, data.currency_code), 485, rowY + 3, { width: 65, align: "right" });
 
-            rowY += 20;
+            rowY += 18;
             doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(35, rowY).lineTo(560, rowY).stroke();
           }
         }

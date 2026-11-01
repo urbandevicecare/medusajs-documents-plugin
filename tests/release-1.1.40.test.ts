@@ -131,6 +131,86 @@ test("Release 1.1.40 - All standard templates fit on exactly 1 single page witho
   assert.strictEqual(await getPageCount(certPdf), 1, "certificate should be 1 page");
 });
 
+test("Release 1.1.40 - Multi-item documents with notes and terms fit on 1 single page without orphan pages", async () => {
+  const getPageCount = async (buf: Buffer): Promise<number> => {
+    const pdfDoc = await PDFLibDoc.load(buf);
+    return pdfDoc.getPageCount();
+  };
+
+  const multiItemData: DocumentData = {
+    display_id: "RT-2005",
+    title: "Tax Invoice",
+    type: "invoice",
+    date: "2026-11-01",
+    currency_code: "KES",
+    company: {
+      name: "Urban Device Care Ltd",
+      address: "Bekim House, 04 Westlands Crossway Rd, Nairobi",
+      phone: "0729 436 660 / 0794 700 241 / \u202D0720 702 537\u202C",
+      email: "info@urbandevicecare.co.uk",
+      website: "www.urbandevicecare.co.uk",
+      payment_details: "Paybill: 400200 | Acc: 1039764",
+      terms: "Payment due within 14 days. 90-day warranty applies on parts and labor. No cash refunds.",
+    },
+    customer: {
+      name: "Jane Smith",
+      email: "jane@example.com",
+      phone: "0799 123 456",
+      address: "Riverside Drive, Nairobi, Kenya",
+    },
+    items: [
+      { title: "OEM Super Retina XDR Display", description: "OLED replacement module", quantity: 1, unit_price: 18000, total: 18000 },
+      { title: "OEM Extended Battery Pack", description: "Internal cell replacement", quantity: 1, unit_price: 5500, total: 5500 },
+      { title: "Precision Cleanroom Re-adhesion", description: "Water resistance gasket", quantity: 1, unit_price: 2500, total: 2500 },
+      { title: "Earpiece Mesh & Audio Chamber Cleaning", description: "Acoustic debris removal", quantity: 1, unit_price: 1500, total: 1500 },
+      { title: "Full Logic Board Diagnostics", description: "Voltage drop rail check", quantity: 1, unit_price: 2000, total: 2000 },
+      { title: "Tempered Glass Screen Protector", description: "9H Oleophobic coating", quantity: 1, unit_price: 1000, total: 1000 },
+    ],
+    notes: "Client requested express turn-around before travel. Hardware passed all QC tests.",
+    total: 30500,
+    payment_link: "https://urbandevicecare.co.uk/r/pay-sample",
+    qr_url: "https://urbandevicecare.co.uk/r/pay-sample",
+  };
+
+  // Test across all templates
+  assert.strictEqual(await getPageCount(await PDFKitGenerator.generate(multiItemData, "zoho_exact")), 1, "zoho_exact multi-item fits 1 page");
+  assert.strictEqual(await getPageCount(await PDFKitGenerator.generate(multiItemData, "modern")), 1, "modern multi-item fits 1 page");
+  assert.strictEqual(await getPageCount(await PDFKitGenerator.generate(multiItemData, "classic")), 1, "classic multi-item fits 1 page");
+  assert.strictEqual(await getPageCount(await PDFKitGenerator.generate(multiItemData, "minimal")), 1, "minimal multi-item fits 1 page");
+
+  // Job card with detailed fields
+  const jobCardData: DocumentData = {
+    ...multiItemData,
+    type: "job_card",
+    title: "Workshop Job Card",
+    custom_fields: {
+      "Device Model": "Apple iPhone 14 Pro Max (256GB Space Black)",
+      "Serial / IMEI": "F2LZ90K8MD6R / 354892019283741",
+      "Intake Condition": "Glass shattered on upper right corner. Chassis scuffed. FaceID functional.",
+      "Accessories": "Spigen Rugged Armor Case, SIM Tray present.",
+      "Reported Issue": "Touch intermittent after accidental impact. Green vertical line on OLED.",
+    },
+  };
+  assert.strictEqual(await getPageCount(await PDFKitGenerator.generate(jobCardData, "standard")), 1, "job_card with full details fits 1 page");
+
+  // Service report with 5 items
+  const serviceReportData: DocumentData = {
+    ...multiItemData,
+    type: "service_report",
+    title: "Diagnostic & Service Report",
+  };
+  assert.strictEqual(await getPageCount(await PDFKitGenerator.generate(serviceReportData, "standard")), 1, "service_report with multi-items fits 1 page");
+
+  // Certificate with notes
+  const certData: DocumentData = {
+    ...multiItemData,
+    type: "certificate" as any,
+    title: "Official Hardware Certificate",
+    body_text: "Urban Device Care certifies that genuine OEM parts were installed and calibrated according to factory specifications.",
+  };
+  assert.strictEqual(await getPageCount(await PDFKitGenerator.generate(certData, "standard")), 1, "certificate with multi-items fits 1 page");
+});
+
 test("Release 1.1.40 - ZohoBooksService has updateInvoice and updateEstimate methods", () => {
   const zoho = new ZohoBooksService({
     client_id: "test",

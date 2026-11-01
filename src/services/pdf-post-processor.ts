@@ -55,7 +55,7 @@ export async function postProcessPdf(
           const qrLabel = isInv ? "Scan to Pay Online" : options.docType === "receipt" ? "Scan to Verify" : "Scan to View";
           lastPage.drawText(qrLabel, {
             x: 488,
-            y: 47,
+            y: 42,
             size: 5.5,
             font: fontBold,
             color: rgb(0.3, 0.35, 0.4),

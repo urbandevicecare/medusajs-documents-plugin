@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../modules/documents";
 import DocumentModuleService from "../../../../modules/documents/service";
+import { sanitizePhoneNumber } from "../../../../utils/phone-sanitizer";
 
 // POST /admin/documents/custom
 export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
@@ -40,7 +41,7 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
           name: customer?.name || companyName || "Customer",
           company_name: companyName || undefined,
           email: customer?.email,
-          phone: customer?.phone,
+          phone: sanitizePhoneNumber(customer?.phone) || undefined,
           address: customer?.address,
         },
         items,

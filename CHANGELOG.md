@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.42] - 2026-11-01
+
+### Fix Blank Extra Pages, Orphan 1-Line Pages, and Sync-Zoho In-Place Updates
+- **Elimination of Blank Extra Pages & Orphan 1-Line Pages**:
+  - Removed accidental `if (totalsY > 700) doc.addPage()` before footer in `generateModern` which triggered empty second pages containing only the footer.
+  - Positioned Notes and Terms & Conditions on the bottom-left alongside the Summary Table on the bottom-right in `renderZohoExactDocument`, eliminating 60pt of vertical stack and preventing Terms from overflowing into an orphan 1-line 2nd page.
+  - Adjusted dynamic signature positioning and height thresholds in `renderJobCardDocument` and `renderCertificateDocument` so dual signatures sit cleanly above the footer without premature page breaks.
+  - Grouped diagnostic summary card and recommendation card in `renderServiceReportDocument` to prevent trailing orphaned cards on separate pages.
+  - Raised line items page break thresholds from 670-690pt to 710-725pt across templates to allow multi-item documents (6-12 items) to fit comfortably on 1 single page.
+- **QR Code & Payment Link Stamping Refinement**:
+  - Adjusted QR label coordinate to `y: 42` in `pdf-post-processor.ts` to prevent text ascenders from colliding with Zoho's divider line at `y = 51`.
+- **Sync-Zoho Route Existing Document Updates**:
+  - Updated `POST /admin/documents/:id/sync-zoho` to call `zoho.updateInvoice` and `zoho.updateEstimate` when document records already exist in Zoho Books, adopting custom notes and payment links in-place.
+  - Applied `sanitizePhoneNumber` in `sync-zoho`, `manual`, and `custom` routes.
+
 ## [1.1.41] - 2026-11-01
 
 ### Single-Page Layout Safety, Phone Unicode Normalization & Zoho Custom Sync

@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DOCUMENTS_MODULE } from "../../../../../modules/documents";
 import DocumentModuleService from "../../../../../modules/documents/service";
 import { ZohoBooksService } from "../../../../../services/zoho-books";
+import { sanitizePhoneNumber } from "../../../../../utils/phone-sanitizer";
 
 // POST /admin/documents/:id/sync-zoho
 export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaResponse) {
@@ -53,7 +54,7 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
     first_name: record.customer_name || "Customer",
     company_name: companyName || undefined,
     email: record.customer_email || undefined,
-    phone: record.customer_phone || undefined,
+    phone: sanitizePhoneNumber(record.customer_phone) || undefined,
   });
 
   const items = (meta.items || []).map((it: any) => ({
@@ -63,16 +64,34 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
     quantity: it.quantity || 1,
   }));
 
+  // Prepare custom notes including payment link if applicable
+  let zohoNotes = settings.zoho_invoice_notes || settings.pdf_payment_details || meta.notes || "Thank you for your business.";
+  const pLink = record.short_payment_link || record.payment_link;
+  if (pLink && !zohoNotes.includes("Pay Online:")) {
+    zohoNotes += `\n\nPay Online: ${pLink}`;
+  }
+  const zohoTerms = settings.zoho_invoice_terms || settings.pdf_terms || "";
+
   let zohoDocId: string;
   if (record.type === "estimate") {
     const existingEst = await zoho.getEstimateByNumber(record.display_id);
     if (existingEst) {
       zohoDocId = existingEst.estimate_id;
+      try {
+        await zoho.updateEstimate(zohoDocId, {
+          line_items: items.length > 0 ? items : undefined,
+          notes: zohoNotes,
+          terms: zohoTerms,
+        });
+      } catch (err: any) {
+        req.scope.resolve("logger", { allowUnregistered: true })?.warn?.(`[sync-zoho] Failed to update existing Zoho estimate ${zohoDocId}: ${err?.message || err}`);
+      }
     } else {
       const est = await zoho.createEstimate(contactId, {
         reference_number: record.display_id,
         line_items: items,
-        notes: meta.notes || settings.zoho_invoice_notes,
+        notes: zohoNotes,
+        terms: zohoTerms,
       });
       zohoDocId = est.estimate_id;
     }
@@ -80,14 +99,25 @@ export async function POST(req: MedusaRequest<{ id: string }>, res: MedusaRespon
     const existingInv = await zoho.getInvoiceByNumber(record.display_id);
     if (existingInv) {
       zohoDocId = existingInv.invoice_id;
+      try {
+        await zoho.updateInvoice(zohoDocId, {
+          line_items: items.length > 0 ? items : undefined,
+          notes: zohoNotes,
+          terms: zohoTerms,
+          payment_terms: settings.zoho_payment_terms_days,
+          is_inclusive_tax: settings.zoho_tax_inclusive,
+        });
+      } catch (err: any) {
+        req.scope.resolve("logger", { allowUnregistered: true })?.warn?.(`[sync-zoho] Failed to update existing Zoho invoice ${zohoDocId}: ${err?.message || err}`);
+      }
     } else {
       const inv = await zoho.createInvoice(contactId, {
         reference_number: record.display_id,
         invoice_number: record.display_id,
         ignore_auto_number_generation: true,
         line_items: items,
-        notes: meta.notes || settings.zoho_invoice_notes,
-        terms: settings.zoho_invoice_terms,
+        notes: zohoNotes,
+        terms: zohoTerms,
         payment_terms: settings.zoho_payment_terms_days,
         is_inclusive_tax: settings.zoho_tax_inclusive,
       });
