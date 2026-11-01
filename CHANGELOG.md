@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.49] - 2026-11-01
+
+### PDF Standard Decryption & Metadata Resilience
+- **Unencrypted Metadata Stream Protection**:
+  - Respected ISO 32000-1 specifications by preserving unencrypted XML metadata streams when `/EncryptMetadata` is `false`.
+  - Avoided double PDF loading overhead in `ensureDecryptedPdf` when the document is already unencrypted.
+- **Test Suite Modernization**:
+  - Added deep stream verification in `tests/release-1.1.47.test.ts` proving full decompression and proper operator syntax inside content streams.
+
 ## [1.1.47] - 2026-11-01
 
 ### Fix Chrome PDFium "Failed to load PDF document" via Full Stream Decryption

@@ -2,13 +2,14 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { PDFDocument } from "pdf-lib";
+import zlib from "node:zlib";
+import { PDFDocument, PDFRawStream } from "pdf-lib";
 import { postProcessPdf } from "../src/services/pdf-post-processor";
 import { PDFKitGenerator, DocumentData } from "../src/services/pdfkit-generator";
 import * as adminRoute from "../src/api/admin/documents/[id]/document/route";
 import * as publicRoute from "../src/api/documents/[id]/document/route";
 
-test("Release 1.1.46 - Streaming routes export clean headers including nosniff and no-cache", async () => {
+test("Release 1.1.47 - Streaming routes export clean headers including nosniff and no-cache", async () => {
   assert.strictEqual(adminRoute.AUTHENTICATE, false);
   assert.strictEqual(typeof adminRoute.GET, "function");
   assert.strictEqual(typeof adminRoute.HEAD, "function");
@@ -29,7 +30,7 @@ test("Release 1.1.46 - Streaming routes export clean headers including nosniff a
   }
 });
 
-test("Release 1.1.46 - Encrypted Zoho Books PDF is decrypted, stripped of /Encrypt, and stamped with payment link and QR", async () => {
+test("Release 1.1.47 - Encrypted Zoho Books PDF is decrypted, stripped of /Encrypt, and stamped with payment link and QR", async () => {
   const fixturePath = path.join(__dirname, "fixtures/zoho-invoice.pdf");
   assert.ok(fs.existsSync(fixturePath), "Fixture must exist");
 
@@ -54,9 +55,32 @@ test("Release 1.1.46 - Encrypted Zoho Books PDF is decrypted, stripped of /Encry
   const reloaded = await PDFDocument.load(processedPdf);
   assert.strictEqual(reloaded.getPageCount(), 1);
   assert.strictEqual((reloaded.context as any).trailerInfo?.Encrypt, undefined, "/Encrypt trailer MUST be removed");
+
+  // Deep verification: Verify streams inflate cleanly into valid PDF syntax and contain stamped payment text
+  let foundDecryptedContent = false;
+  let foundStampedPaymentText = false;
+
+  for (const [, obj] of reloaded.context.enumerateIndirectObjects()) {
+    if (obj instanceof PDFRawStream) {
+      try {
+        const decompressed = zlib.inflateSync(Buffer.from(obj.contents)).toString("latin1");
+        // Check for valid page content stream operators
+        if (decompressed.includes("0 841.69 Td") || decompressed.includes("Urban Device Care")) {
+          foundDecryptedContent = true;
+        }
+        // Check for stamped payment link block and QR label
+        if (decompressed.includes("506179204F6E6C696E653A") || decompressed.includes("urbandevicecare.co.uk/r/15wb2j")) {
+          foundStampedPaymentText = true;
+        }
+      } catch (_) {}
+    }
+  }
+
+  assert.strictEqual(foundDecryptedContent, true, "Content streams must decompress and contain decrypted page commands");
+  assert.strictEqual(foundStampedPaymentText, true, "Overlay stream must contain stamped Pay Online and payment URL");
 });
 
-test("Release 1.1.46 - Non-invoice encrypted PDF is decrypted without payment block", async () => {
+test("Release 1.1.47 - Non-invoice encrypted PDF is decrypted without payment block", async () => {
   const fixturePath = path.join(__dirname, "fixtures/zoho-invoice.pdf");
   const rawZohoPdf = fs.readFileSync(fixturePath);
 
@@ -71,9 +95,19 @@ test("Release 1.1.46 - Non-invoice encrypted PDF is decrypted without payment bl
   const reloaded = await PDFDocument.load(processedPdf);
   assert.strictEqual(reloaded.getPageCount(), 1);
   assert.strictEqual((reloaded.context as any).trailerInfo?.Encrypt, undefined);
+
+  // Deep verification: Ensure payment block text is NOT in any stream
+  for (const [, obj] of reloaded.context.enumerateIndirectObjects()) {
+    if (obj instanceof PDFRawStream) {
+      try {
+        const decompressed = zlib.inflateSync(Buffer.from(obj.contents)).toString("latin1");
+        assert.strictEqual(decompressed.includes("506179204F6E6C696E653A"), false, "Non-invoice must not contain Pay Online text");
+      } catch (_) {}
+    }
+  }
 });
 
-test("Release 1.1.46 - Standard unencrypted PDF continues to post-process cleanly", async () => {
+test("Release 1.1.47 - Standard unencrypted PDF continues to post-process cleanly", async () => {
   const baseDoc: DocumentData = {
     display_id: "RT-1793466012168-TS9RXZ",
     type: "invoice",

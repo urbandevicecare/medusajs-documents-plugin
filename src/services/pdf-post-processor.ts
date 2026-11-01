@@ -235,7 +235,9 @@ export async function decryptStandardPdf(pdfBuffer: Buffer, password = ""): Prom
       if (obj instanceof PDFRawStream) {
         if (obj.dict) {
           const type = obj.dict.get(PDFName.of("Type"));
+          const subtype = obj.dict.get(PDFName.of("Subtype"));
           if (type && (type.toString() === "/XRef" || type.toString() === "/Sig")) continue;
+          if (!encryptMetadata && (type?.toString() === "/Metadata" || subtype?.toString() === "/XML")) continue;
         }
         (obj as any).contents = decryptData(
           Buffer.from(obj.contents),
@@ -267,10 +269,12 @@ export async function ensureDecryptedPdf(pdfBuffer: Buffer): Promise<Buffer> {
   let workingBuffer = pdfBuffer;
   try {
     const encInfo = await isEncrypted(new Uint8Array(workingBuffer)).catch(() => null);
-    if (encInfo && encInfo.encrypted) {
+    if (encInfo) {
+      if (!encInfo.encrypted) {
+        return workingBuffer;
+      }
       const decryptedBytes = await decryptPDF(new Uint8Array(workingBuffer), "");
-      workingBuffer = Buffer.from(decryptedBytes);
-      return workingBuffer;
+      return Buffer.from(decryptedBytes);
     }
   } catch (_e) {
     // If @pdfsmaller/pdf-decrypt throws (e.g. Unsupported encryption: V=4, R=4), fallback to Standard Security Handler
