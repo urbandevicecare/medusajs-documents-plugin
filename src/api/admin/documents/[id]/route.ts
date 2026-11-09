@@ -106,3 +106,37 @@ export async function DELETE(
     return res.status(500).json({ message: error.message, error: true });
   }
 }
+
+// PUT /admin/documents/:id - Edit / update an existing document (in database and Zoho Books)
+export async function PUT(
+  req: MedusaRequest<any>,
+  res: MedusaResponse
+) {
+  try {
+    const documentService: DocumentModuleService = req.scope.resolve(DOCUMENTS_MODULE);
+    const docId = req.params.id;
+    const body = (req.body || {}) as any;
+
+    const updated = await documentService.updateDocument(docId, body, req.scope);
+
+    return res.json({
+      success: true,
+      message: "Document updated successfully",
+      document: updated,
+    });
+  } catch (error: any) {
+    req.scope.resolve("logger", { allowUnregistered: true })?.error?.(
+      `[Documents-API] Failed to update document ${req.params.id}: ${error.message}`
+    );
+    return res.status(500).json({ message: error.message, error: true });
+  }
+}
+
+// POST /admin/documents/:id - Alternative method for updating document
+export async function POST(
+  req: MedusaRequest<any>,
+  res: MedusaResponse
+) {
+  return PUT(req, res);
+}
+

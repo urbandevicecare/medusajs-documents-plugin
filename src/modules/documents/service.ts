@@ -48,7 +48,9 @@ export interface GenerateDocumentInput {
   zoho_document_id?: string;
   payment_status?: string;
   payment_link?: string;
+  payment_reference?: string;
   notes?: string;
+  terms?: string;
   body_text?: string;
   custom_fields?: Record<string, string>;
   force_source?: "zoho" | "pdfkit";
@@ -56,6 +58,36 @@ export interface GenerateDocumentInput {
   notification_channels?: Array<"email" | "sms" | "whatsapp">;
   email_subject?: string;
   custom_email_message?: string;
+  _skip_quote_creation?: boolean;
+}
+
+export interface UpdateDocumentInput {
+  title?: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  customer?: {
+    name?: string;
+    company_name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  };
+  items?: LineItem[];
+  subtotal?: number;
+  tax_total?: number;
+  shipping_total?: number;
+  discount_total?: number;
+  total?: number;
+  currency_code?: string;
+  payment_status?: string;
+  payment_link?: string;
+  payment_reference?: string;
+  notes?: string;
+  terms?: string;
+  body_text?: string;
+  custom_fields?: Record<string, string>;
+  force_source?: "zoho" | "pdfkit";
 }
 
 /**
@@ -298,6 +330,23 @@ export class DocumentModuleService extends MedusaService({
         targetSettings.job_card_template = repSettings.job_card_template;
       }
     }
+
+    // Fall back to environment variables if Zoho Books credentials not yet in DB
+    if (!targetSettings.zoho_client_id && process.env.ZOHO_CLIENT_ID) {
+      targetSettings.zoho_client_id = process.env.ZOHO_CLIENT_ID;
+      targetSettings.zoho_client_secret = targetSettings.zoho_client_secret || process.env.ZOHO_CLIENT_SECRET;
+      targetSettings.zoho_refresh_token = targetSettings.zoho_refresh_token || process.env.ZOHO_REFRESH_TOKEN;
+      targetSettings.zoho_organization_id = targetSettings.zoho_organization_id || process.env.ZOHO_ORGANIZATION_ID;
+      targetSettings.zoho_domain = targetSettings.zoho_domain || process.env.ZOHO_DOMAIN || "com";
+    }
+
+    // When Zoho Books credentials exist, ensure zoho_books_enabled is true unless explicitly disabled
+    if (targetSettings.zoho_client_id && targetSettings.zoho_client_secret && targetSettings.zoho_refresh_token && targetSettings.zoho_organization_id) {
+      if (targetSettings.zoho_books_enabled === undefined || targetSettings.zoho_books_enabled === null) {
+        targetSettings.zoho_books_enabled = true;
+      }
+    }
+
     if (targetSettings.pdf_phone) {
       targetSettings.pdf_phone = sanitizePhoneNumber(targetSettings.pdf_phone);
     }
@@ -612,18 +661,65 @@ export class DocumentModuleService extends MedusaService({
       shortPdfLink = await this.getOrGenerateShortUrl(documentPublicUrl, storeUrl);
     } catch (_) {}
 
+    // Requirement: Always create a quote (estimate) when creating invoices
+    if (input.type === "invoice" && !input._skip_quote_creation) {
+      try {
+        let existingEstimate: any = null;
+        if (input.repair_ticket_id) {
+          const docs = await this.listDocumentRecords(
+            { repair_ticket_id: input.repair_ticket_id, type: "estimate" },
+            {},
+            sharedContext
+          ).catch(() => []);
+          if (docs && docs.length > 0) existingEstimate = docs[0];
+        } else if (input.order_id) {
+          const docs = await this.listDocumentRecords(
+            { order_id: input.order_id, type: "estimate" },
+            {},
+            sharedContext
+          ).catch(() => []);
+          if (docs && docs.length > 0) existingEstimate = docs[0];
+        }
+
+        if (!existingEstimate) {
+          const cleanRef = String(displayId || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
+          const quoteDisplayId = isRepairTicket
+            ? `EST-${cleanRef}`
+            : isStoreOrder
+            ? `EST-${cleanRef}`
+            : `EST-${cleanRef || Math.floor(100000 + Math.random() * 900000)}`;
+
+          await this.generateDocument(
+            {
+              ...input,
+              type: "estimate",
+              display_id: quoteDisplayId,
+              title: isRepairTicket ? "Repair Estimate / Quote" : "Quotation",
+              auto_send: false,
+              _skip_quote_creation: true,
+            },
+            container
+          );
+        }
+      } catch (quoteErr: any) {
+        container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(
+          `[Documents-Module] Auto quote creation for invoice failed: ${quoteErr?.message || quoteErr}`
+        );
+      }
+    }
+
     let source: "zoho" | "pdfkit" = "pdfkit";
     let zohoDocumentId: string | null = null;
     let pdfBuffer: Buffer | null = null;
 
-    // Check if Zoho Books should be used
+    // Check if Zoho Books should be used - Zoho Books is single source of truth unless PDFKit is manually selected or Zoho is unavailable
     const canUseZoho =
       input.force_source !== "pdfkit" &&
-      settings.zoho_books_enabled &&
-      settings.zoho_client_id &&
-      settings.zoho_client_secret &&
-      settings.zoho_refresh_token &&
-      settings.zoho_organization_id &&
+      settings.zoho_books_enabled !== false &&
+      Boolean(settings.zoho_client_id) &&
+      Boolean(settings.zoho_client_secret) &&
+      Boolean(settings.zoho_refresh_token) &&
+      Boolean(settings.zoho_organization_id) &&
       (input.type === "invoice" || input.type === "estimate" || input.type === "receipt");
 
     if (canUseZoho) {
@@ -652,11 +748,13 @@ export class DocumentModuleService extends MedusaService({
           return contactId || "";
         };
 
-        // 2. Prepare Zoho Notes & Terms (including payment link if unpaid)
+        // 2. Prepare Zoho Notes & Terms (including Paystack payment link if unpaid)
         let zohoNotes = settings.zoho_invoice_notes || settings.pdf_payment_details || input.notes || "Thank you for your business.";
         const pLink = shortPaymentLink || input.payment_link;
-        if (pLink && !zohoNotes.includes("Pay Online:")) {
-          zohoNotes += `\n\nPay Online: ${pLink}`;
+        if (pLink) {
+          if (!zohoNotes.includes("Pay Online:") && !zohoNotes.includes("Paystack Payment Link:")) {
+            zohoNotes += `\n\nPaystack Payment Link: ${pLink}\nPay Online (Paystack): ${pLink}`;
+          }
         }
         const zohoTerms = settings.zoho_invoice_terms || settings.pdf_terms || "";
 
@@ -890,12 +988,20 @@ export class DocumentModuleService extends MedusaService({
 
           const cid = await ensureContactId();
           const paymentAmount = Number(input.total || 0);
+          const paystackReference =
+            input.payment_reference ||
+            (repairTicket?.metadata as any)?.paystack_reference ||
+            (repairTicket?.metadata as any)?.payment_reference ||
+            (input.custom_fields && (input.custom_fields["Payment Reference"] || input.custom_fields["paystack_reference"])) ||
+            displayId;
+
           const paymentId = await zoho.registerPayment(
             targetInvoiceId,
             paymentAmount,
             cid,
-            "Online",
-            displayId
+            "Paystack",
+            paystackReference,
+            paystackReference !== displayId ? `Payment via Paystack: ${paystackReference}` : undefined
           );
 
           zohoDocumentId = paymentId;
@@ -909,7 +1015,7 @@ export class DocumentModuleService extends MedusaService({
           });
         }
       } catch (zohoErr: any) {
-        container?.resolve("logger")?.warn(`[Documents-Module] Zoho Books generation failed (${zohoErr.message}). Falling back to PDFKit.`);
+        container?.resolve("logger")?.warn(`[Documents-Module] Zoho Books is unavailable (${zohoErr.message}). Falling back to PDFKit.`);
         source = "pdfkit";
         zohoDocumentId = null;
         pdfBuffer = null;
@@ -1578,6 +1684,211 @@ export class DocumentModuleService extends MedusaService({
       deleted_zoho_estimates: deletedEstimates,
       deleted_zoho_payments: deletedPayments,
     };
+  }
+
+  /**
+   * Updates an existing document record (title, customer details, line items, notes, terms)
+   * and synchronizes the updates with Zoho Books if the document is an invoice or estimate.
+   */
+  async updateDocument(id: string, updateData: UpdateDocumentInput, container?: any): Promise<any> {
+    const manager = container?.resolve?.("manager", { allowUnregistered: true });
+    const sharedContext = manager ? { manager } : {};
+    const settings = await this.getSettings(sharedContext, container);
+
+    let record: any = null;
+    try {
+      record = await this.retrieveDocumentRecord(id, {}, sharedContext);
+    } catch (_) {
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+      if (conn) {
+        record = await conn("document_record").where({ id }).first();
+      }
+    }
+
+    if (!record) {
+      throw new Error(`Document record '${id}' not found`);
+    }
+
+    let meta = (record.metadata || {}) as any;
+    if (typeof meta === "string") {
+      try {
+        meta = JSON.parse(meta);
+      } catch (_) {
+        meta = {};
+      }
+    }
+
+    // 1. Process line items and recalculate total
+    const newItems = updateData.items !== undefined ? updateData.items : (meta.items || []);
+    let newTotal = updateData.total;
+    if (newTotal === undefined && updateData.items !== undefined) {
+      newTotal = newItems.reduce((acc: number, it: any) => {
+        const qty = Number(it.quantity || 1);
+        const rate = Number(it.unit_price || 0);
+        return acc + qty * rate;
+      }, 0);
+    }
+    if (newTotal === undefined) {
+      newTotal = Number(record.total_amount || 0);
+    }
+
+    const newCustomerName = updateData.customer?.name || updateData.customer_name || record.customer_name;
+    const newCustomerEmail = updateData.customer?.email !== undefined ? updateData.customer.email : (updateData.customer_email !== undefined ? updateData.customer_email : record.customer_email);
+    const newCustomerPhone = updateData.customer?.phone !== undefined ? updateData.customer.phone : (updateData.customer_phone !== undefined ? updateData.customer_phone : record.customer_phone);
+    const newTitle = updateData.title || record.title;
+    const newNotes = updateData.notes !== undefined ? updateData.notes : meta.notes;
+    const newTerms = updateData.terms !== undefined ? updateData.terms : meta.terms;
+    const newCustomFields = { ...(meta.custom_fields || {}), ...(updateData.custom_fields || {}) };
+    const newPaymentStatus = updateData.payment_status || record.payment_status;
+
+    // Invalidate PDF cache for this document
+    invalidatePdfCache(record.id);
+
+    // 2. Synchronize updates to Zoho Books if credentials exist and document is invoice or estimate
+    let zohoDocId = record.zoho_document_id;
+    const canUseZoho =
+      updateData.force_source !== "pdfkit" &&
+      settings.zoho_books_enabled !== false &&
+      Boolean(settings.zoho_client_id) &&
+      Boolean(settings.zoho_client_secret) &&
+      Boolean(settings.zoho_refresh_token) &&
+      Boolean(settings.zoho_organization_id) &&
+      (record.type === "invoice" || record.type === "estimate");
+
+    if (canUseZoho) {
+      try {
+        const logger = container?.resolve?.("logger", { allowUnregistered: true });
+        const zoho = new ZohoBooksService(
+          {
+            client_id: settings.zoho_client_id,
+            client_secret: settings.zoho_client_secret,
+            refresh_token: settings.zoho_refresh_token,
+            organization_id: settings.zoho_organization_id,
+            domain: settings.zoho_domain || "com",
+          },
+          logger
+        );
+
+        const zohoLineItems = newItems.map((it: any) => ({
+          name: it.title,
+          description: it.description || "",
+          rate: Number(it.unit_price || 0).toFixed(2),
+          quantity: it.quantity || 1,
+        }));
+
+        let zohoNotes = newNotes || settings.zoho_invoice_notes || settings.pdf_payment_details || "Thank you for your business.";
+        const pLink = record.short_payment_link || record.payment_link;
+        if (pLink && !zohoNotes.includes("Pay Online:") && !zohoNotes.includes("Paystack Payment Link:")) {
+          zohoNotes += `\n\nPaystack Payment Link: ${pLink}\nPay Online (Paystack): ${pLink}`;
+        }
+        const zohoTerms = newTerms || settings.zoho_invoice_terms || settings.pdf_terms || "";
+
+        if (record.type === "invoice") {
+          if (zohoDocId) {
+            await zoho.updateInvoice(zohoDocId, {
+              line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
+              notes: zohoNotes,
+              terms: zohoTerms,
+            });
+          } else {
+            const contactId = await zoho.syncContact({
+              first_name: newCustomerName,
+              email: newCustomerEmail,
+              phone: sanitizePhoneNumber(newCustomerPhone),
+            });
+            const res = await zoho.createInvoice(contactId, {
+              reference_number: record.display_id,
+              invoice_number: record.display_id,
+              ignore_auto_number_generation: true,
+              line_items: zohoLineItems,
+              notes: zohoNotes,
+              terms: zohoTerms,
+              payment_terms: settings.zoho_payment_terms_days || 0,
+              is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+            });
+            zohoDocId = res.invoice_id;
+          }
+        } else if (record.type === "estimate") {
+          if (zohoDocId) {
+            await zoho.updateEstimate(zohoDocId, {
+              line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
+              notes: zohoNotes,
+              terms: zohoTerms,
+            });
+          } else {
+            const contactId = await zoho.syncContact({
+              first_name: newCustomerName,
+              email: newCustomerEmail,
+              phone: sanitizePhoneNumber(newCustomerPhone),
+            });
+            const res = await zoho.createEstimate(contactId, {
+              reference_number: record.display_id,
+              estimate_number: record.display_id,
+              line_items: zohoLineItems,
+              notes: zohoNotes,
+              terms: zohoTerms,
+              is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+            });
+            zohoDocId = res.estimate_id;
+          }
+        }
+        record.source = "zoho";
+      } catch (zohoErr: any) {
+        container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(
+          `[Documents-Module] Failed to update document in Zoho Books (${zohoErr.message}). Saving changes locally.`
+        );
+      }
+    }
+
+    // 3. Update database record
+    const updatedMeta = {
+      ...meta,
+      items: newItems,
+      notes: newNotes,
+      terms: newTerms,
+      custom_fields: newCustomFields,
+    };
+
+    let updatedRecord: any = null;
+    try {
+      updatedRecord = await this.updateDocumentRecords(
+        {
+          id: record.id,
+          title: newTitle,
+          customer_name: newCustomerName,
+          customer_email: newCustomerEmail,
+          customer_phone: newCustomerPhone,
+          total_amount: newTotal,
+          payment_status: newPaymentStatus,
+          zoho_document_id: zohoDocId,
+          source: zohoDocId ? "zoho" : record.source,
+          metadata: updatedMeta,
+        },
+        sharedContext
+      );
+    } catch (_) {
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+      if (conn) {
+        await conn("document_record")
+          .where({ id: record.id })
+          .update({
+            title: newTitle,
+            customer_name: newCustomerName,
+            customer_email: newCustomerEmail,
+            customer_phone: newCustomerPhone,
+            total_amount: newTotal,
+            payment_status: newPaymentStatus,
+            zoho_document_id: zohoDocId,
+            source: zohoDocId ? "zoho" : record.source,
+            metadata: JSON.stringify(updatedMeta),
+            updated_at: new Date(),
+          });
+        updatedRecord = await conn("document_record").where({ id: record.id }).first();
+      }
+    }
+
+    invalidatePdfCache(record.id);
+    return updatedRecord || record;
   }
 }
 

@@ -256,6 +256,8 @@ export default async function repairDocumentsSubscriber({
     // All customer notifications are handled exclusively by Meduajs-repair-plugin alone.
     const autoSend = false;
 
+    const payRef = data.reference || (ticket.metadata as any)?.paystack_reference || (ticket.metadata as any)?.payment_reference;
+
     const genResult = await documentService.generateDocument(
       {
         display_id: displayId,
@@ -263,7 +265,7 @@ export default async function repairDocumentsSubscriber({
         type: docType,
         repair_ticket_id: ticket.id,
         order_id: data.order_id || ticket.order_id || (ticket.metadata as any)?.order_id,
-        force_source: settings.zoho_books_enabled ? "zoho" : undefined,
+        force_source: settings.zoho_books_enabled !== false ? "zoho" : undefined,
         customer: {
           name: customerName,
           company_name: customerCompanyName || undefined,
@@ -275,6 +277,7 @@ export default async function repairDocumentsSubscriber({
         currency_code: currencyCode,
         payment_status: isPaid ? "paid" : "unpaid",
         payment_link: paymentOrTrackingLink || undefined,
+        payment_reference: isPaid ? payRef : undefined,
         auto_send: autoSend,
         email_subject: `${docTitle} for Ticket #${ticket.ticket_number} (${ticket.device?.model_name || "Device"})`,
         notes:
@@ -289,6 +292,7 @@ export default async function repairDocumentsSubscriber({
           Accessories: ticket.accessories || "None",
           Technician: ticket.technician_name || "Unassigned",
           Issue: ticket.issue_description || "Standard Repair",
+          ...(payRef ? { "Payment Reference": String(payRef) } : {}),
         },
       },
       container

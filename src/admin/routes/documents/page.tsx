@@ -28,6 +28,7 @@ import {
   Trash,
   ChevronDown,
   ChevronRight,
+  PencilSquare,
 } from "@medusajs/icons";
 import {
   groupDocuments,
@@ -264,6 +265,28 @@ export const DocumentsPage = () => {
   const [customDocModalOpen, setCustomDocModalOpen] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
+
+  // Edit Document Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingDoc, setEditingDoc] = useState<DocumentRecord | null>(null);
+  const [isUpdatingDoc, setIsUpdatingDoc] = useState(false);
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    customer_name: string;
+    customer_email: string;
+    customer_phone: string;
+    notes: string;
+    terms: string;
+    items: Array<{ title: string; description: string; quantity: number; unit_price: number }>;
+  }>({
+    title: "",
+    customer_name: "",
+    customer_email: "",
+    customer_phone: "",
+    notes: "",
+    terms: "",
+    items: [],
+  });
 
   // Settings State
   const [settings, setSettings] = useState<any>({
@@ -905,6 +928,88 @@ export const DocumentsPage = () => {
     }
   };
 
+  // Open Edit Modal for an Invoice or Estimate
+  const handleOpenEditModal = (doc: any) => {
+    setEditingDoc(doc);
+    let meta: any = doc.metadata || {};
+    if (typeof meta === "string") {
+      try {
+        meta = JSON.parse(meta);
+      } catch (_) {
+        meta = {};
+      }
+    }
+    const docItems = Array.isArray(meta?.items) && meta.items.length > 0
+      ? meta.items.map((it: any) => ({
+          title: it.title || it.name || "Item",
+          description: it.description || "",
+          quantity: Number(it.quantity || 1),
+          unit_price: Number(it.unit_price || it.rate || 0),
+        }))
+      : [
+          {
+            title: doc.title || "Service / Goods",
+            description: "",
+            quantity: 1,
+            unit_price: Number(doc.total_amount || 0),
+          },
+        ];
+
+    setEditForm({
+      title: doc.title || (doc.type === "invoice" ? "Tax Invoice" : "Quotation"),
+      customer_name: doc.customer_name || "",
+      customer_email: doc.customer_email || "",
+      customer_phone: doc.customer_phone || "",
+      notes: meta?.notes || "",
+      terms: meta?.terms || "",
+      items: docItems,
+    });
+    setEditModalOpen(true);
+  };
+
+  // Save changes to document and update Zoho Books
+  const handleSaveEditDocument = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingDoc) return;
+    setIsUpdatingDoc(true);
+    try {
+      const calculatedTotal = editForm.items.reduce(
+        (sum, it) => sum + Number(it.quantity || 1) * Number(it.unit_price || 0),
+        0
+      );
+
+      const res = await fetch(`/admin/documents/${editingDoc.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: editForm.title,
+          customer_name: editForm.customer_name,
+          customer_email: editForm.customer_email,
+          customer_phone: editForm.customer_phone,
+          notes: editForm.notes,
+          terms: editForm.terms,
+          items: editForm.items,
+          total: calculatedTotal,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.message || "Failed to update document");
+      }
+
+      setEditModalOpen(false);
+      setEditingDoc(null);
+      await loadDocuments();
+      alert("Document updated successfully and synced with Zoho Books!");
+    } catch (err: any) {
+      alert(`Error updating document: ${err.message}`);
+    } finally {
+      setIsUpdatingDoc(false);
+    }
+  };
+
   // Sync to Zoho
   const handleSyncToZoho = async (docId: string) => {
     try {
@@ -1368,6 +1473,16 @@ export const DocumentsPage = () => {
                               >
                                 <ArrowDownTray className="w-4 h-4" />
                               </button>
+                              {(doc.type === "invoice" || doc.type === "estimate" || (doc as any).type === "quote") && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditModal(doc)}
+                                  className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-purple-600 cursor-pointer"
+                                  title="Edit Quote / Invoice & Sync with Zoho Books"
+                                >
+                                  <PencilSquare className="w-4 h-4" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => {
                                   setSelectedDoc(doc);
@@ -1528,6 +1643,16 @@ export const DocumentsPage = () => {
                                                 >
                                                   <ArrowDownTray className="w-3.5 h-3.5" />
                                                 </button>
+                                                {(subDoc.type === "invoice" || subDoc.type === "estimate" || (subDoc as any).type === "quote") && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleOpenEditModal(subDoc)}
+                                                    className="p-1 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-purple-600"
+                                                    title="Edit Quote / Invoice & Sync with Zoho Books"
+                                                  >
+                                                    <PencilSquare className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
                                                 <button
                                                   type="button"
                                                   onClick={() => {
@@ -1650,6 +1775,16 @@ export const DocumentsPage = () => {
                             >
                               <ArrowDownTray className="w-4 h-4" />
                             </button>
+                            {(doc.type === "invoice" || doc.type === "estimate" || (doc as any).type === "quote") && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(doc)}
+                                className="p-1.5 rounded hover:bg-ui-bg-subtle text-ui-fg-subtle hover:text-purple-600 cursor-pointer"
+                                title="Edit Quote / Invoice & Sync with Zoho Books"
+                              >
+                                <PencilSquare className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 setSelectedDoc(doc);
@@ -3994,6 +4129,218 @@ export const DocumentsPage = () => {
                     </Button>
                   </div>
                 )}
+              </div>
+            </FocusModal.Body>
+          </FocusModal.Content>
+        </FocusModal>
+      )}
+
+      {/* Edit Document Modal */}
+      {editModalOpen && editingDoc && (
+        <FocusModal open={editModalOpen} onOpenChange={setEditModalOpen}>
+          <FocusModal.Content>
+            <FocusModal.Header className="flex items-center justify-between px-6 py-4 border-b border-ui-border-base">
+              <div className="flex items-center gap-2">
+                <PencilSquare className="w-5 h-5 text-purple-600" />
+                <Heading level="h2">
+                  Edit {editingDoc.type === "invoice" ? "Invoice" : "Quote / Estimate"} #{editingDoc.display_id}
+                </Heading>
+                <Badge color="purple" size="small">
+                  Zoho Synced
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => setEditModalOpen(false)}
+                  disabled={isUpdatingDoc}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="small"
+                  onClick={() => handleSaveEditDocument()}
+                  isLoading={isUpdatingDoc}
+                  disabled={isUpdatingDoc}
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  Save & Sync to Zoho Books
+                </Button>
+              </div>
+            </FocusModal.Header>
+            <FocusModal.Body className="p-6 flex flex-col gap-6 max-w-3xl mx-auto overflow-y-auto max-h-[80vh]">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Document Title</Label>
+                  <Input
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    size="small"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Customer Name</Label>
+                  <Input
+                    value={editForm.customer_name}
+                    onChange={(e) => setEditForm({ ...editForm, customer_name: e.target.value })}
+                    size="small"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Customer Email</Label>
+                  <Input
+                    value={editForm.customer_email}
+                    onChange={(e) => setEditForm({ ...editForm, customer_email: e.target.value })}
+                    size="small"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Customer Phone</Label>
+                  <Input
+                    value={editForm.customer_phone}
+                    onChange={(e) => setEditForm({ ...editForm, customer_phone: e.target.value })}
+                    size="small"
+                  />
+                </div>
+              </div>
+
+              {/* Items Section */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Itemized Line Items</Label>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={() =>
+                      setEditForm({
+                        ...editForm,
+                        items: [
+                          ...editForm.items,
+                          { title: "", description: "", quantity: 1, unit_price: 0 },
+                        ],
+                      })
+                    }
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add Line Item
+                  </Button>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {editForm.items.map((it, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col gap-2"
+                    >
+                      <div className="grid grid-cols-12 gap-2 items-start">
+                        <div className="col-span-6 flex flex-col gap-1">
+                          <Label className="text-[11px] text-ui-fg-subtle">Item Title *</Label>
+                          <Input
+                            placeholder="Item name / Service"
+                            value={it.title}
+                            onChange={(e) => {
+                              const newItems = [...editForm.items];
+                              newItems[idx] = { ...newItems[idx], title: e.target.value };
+                              setEditForm({ ...editForm, items: newItems });
+                            }}
+                            size="small"
+                          />
+                        </div>
+                        <div className="col-span-2 flex flex-col gap-1">
+                          <Label className="text-[11px] text-ui-fg-subtle">Qty</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={it.quantity}
+                            onChange={(e) => {
+                              const newItems = [...editForm.items];
+                              newItems[idx] = { ...newItems[idx], quantity: Number(e.target.value) || 1 };
+                              setEditForm({ ...editForm, items: newItems });
+                            }}
+                            size="small"
+                          />
+                        </div>
+                        <div className="col-span-3 flex flex-col gap-1">
+                          <Label className="text-[11px] text-ui-fg-subtle">Unit Price</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={it.unit_price}
+                            onChange={(e) => {
+                              const newItems = [...editForm.items];
+                              newItems[idx] = { ...newItems[idx], unit_price: Number(e.target.value) || 0 };
+                              setEditForm({ ...editForm, items: newItems });
+                            }}
+                            size="small"
+                          />
+                        </div>
+                        <div className="col-span-1 pt-6 flex justify-end">
+                          <Button
+                            variant="transparent"
+                            size="small"
+                            onClick={() => {
+                              const newItems = editForm.items.filter((_, i) => i !== idx);
+                              setEditForm({ ...editForm, items: newItems });
+                            }}
+                            className="text-ui-fg-muted hover:text-ui-fg-error p-1"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[11px] text-ui-fg-subtle">Description (Optional)</Label>
+                        <Input
+                          placeholder="Optional item details / specifications"
+                          value={it.description}
+                          onChange={(e) => {
+                            const newItems = [...editForm.items];
+                            newItems[idx] = { ...newItems[idx], description: e.target.value };
+                            setEditForm({ ...editForm, items: newItems });
+                          }}
+                          size="small"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Subtotal preview */}
+                <div className="flex justify-end items-center gap-4 py-2 border-t border-ui-border-base">
+                  <Text className="text-xs text-ui-fg-subtle">Calculated Total:</Text>
+                  <Text className="text-sm font-semibold">
+                    {formatCurrency(
+                      editForm.items.reduce(
+                        (sum, it) => sum + (Number(it.quantity) || 1) * (Number(it.unit_price) || 0),
+                        0
+                      ),
+                      editingDoc.currency_code || "KES"
+                    )}
+                  </Text>
+                </div>
+              </div>
+
+              {/* Notes & Terms */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Notes / Client Remarks</Label>
+                  <Textarea
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    rows={3}
+                    placeholder="Notes visible on the document..."
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Terms & Conditions</Label>
+                  <Textarea
+                    value={editForm.terms}
+                    onChange={(e) => setEditForm({ ...editForm, terms: e.target.value })}
+                    rows={3}
+                    placeholder="Terms and conditions..."
+                  />
+                </div>
               </div>
             </FocusModal.Body>
           </FocusModal.Content>

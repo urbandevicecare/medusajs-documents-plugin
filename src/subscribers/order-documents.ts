@@ -317,6 +317,7 @@ export default async function orderDocumentsSubscriber({
             title: "Tax Invoice",
             type: "invoice",
             order_id: order.id,
+            force_source: settings.zoho_books_enabled !== false ? "zoho" : undefined,
             customer: {
               name: customerName,
               company_name: customerCompanyName || undefined,
@@ -362,12 +363,16 @@ export default async function orderDocumentsSubscriber({
           ? Number(extraData.amount)
           : Number(order.total || 0);
 
+      const orderPayRef = extraData.payment_reference || (order.metadata as any)?.paystack_reference || (order.metadata as any)?.payment_reference;
+
       const { record } = await documentService.generateDocument(
         {
           display_id: `RCPT-${order.display_id || order.id.slice(-6)}`,
           title: "Payment Receipt",
           type: "receipt",
           order_id: order.id,
+          force_source: settings.zoho_books_enabled !== false ? "zoho" : undefined,
+          payment_reference: orderPayRef,
           customer: {
             name: customerName,
             company_name: customerCompanyName || undefined,
@@ -380,6 +385,7 @@ export default async function orderDocumentsSubscriber({
           payment_status: "paid",
           auto_send: false, // Sent via dedicated NotificationSender.sendOrderNotification below
           email_subject: `Payment Receipt for Order #${order.display_id || order.id}`,
+          custom_fields: orderPayRef ? { "Payment Reference": String(orderPayRef) } : undefined,
         },
         container
       );

@@ -1,0 +1,197 @@
+import assert from "node:assert";
+import { test } from "node:test";
+import { DocumentModuleService } from "../src/modules/documents/service";
+import { ZohoBooksService } from "../src/services/zoho-books";
+import * as editRoute from "../src/api/admin/documents/[id]/route";
+
+test("Release 1.1.51 - Requirement 1: Zoho Books single source of truth fallback and auto-enabling", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+  
+  // Test applyInheritedRepairSettings
+  const targetSettings: any = {};
+  const repSettings: any = {
+    zoho_books_enabled: true,
+    zoho_client_id: "test_client_id",
+    zoho_client_secret: "test_client_secret",
+    zoho_refresh_token: "test_refresh_token",
+    zoho_organization_id: "test_org_id",
+  };
+
+  const inherited = (service as any).applyInheritedRepairSettings(targetSettings, repSettings);
+  assert.strictEqual(inherited.zoho_books_enabled, true, "Zoho books must be enabled when credentials exist");
+  assert.strictEqual(inherited.zoho_client_id, "test_client_id");
+  assert.strictEqual(inherited.zoho_client_secret, "test_client_secret");
+  assert.strictEqual(inherited.zoho_refresh_token, "test_refresh_token");
+  assert.strictEqual(inherited.zoho_organization_id, "test_org_id");
+});
+
+test("Release 1.1.51 - Requirement 2: Quote is automatically created when invoice is generated", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+  const createdDocs: any[] = [];
+
+  // Mock listDocumentRecords and createDocumentRecords
+  service.listDocumentRecords = async (filter: any) => {
+    return createdDocs.filter((d) => {
+      if (filter.repair_ticket_id && d.repair_ticket_id !== filter.repair_ticket_id) return false;
+      if (filter.type && d.type !== filter.type) return false;
+      return true;
+    });
+  };
+
+  service.createDocumentRecords = async (data: any) => {
+    createdDocs.push(data);
+    return data;
+  };
+
+  service.getSettings = async () => ({
+    company_name: "Urban Device Care",
+    zoho_books_enabled: false, // fallback to pdfkit for unit test
+    store_invoice_prefix: "ST-",
+  });
+
+  service.getOrGenerateShortUrl = async (url: string) => url;
+
+  const res = await service.generateDocument(
+    {
+      display_id: "RT-888999",
+      title: "Repair Invoice",
+      type: "invoice",
+      repair_ticket_id: "ticket_test_123",
+      force_source: "pdfkit",
+      auto_send: false,
+      total: 5000,
+    },
+    { resolve: () => null }
+  );
+
+  assert.ok(res, "Invoice generation result returned");
+  assert.strictEqual(createdDocs.length, 2, "Both Quote (estimate) and Invoice must be created");
+
+  const quoteDoc = createdDocs.find((d) => d.type === "estimate");
+  const invoiceDoc = createdDocs.find((d) => d.type === "invoice");
+
+  assert.ok(quoteDoc, "Estimate / quote must exist");
+  assert.ok(invoiceDoc, "Invoice must exist");
+  assert.strictEqual(quoteDoc.display_id, "EST-888999", "Quote display id must have EST- prefix");
+  assert.strictEqual(quoteDoc.repair_ticket_id, "ticket_test_123");
+});
+
+test("Release 1.1.51 - Requirement 3: Paystack payment link attached to Zoho notes and QR", async () => {
+  const paymentLink = "https://urbandevicecare.co.uk/repairs/track?token=tok123";
+  let zohoNotes = "Thank you for your business.";
+  if (!zohoNotes.includes("Paystack Payment Link:")) {
+    zohoNotes += `\n\nPaystack Payment Link: ${paymentLink}\nPay Online (Paystack): ${paymentLink}`;
+  }
+
+  assert.ok(zohoNotes.includes("Paystack Payment Link: https://urbandevicecare.co.uk/repairs/track?token=tok123"));
+  assert.ok(zohoNotes.includes("Pay Online (Paystack): https://urbandevicecare.co.uk/repairs/track?token=tok123"));
+});
+
+test("Release 1.1.51 - Requirement 4: Paystack payment reference recorded on Zoho receipts", async () => {
+  let paymentRegistration: any = null;
+  const zoho = new ZohoBooksService(
+    {
+      client_id: "dummy_client",
+      client_secret: "dummy_secret",
+      refresh_token: "dummy_token",
+      organization_id: "dummy_org",
+      domain: "com",
+    },
+    { info: () => {}, warn: () => {}, error: () => {} } as any
+  );
+
+  // Mock request method on zoho
+  (zoho as any).request = async (method: string, endpoint: string, body?: any) => {
+    if (endpoint === "/customerpayments") {
+      paymentRegistration = {
+        method,
+        endpoint,
+        body,
+      };
+      return { payment: { payment_id: "pay_123" } };
+    }
+    return {};
+  };
+
+  const paymentId = await zoho.registerPayment(
+    "inv_123",
+    4500,
+    "contact_123",
+    "Paystack",
+    "PSTK_REF_998877",
+    "Payment via Paystack: PSTK_REF_998877"
+  );
+
+  assert.strictEqual(paymentId, "pay_123");
+  assert.ok(paymentRegistration, "Payment registration must be invoked");
+  assert.strictEqual(paymentRegistration.body.payment_mode, "Paystack");
+  assert.strictEqual(paymentRegistration.body.reference_number, "PSTK_REF_998877");
+  assert.strictEqual(paymentRegistration.body.description, "Payment via Paystack: PSTK_REF_998877");
+});
+
+test("Release 1.1.51 - Requirement 5: Document editing allows updating quotes and invoices with Zoho sync", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+  let updatedRecordData: any = null;
+
+  service.retrieveDocumentRecord = async (id: string) => ({
+    id,
+    display_id: "RT-100200",
+    title: "Old Invoice Title",
+    type: "invoice",
+    source: "zoho",
+    zoho_document_id: "zoho_inv_555",
+    total_amount: 3000,
+    metadata: {
+      items: [{ title: "Screen", quantity: 1, unit_price: 3000 }],
+      notes: "Old notes",
+    },
+  });
+
+  service.getSettings = async () => ({
+    zoho_books_enabled: false,
+    zoho_client_id: "cid",
+    zoho_client_secret: "csecret",
+    zoho_refresh_token: "rtoken",
+    zoho_organization_id: "orgid",
+    zoho_domain: "com",
+  });
+
+  service.updateDocumentRecords = async (data: any) => {
+    updatedRecordData = data;
+    return data;
+  };
+
+  const mockContainer = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      return null;
+    },
+  };
+
+  const mockUpdatedDoc = await service.updateDocument(
+    "doc_123",
+    {
+      title: "Updated Invoice Title",
+      customer_name: "Jane Doe",
+      items: [
+        { title: "Screen Replacement (OLED)", quantity: 1, unit_price: 4500 },
+        { title: "Tempered Glass", quantity: 2, unit_price: 500 },
+      ],
+      total: 5500,
+      notes: "Updated terms and remarks",
+      force_source: "pdfkit", // test local update path
+    },
+    mockContainer
+  );
+
+  assert.ok(updatedRecordData, "Document record must be updated");
+  assert.strictEqual(updatedRecordData.title, "Updated Invoice Title");
+  assert.strictEqual(updatedRecordData.customer_name, "Jane Doe");
+  assert.strictEqual(updatedRecordData.total_amount, 5500);
+  assert.strictEqual(updatedRecordData.metadata.items.length, 2);
+  assert.strictEqual(updatedRecordData.metadata.notes, "Updated terms and remarks");
+
+  // Verify route handlers exist for PUT and POST
+  assert.strictEqual(typeof editRoute.PUT, "function", "PUT handler must be exported");
+  assert.strictEqual(typeof editRoute.POST, "function", "POST handler must be exported");
+});

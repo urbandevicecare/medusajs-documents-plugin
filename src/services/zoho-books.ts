@@ -523,7 +523,8 @@ export class ZohoBooksService {
     amount: number,
     contactId: string,
     paymentMode: string = "Online",
-    referenceNumber?: string
+    referenceNumber?: string,
+    description?: string
   ): Promise<string> {
     const payload: any = {
       customer_id: contactId,
@@ -539,6 +540,9 @@ export class ZohoBooksService {
     };
     if (referenceNumber) {
       payload.reference_number = referenceNumber;
+    }
+    if (description) {
+      payload.description = description;
     }
 
     const res = await this.request("POST", "/customerpayments", payload);
