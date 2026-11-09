@@ -28,7 +28,7 @@ export function invalidatePdfCache(documentId?: string) {
 export interface GenerateDocumentInput {
   display_id?: string;
   title?: string;
-  type: "invoice" | "receipt" | "estimate" | "packing_slip" | "custom" | "job_card";
+  type: "invoice" | "receipt" | "estimate" | "packing_slip" | "custom" | "job_card" | "service_report" | "handover";
   customer?: {
     name: string;
     company_name?: string;
@@ -291,17 +291,15 @@ export class DocumentModuleService extends MedusaService({
     if (!targetSettings) return targetSettings;
     if (repSettings) {
       if (repSettings.zoho_client_id) {
-        if (!targetSettings.zoho_client_id || repSettings.zoho_client_id !== targetSettings.zoho_client_id) {
-          targetSettings.zoho_books_enabled = true;
-          targetSettings.zoho_client_id = repSettings.zoho_client_id;
-          targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
-          targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
-          targetSettings.zoho_organization_id = repSettings.zoho_organization_id;
-          targetSettings.zoho_domain = repSettings.zoho_domain || targetSettings.zoho_domain || "com";
-          if (repSettings.zoho_tax_inclusive != null) targetSettings.zoho_tax_inclusive = repSettings.zoho_tax_inclusive;
-          if (repSettings.zoho_invoice_notes && !targetSettings.zoho_invoice_notes) targetSettings.zoho_invoice_notes = repSettings.zoho_invoice_notes;
-          if (repSettings.zoho_invoice_terms && !targetSettings.zoho_invoice_terms) targetSettings.zoho_invoice_terms = repSettings.zoho_invoice_terms;
-        }
+        targetSettings.zoho_books_enabled = true;
+        targetSettings.zoho_client_id = repSettings.zoho_client_id;
+        targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
+        targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
+        targetSettings.zoho_organization_id = repSettings.zoho_organization_id;
+        targetSettings.zoho_domain = repSettings.zoho_domain || targetSettings.zoho_domain || "com";
+        if (repSettings.zoho_tax_inclusive != null) targetSettings.zoho_tax_inclusive = repSettings.zoho_tax_inclusive;
+        if (repSettings.zoho_invoice_notes && !targetSettings.zoho_invoice_notes) targetSettings.zoho_invoice_notes = repSettings.zoho_invoice_notes;
+        if (repSettings.zoho_invoice_terms && !targetSettings.zoho_invoice_terms) targetSettings.zoho_invoice_terms = repSettings.zoho_invoice_terms;
       }
       if (!targetSettings.pdf_logo_url && repSettings.pdf_logo_url) targetSettings.pdf_logo_url = repSettings.pdf_logo_url;
       if (!targetSettings.pdf_address && repSettings.pdf_address) targetSettings.pdf_address = repSettings.pdf_address;
@@ -460,9 +458,19 @@ export class DocumentModuleService extends MedusaService({
           if (tickets && tickets.length > 0) {
             repairTicket = tickets[0];
             const ticket = tickets[0];
-            const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-|CERT-)+/i, "");
-            input.display_id = input.display_id || (input.type === "job_card" ? `JOB-${cleanTicketNumber}` : input.type === "custom" ? `CERT-${cleanTicketNumber}` : `RT-${cleanTicketNumber}`);
-            input.title = input.title || (input.type === "job_card" ? "Repair Job Card" : input.type === "custom" ? "Warranty Certificate" : "Repair Document");
+            const cleanTicketNumber = String(ticket.ticket_number || "").replace(/^(JOB-|RT-|CERT-|SRV-|HO-)+/i, "");
+            input.display_id = input.display_id || (
+              input.type === "job_card" ? `JOB-${cleanTicketNumber}` :
+              input.type === "service_report" ? `SRV-${cleanTicketNumber}` :
+              input.type === "handover" ? `HO-${cleanTicketNumber}` :
+              input.type === "custom" ? `CERT-${cleanTicketNumber}` : `RT-${cleanTicketNumber}`
+            );
+            input.title = input.title || (
+              input.type === "job_card" ? "Repair Job Card" :
+              input.type === "service_report" ? "Service & Diagnostic Report" :
+              input.type === "handover" ? "Equipment Handover & Inspection" :
+              input.type === "custom" ? "Warranty Certificate" : "Repair Document"
+            );
             let customerCompanyName: string | undefined =
               ticket.company_name ||
               ticket.customer?.company_name ||
@@ -611,6 +619,10 @@ export class DocumentModuleService extends MedusaService({
     let defaultPrefix = "DOC-";
     if (input.type === "job_card") {
       defaultPrefix = "JOB-";
+    } else if (input.type === "service_report") {
+      defaultPrefix = "SRV-";
+    } else if (input.type === "handover") {
+      defaultPrefix = "HO-";
     } else if (input.type === "receipt") {
       defaultPrefix = "RCPT-";
     } else if (input.type === "packing_slip") {
@@ -636,6 +648,10 @@ export class DocumentModuleService extends MedusaService({
     let displayId = input.display_id || `${defaultPrefix}${Math.floor(100000 + Math.random() * 900000)}`;
     if (displayId.startsWith("JOB-RT-")) {
       displayId = displayId.replace(/^JOB-RT-/, "JOB-");
+    } else if (displayId.startsWith("SRV-RT-")) {
+      displayId = displayId.replace(/^SRV-RT-/, "SRV-");
+    } else if (displayId.startsWith("HO-RT-")) {
+      displayId = displayId.replace(/^HO-RT-/, "HO-");
     } else if (displayId.startsWith("RT-RT-")) {
       displayId = displayId.replace(/^RT-RT-/, "RT-");
     } else if (displayId.startsWith("CERT-RT-")) {
@@ -1062,6 +1078,8 @@ export class DocumentModuleService extends MedusaService({
       else if (input.type === "receipt") templateName = settings.receipt_template || "zoho_exact";
       else if (input.type === "estimate") templateName = settings.estimate_template || "zoho_exact";
       else if (input.type === "job_card") templateName = settings.job_card_template || "standard";
+      else if (input.type === "service_report") templateName = (settings as any).service_report_template || "standard";
+      else if (input.type === "handover") templateName = (settings as any).handover_template || "standard";
       else if (input.type === "custom") templateName = settings.custom_doc_template || "modern";
 
       const docData: DocumentData = {
