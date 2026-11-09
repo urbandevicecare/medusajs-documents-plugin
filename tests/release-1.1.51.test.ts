@@ -349,3 +349,156 @@ test("Release 1.1.51 - Requirement 1c: deleteDocumentsForRepairTicket deletes re
   }
 });
 
+test("Release 1.1.53 - Requirement 1d: ticket metadata cleanup deletes payments before invoices", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+  const deletionLog: string[] = [];
+
+  service.listDocumentRecords = async () => [];
+  service.getSettings = async () => ({
+    zoho_books_enabled: true,
+    zoho_client_id: "cid",
+    zoho_client_secret: "csecret",
+    zoho_refresh_token: "rtoken",
+    zoho_organization_id: "orgid",
+  });
+  service.deleteDocumentRecords = async () => {};
+
+  const originalZoho = ZohoBooksService.prototype;
+  (ZohoBooksService.prototype as any).deletePayment = async (id: string) => { deletionLog.push(`deletePayment:${id}`); };
+  (ZohoBooksService.prototype as any).deleteInvoice = async (id: string) => { deletionLog.push(`deleteInvoice:${id}`); };
+  (ZohoBooksService.prototype as any).deleteEstimate = async (id: string) => { deletionLog.push(`deleteEstimate:${id}`); };
+
+  try {
+    const mockRepair = {
+      retrieveRepairTicket: async () => ({
+        id: "rep_ticket_meta_test",
+        metadata: {
+          zoho_invoice_id: "meta_inv_99",
+          zoho_payment_id: "meta_pay_99",
+          zoho_estimate_id: "meta_est_99",
+        },
+      }),
+      updateRepairTickets: async () => {},
+    };
+
+    await service.deleteDocumentsForRepairTicket("rep_ticket_meta_test", {
+      resolve: (key: string) => {
+        if (key === "repair") return mockRepair;
+        return { info: () => {}, warn: () => {}, error: () => {} };
+      },
+    });
+
+    assert.strictEqual(deletionLog.length, 3);
+    assert.strictEqual(deletionLog[0], "deletePayment:meta_pay_99", "Metadata payment must be deleted FIRST");
+    assert.strictEqual(deletionLog[1], "deleteInvoice:meta_inv_99", "Metadata invoice must be deleted SECOND");
+    assert.strictEqual(deletionLog[2], "deleteEstimate:meta_est_99", "Metadata estimate must be deleted THIRD");
+  } finally {
+    ZohoBooksService.prototype.deletePayment = originalZoho.deletePayment;
+    ZohoBooksService.prototype.deleteInvoice = originalZoho.deleteInvoice;
+    ZohoBooksService.prototype.deleteEstimate = originalZoho.deleteEstimate;
+  }
+});
+
+test("Release 1.1.53 - Requirement 4c: receipt generation is idempotent and reuses existing Zoho payment", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+
+  service.getSettings = async () => ({
+    zoho_books_enabled: true,
+    zoho_client_id: "cid",
+    zoho_client_secret: "csecret",
+    zoho_refresh_token: "rtoken",
+    zoho_organization_id: "orgid",
+  });
+  service.listDocumentRecords = async () => [
+    { id: "doc_inv_1", type: "invoice", zoho_document_id: "zh_inv_444" },
+  ];
+  service.createDocumentRecords = async (rec: any) => ({ ...rec, id: "doc_rcpt_new" });
+
+  const originalZoho = ZohoBooksService.prototype;
+  let registerPaymentCalled = false;
+
+  (ZohoBooksService.prototype as any).syncContact = async () => "contact_123";
+  (ZohoBooksService.prototype as any).getInvoice = async (invId: string) => ({
+    invoice_id: invId,
+    payments: [
+      { payment_id: "existing_pay_888", reference_number: "PSTK_REF_9999", amount: 15000 },
+    ],
+  });
+  (ZohoBooksService.prototype as any).registerPayment = async () => {
+    registerPaymentCalled = true;
+    return "new_pay_id";
+  };
+  const minimalPdf = Buffer.from(
+    "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000108 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n182\n%%EOF"
+  );
+  (ZohoBooksService.prototype as any).getPaymentReceiptPdf = async () => minimalPdf;
+
+  try {
+    const result = await service.generateDocument(
+      {
+        type: "receipt",
+        repair_ticket_id: "rep_ticket_idem",
+        total: 15000,
+        payment_reference: "PSTK_REF_9999",
+        payment_status: "paid",
+        auto_send: false,
+      },
+      {
+        resolve: () => ({ info: () => {}, warn: () => {}, error: () => {} }),
+      }
+    );
+
+    assert.strictEqual(registerPaymentCalled, false, "Must NOT call registerPayment when payment already exists in Zoho");
+    assert.strictEqual(result.record.zoho_document_id, "existing_pay_888", "Must reuse existing payment_id");
+    assert.strictEqual(result.record.source, "zoho");
+  } finally {
+    ZohoBooksService.prototype.syncContact = originalZoho.syncContact;
+    ZohoBooksService.prototype.getInvoice = originalZoho.getInvoice;
+    ZohoBooksService.prototype.registerPayment = originalZoho.registerPayment;
+    ZohoBooksService.prototype.getPaymentReceiptPdf = originalZoho.getPaymentReceiptPdf;
+  }
+});
+
+test("Release 1.1.53 - Requirement 1e: getPdfForRecord self-heals PDFKit document to Zoho Books", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+
+  const mockRecord = {
+    id: "doc_pdfkit_old",
+    display_id: "RT-888999",
+    type: "invoice",
+    source: "pdfkit",
+    zoho_document_id: null,
+    metadata: {},
+  };
+
+  service.retrieveDocumentRecord = async () => mockRecord;
+  service.getSettings = async () => ({
+    zoho_books_enabled: true,
+    zoho_client_id: "cid",
+    zoho_client_secret: "csecret",
+    zoho_refresh_token: "rtoken",
+    zoho_organization_id: "orgid",
+  });
+
+  const originalZoho = ZohoBooksService.prototype;
+  (ZohoBooksService.prototype as any).getInvoiceByNumber = async (num: string) => ({
+    invoice_id: "zoho_inv_healed_123",
+    invoice_number: num,
+  });
+  (ZohoBooksService.prototype as any).getDocumentPdf = async () => Buffer.from("%PDF-1.4 official zoho invoice");
+
+  try {
+    const pdf = await service.getPdfForRecord("doc_pdfkit_old", {
+      resolve: () => ({ info: () => {}, warn: () => {}, error: () => {} }),
+    });
+
+    assert.ok(pdf, "Must return PDF buffer");
+    assert.strictEqual(mockRecord.source, "zoho", "Record source must be updated to zoho");
+    assert.strictEqual(mockRecord.zoho_document_id, "zoho_inv_healed_123", "zoho_document_id must be self-healed");
+  } finally {
+    ZohoBooksService.prototype.getInvoiceByNumber = originalZoho.getInvoiceByNumber;
+    ZohoBooksService.prototype.getDocumentPdf = originalZoho.getDocumentPdf;
+  }
+});
+
+

@@ -60,7 +60,12 @@ export function generateRepairPaymentLink(ticket: any, storefrontUrl: string): O
   const paid = Number(ticket.amount_paid || 0);
   const remainingBalance = Math.max(0, targetTotal - paid);
 
-  if (remainingBalance <= 0 || !ticket.approval_token) {
+  const directPaystackLink =
+    (ticket.metadata as any)?.paystack_payment_link ||
+    (ticket.metadata as any)?.paystack_url ||
+    (ticket.metadata as any)?.payment_link;
+
+  if (remainingBalance <= 0 || (!ticket.approval_token && !directPaystackLink)) {
     return {
       paymentLink: null,
       remainingBalance,
@@ -69,7 +74,7 @@ export function generateRepairPaymentLink(ticket: any, storefrontUrl: string): O
   }
 
   const cleanStorefrontUrl = storefrontUrl.replace(/\/$/, "");
-  const paymentLink = `${cleanStorefrontUrl}/repairs/track?token=${ticket.approval_token}`;
+  const paymentLink = directPaystackLink || `${cleanStorefrontUrl}/repairs/track?token=${ticket.approval_token}`;
 
   return {
     paymentLink,

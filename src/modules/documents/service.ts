@@ -121,17 +121,17 @@ export function getDatabaseConnection(container: any): any {
     if (typeof container.resolve === "function") {
       try {
         const conn = container.resolve(ContainerRegistrationKeys.PG_CONNECTION, { allowUnregistered: true });
-        if (conn) return conn;
+        if (typeof conn === "function") return conn;
       } catch (_) {}
 
       try {
         const conn = container.resolve("__pg_connection__", { allowUnregistered: true });
-        if (conn) return conn;
+        if (typeof conn === "function") return conn;
       } catch (_) {}
 
       try {
         const conn = container.resolve("pg_connection", { allowUnregistered: true });
-        if (conn) return conn;
+        if (typeof conn === "function") return conn;
       } catch (_) {}
     }
   } catch (_) {}
@@ -141,38 +141,32 @@ export function getDatabaseConnection(container: any): any {
     const cradle = container.cradle;
     if (cradle) {
       try {
-        if (cradle[ContainerRegistrationKeys.PG_CONNECTION]) {
-          return cradle[ContainerRegistrationKeys.PG_CONNECTION];
-        }
+        const conn = cradle[ContainerRegistrationKeys.PG_CONNECTION];
+        if (typeof conn === "function") return conn;
       } catch (_) {}
       try {
-        if (cradle["__pg_connection__"]) {
-          return cradle["__pg_connection__"];
-        }
+        const conn = cradle["__pg_connection__"];
+        if (typeof conn === "function") return conn;
       } catch (_) {}
       try {
-        if (cradle["pg_connection"]) {
-          return cradle["pg_connection"];
-        }
+        const conn = cradle["pg_connection"];
+        if (typeof conn === "function") return conn;
       } catch (_) {}
     }
   } catch (_) {}
 
   // 3. Try direct property index on container (each property access guarded)
   try {
-    if (container[ContainerRegistrationKeys.PG_CONNECTION]) {
-      return container[ContainerRegistrationKeys.PG_CONNECTION];
-    }
+    const conn = container[ContainerRegistrationKeys.PG_CONNECTION];
+    if (typeof conn === "function") return conn;
   } catch (_) {}
   try {
-    if (container["__pg_connection__"]) {
-      return container["__pg_connection__"];
-    }
+    const conn = container["__pg_connection__"];
+    if (typeof conn === "function") return conn;
   } catch (_) {}
   try {
-    if (container["pg_connection"]) {
-      return container["pg_connection"];
-    }
+    const conn = container["pg_connection"];
+    if (typeof conn === "function") return conn;
   } catch (_) {}
 
   return undefined;
@@ -296,16 +290,18 @@ export class DocumentModuleService extends MedusaService({
   private applyInheritedRepairSettings(targetSettings: any, repSettings: any): any {
     if (!targetSettings) return targetSettings;
     if (repSettings) {
-      if (!targetSettings.zoho_client_id && repSettings.zoho_client_id) {
-        targetSettings.zoho_books_enabled = true;
-        targetSettings.zoho_client_id = repSettings.zoho_client_id;
-        targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
-        targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
-        targetSettings.zoho_organization_id = repSettings.zoho_organization_id;
-        targetSettings.zoho_domain = repSettings.zoho_domain || targetSettings.zoho_domain || "com";
-        if (repSettings.zoho_tax_inclusive != null) targetSettings.zoho_tax_inclusive = repSettings.zoho_tax_inclusive;
-        if (repSettings.zoho_invoice_notes && !targetSettings.zoho_invoice_notes) targetSettings.zoho_invoice_notes = repSettings.zoho_invoice_notes;
-        if (repSettings.zoho_invoice_terms && !targetSettings.zoho_invoice_terms) targetSettings.zoho_invoice_terms = repSettings.zoho_invoice_terms;
+      if (repSettings.zoho_client_id) {
+        if (!targetSettings.zoho_client_id || repSettings.zoho_client_id !== targetSettings.zoho_client_id) {
+          targetSettings.zoho_books_enabled = true;
+          targetSettings.zoho_client_id = repSettings.zoho_client_id;
+          targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
+          targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
+          targetSettings.zoho_organization_id = repSettings.zoho_organization_id;
+          targetSettings.zoho_domain = repSettings.zoho_domain || targetSettings.zoho_domain || "com";
+          if (repSettings.zoho_tax_inclusive != null) targetSettings.zoho_tax_inclusive = repSettings.zoho_tax_inclusive;
+          if (repSettings.zoho_invoice_notes && !targetSettings.zoho_invoice_notes) targetSettings.zoho_invoice_notes = repSettings.zoho_invoice_notes;
+          if (repSettings.zoho_invoice_terms && !targetSettings.zoho_invoice_terms) targetSettings.zoho_invoice_terms = repSettings.zoho_invoice_terms;
+        }
       }
       if (!targetSettings.pdf_logo_url && repSettings.pdf_logo_url) targetSettings.pdf_logo_url = repSettings.pdf_logo_url;
       if (!targetSettings.pdf_address && repSettings.pdf_address) targetSettings.pdf_address = repSettings.pdf_address;
@@ -1012,14 +1008,31 @@ export class DocumentModuleService extends MedusaService({
             (input.custom_fields && (input.custom_fields["Payment Reference"] || input.custom_fields["paystack_reference"])) ||
             displayId;
 
-          const paymentId = await zoho.registerPayment(
-            targetInvoiceId,
-            paymentAmount,
-            cid,
-            "Paystack",
-            paystackReference,
-            paystackReference !== displayId ? `Payment via Paystack: ${paystackReference}` : undefined
-          );
+          let paymentId: string | null = null;
+          try {
+            const invDetails = await zoho.getInvoice(targetInvoiceId);
+            if (invDetails?.payments && Array.isArray(invDetails.payments)) {
+              const existingPayment = invDetails.payments.find(
+                (p: any) =>
+                  (paystackReference && p.reference_number === paystackReference) ||
+                  (Math.abs(Number(p.amount) - paymentAmount) < 0.01 && p.payment_id)
+              );
+              if (existingPayment?.payment_id) {
+                paymentId = existingPayment.payment_id;
+              }
+            }
+          } catch (_) {}
+
+          if (!paymentId) {
+            paymentId = await zoho.registerPayment(
+              targetInvoiceId,
+              paymentAmount,
+              cid,
+              "Paystack",
+              paystackReference,
+              paystackReference !== displayId ? `Payment via Paystack: ${paystackReference}` : undefined
+            );
+          }
 
           zohoDocumentId = paymentId;
           source = "zoho";
@@ -1416,13 +1429,26 @@ export class DocumentModuleService extends MedusaService({
       ? (effectivePayLink || record.short_pdf_link || record.pdf_url)
       : (record.short_pdf_link || record.pdf_url);
 
-    // If source is Zoho and zoho_document_id exists, fetch from Zoho API
-    if (
-      record.source === "zoho" &&
-      record.zoho_document_id &&
-      settings.zoho_books_enabled &&
-      settings.zoho_client_id
-    ) {
+    let meta = (record.metadata || {}) as any;
+    if (typeof meta === "string") {
+      try {
+        meta = JSON.parse(meta);
+      } catch (_) {
+        meta = {};
+      }
+    }
+
+    // Zoho Books is single source of truth unless PDFKit is explicitly selected or Zoho is unavailable
+    const canUseZohoInPdf =
+      meta.force_source !== "pdfkit" &&
+      settings.zoho_books_enabled !== false &&
+      Boolean(settings.zoho_client_id) &&
+      Boolean(settings.zoho_client_secret) &&
+      Boolean(settings.zoho_refresh_token) &&
+      Boolean(settings.zoho_organization_id) &&
+      (record.type === "invoice" || record.type === "estimate" || record.type === "receipt");
+
+    if (canUseZohoInPdf) {
       try {
         const logger = container?.resolve?.("logger", { allowUnregistered: true });
         const zoho = new ZohoBooksService(
@@ -1436,26 +1462,57 @@ export class DocumentModuleService extends MedusaService({
           logger
         );
 
-        let rawBuf: ArrayBuffer | null = null;
-        if (record.type === "receipt") {
-          rawBuf = await zoho.getPaymentReceiptPdf(record.zoho_document_id);
-        } else {
-          const docType = record.type === "estimate" ? "estimate" : "invoice";
-          rawBuf = await zoho.getDocumentPdf(record.zoho_document_id, docType);
+        // Self-heal: If document is not yet linked to Zoho Books, look up by number
+        if (!record.zoho_document_id) {
+          if (record.type === "invoice") {
+            const existingInZoho = await zoho.getInvoiceByNumber(record.display_id);
+            if (existingInZoho) {
+              record.zoho_document_id = existingInZoho.invoice_id;
+              record.source = "zoho";
+            }
+          } else if (record.type === "estimate") {
+            const existingInZoho = await zoho.getEstimateByNumber(record.display_id);
+            if (existingInZoho) {
+              record.zoho_document_id = existingInZoho.estimate_id;
+              record.source = "zoho";
+            }
+          }
+          if (record.zoho_document_id) {
+            try {
+              const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+              if (conn) {
+                await conn("document_record").where({ id: record.id }).update({
+                  zoho_document_id: record.zoho_document_id,
+                  source: "zoho",
+                  updated_at: new Date(),
+                });
+              }
+            } catch (_) {}
+          }
         }
 
-        if (rawBuf && rawBuf.byteLength >= 4) {
-          const buf = Buffer.from(rawBuf);
-          if (buf.subarray(0, 4).toString() === "%PDF") {
-            const processedBuf = await postProcessPdf(buf, {
-              qrUrl: effectiveQrUrl,
-              obscureZohoFooter: true,
-              isInvoice,
-              paymentLink: effectivePayLink,
-              docType: record.type,
-            });
-            pdfBufferCache.set(cacheKey, { buffer: processedBuf, expiresAt: Date.now() + 60000 });
-            return processedBuf;
+        if (record.zoho_document_id) {
+          let rawBuf: ArrayBuffer | null = null;
+          if (record.type === "receipt") {
+            rawBuf = await zoho.getPaymentReceiptPdf(record.zoho_document_id);
+          } else {
+            const docType = record.type === "estimate" ? "estimate" : "invoice";
+            rawBuf = await zoho.getDocumentPdf(record.zoho_document_id, docType);
+          }
+
+          if (rawBuf && rawBuf.byteLength >= 4) {
+            const buf = Buffer.from(rawBuf);
+            if (buf.subarray(0, 4).toString() === "%PDF") {
+              const processedBuf = await postProcessPdf(buf, {
+                qrUrl: effectiveQrUrl,
+                obscureZohoFooter: true,
+                isInvoice,
+                paymentLink: effectivePayLink,
+                docType: record.type,
+              });
+              pdfBufferCache.set(cacheKey, { buffer: processedBuf, expiresAt: Date.now() + 60000 });
+              return processedBuf;
+            }
           }
         }
       } catch (err: any) {
@@ -1472,8 +1529,6 @@ export class DocumentModuleService extends MedusaService({
     else if (record.type === "estimate") templateName = settings.estimate_template || "zoho_exact";
     else if (record.type === "job_card") templateName = settings.job_card_template || "standard";
     else if (record.type === "custom") templateName = settings.custom_doc_template || "modern";
-
-    let meta = (record.metadata || {}) as any;
     if (typeof meta === "string") {
       try {
         meta = JSON.parse(meta);
@@ -1632,6 +1687,10 @@ export class DocumentModuleService extends MedusaService({
         const ticket = await repairModule.retrieveRepairTicket(repairTicketId).catch(() => null);
         if (ticket && ticket.metadata && zoho) {
           const meta = ticket.metadata;
+          if (meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
+            await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
+            deletedPayments.push(meta.zoho_payment_id);
+          }
           if (meta.zoho_invoice_id && !deletedInvoices.includes(meta.zoho_invoice_id)) {
             await zoho.deleteInvoice(meta.zoho_invoice_id).catch(() => {});
             deletedInvoices.push(meta.zoho_invoice_id);
@@ -1639,10 +1698,6 @@ export class DocumentModuleService extends MedusaService({
           if (meta.zoho_estimate_id && !deletedEstimates.includes(meta.zoho_estimate_id)) {
             await zoho.deleteEstimate(meta.zoho_estimate_id).catch(() => {});
             deletedEstimates.push(meta.zoho_estimate_id);
-          }
-          if (meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
-            await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
-            deletedPayments.push(meta.zoho_payment_id);
           }
         }
 
@@ -1670,6 +1725,10 @@ export class DocumentModuleService extends MedusaService({
           if (ticket) {
             const meta = typeof ticket.metadata === "string" ? JSON.parse(ticket.metadata || "{}") : (ticket.metadata || {});
             if (zoho) {
+              if (meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
+                await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
+                deletedPayments.push(meta.zoho_payment_id);
+              }
               if (meta.zoho_invoice_id && !deletedInvoices.includes(meta.zoho_invoice_id)) {
                 await zoho.deleteInvoice(meta.zoho_invoice_id).catch(() => {});
                 deletedInvoices.push(meta.zoho_invoice_id);
@@ -1677,10 +1736,6 @@ export class DocumentModuleService extends MedusaService({
               if (meta.zoho_estimate_id && !deletedEstimates.includes(meta.zoho_estimate_id)) {
                 await zoho.deleteEstimate(meta.zoho_estimate_id).catch(() => {});
                 deletedEstimates.push(meta.zoho_estimate_id);
-              }
-              if (meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
-                await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
-                deletedPayments.push(meta.zoho_payment_id);
               }
             }
             delete meta.document_id;
@@ -1814,12 +1869,29 @@ export class DocumentModuleService extends MedusaService({
           quantity: Number(it.quantity || 1),
         }));
 
+        if (zohoLineItems.length === 0 && Number(newTotal || 0) > 0) {
+          zohoLineItems.push({
+            name: newTitle || record.title || "Item",
+            description: "",
+            rate: Number(newTotal).toFixed(2),
+            quantity: 1,
+          });
+        }
+
         let zohoNotes = newNotes || settings.zoho_invoice_notes || settings.pdf_payment_details || "Thank you for your business.";
         const pLink = record.short_payment_link || record.payment_link;
         if (pLink && !zohoNotes.includes("Pay Online:") && !zohoNotes.includes("Paystack Payment Link:")) {
           zohoNotes += `\n\nPaystack Payment Link: ${pLink}\nPay Online (Paystack): ${pLink}`;
         }
         const zohoTerms = newTerms || settings.zoho_invoice_terms || settings.pdf_terms || "";
+
+        const customFields: Array<{ label: string; value: string }> = [];
+        if (settings.zoho_custom_field_payment_link && settings.zoho_custom_field_payment_link.trim() !== "" && (record.short_payment_link || record.payment_link)) {
+          customFields.push({
+            label: settings.zoho_custom_field_payment_link,
+            value: (record.short_payment_link || record.payment_link) as string,
+          });
+        }
 
         const contactId = await zoho.syncContact({
           first_name: newCustomerName,
@@ -1842,6 +1914,7 @@ export class DocumentModuleService extends MedusaService({
               line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
               notes: zohoNotes,
               terms: zohoTerms,
+              custom_fields: customFields.length > 0 ? customFields : undefined,
             });
           } else {
             const res = await zoho.createInvoice(contactId, {
@@ -1853,6 +1926,7 @@ export class DocumentModuleService extends MedusaService({
               terms: zohoTerms,
               payment_terms: settings.zoho_payment_terms_days || 0,
               is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+              custom_fields: customFields.length > 0 ? customFields : undefined,
             });
             zohoDocId = res.invoice_id;
           }
@@ -1870,6 +1944,7 @@ export class DocumentModuleService extends MedusaService({
               line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
               notes: zohoNotes,
               terms: zohoTerms,
+              custom_fields: customFields.length > 0 ? customFields : undefined,
             });
           } else {
             const res = await zoho.createEstimate(contactId, {
@@ -1879,6 +1954,7 @@ export class DocumentModuleService extends MedusaService({
               notes: zohoNotes,
               terms: zohoTerms,
               is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+              custom_fields: customFields.length > 0 ? customFields : undefined,
             });
             zohoDocId = res.estimate_id;
           }
