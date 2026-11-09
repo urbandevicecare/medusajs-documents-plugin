@@ -252,6 +252,11 @@ export class ZohoBooksService {
     };
   }
 
+  async getInvoice(invoiceId: string): Promise<any> {
+    const res = await this.request("GET", `/invoices/${invoiceId}`);
+    return res.invoice;
+  }
+
   async updateInvoice(invoiceId: string, invoiceData: {
     customer_id?: string;
     reference_number?: string;
@@ -262,9 +267,12 @@ export class ZohoBooksService {
     payment_terms?: number;
     is_inclusive_tax?: boolean;
     due_date?: string;
+    reason?: string;
     custom_fields?: Array<{ label: string; value: string }>;
   }): Promise<{ invoice_id: string; invoice_number: string }> {
-    const payload: any = {};
+    const payload: any = {
+      reason: invoiceData.reason || "Updated via Admin Dashboard",
+    };
     if (invoiceData.customer_id) payload.customer_id = invoiceData.customer_id;
     if (invoiceData.reference_number) payload.reference_number = invoiceData.reference_number;
     if (invoiceData.invoice_number) payload.invoice_number = invoiceData.invoice_number;
@@ -276,6 +284,16 @@ export class ZohoBooksService {
     if (invoiceData.is_inclusive_tax !== undefined) payload.is_inclusive_tax = invoiceData.is_inclusive_tax;
     if (invoiceData.custom_fields && invoiceData.custom_fields.length > 0) {
       payload.custom_fields = invoiceData.custom_fields;
+    }
+
+    // Ensure customer_id is present (mandatory for Zoho Books PUT /invoices/{id})
+    if (!payload.customer_id) {
+      try {
+        const existing = await this.getInvoice(invoiceId);
+        if (existing?.customer_id) {
+          payload.customer_id = existing.customer_id;
+        }
+      } catch (_) {}
     }
 
     let res: any;
@@ -413,6 +431,11 @@ export class ZohoBooksService {
     };
   }
 
+  async getEstimate(estimateId: string): Promise<any> {
+    const res = await this.request("GET", `/estimates/${estimateId}`);
+    return res.estimate;
+  }
+
   async updateEstimate(estimateId: string, estimateData: {
     customer_id?: string;
     reference_number?: string;
@@ -433,6 +456,16 @@ export class ZohoBooksService {
     if (estimateData.is_inclusive_tax !== undefined) payload.is_inclusive_tax = estimateData.is_inclusive_tax;
     if (estimateData.custom_fields && estimateData.custom_fields.length > 0) {
       payload.custom_fields = estimateData.custom_fields;
+    }
+
+    // Ensure customer_id is present (mandatory for Zoho Books PUT /estimates/{id})
+    if (!payload.customer_id) {
+      try {
+        const existing = await this.getEstimate(estimateId);
+        if (existing?.customer_id) {
+          payload.customer_id = existing.customer_id;
+        }
+      } catch (_) {}
     }
 
     let res: any;
@@ -545,8 +578,20 @@ export class ZohoBooksService {
       payload.description = description;
     }
 
-    const res = await this.request("POST", "/customerpayments", payload);
-    return res.payment.payment_id;
+    try {
+      const res = await this.request("POST", "/customerpayments", payload);
+      return res.payment.payment_id;
+    } catch (err: any) {
+      if (err.message && (err.message.toLowerCase().includes("payment mode") || err.message.toLowerCase().includes("payment_mode"))) {
+        payload.payment_mode = "others";
+        payload.description = payload.description
+          ? `${payload.description} (Mode: ${paymentMode})`
+          : `Payment Mode: ${paymentMode}`;
+        const fallbackRes = await this.request("POST", "/customerpayments", payload);
+        return fallbackRes.payment.payment_id;
+      }
+      throw err;
+    }
   }
 
   async getDocumentPdf(documentId: string, type: "invoice" | "estimate"): Promise<ArrayBuffer> {

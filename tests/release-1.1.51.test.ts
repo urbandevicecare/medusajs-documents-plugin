@@ -195,3 +195,157 @@ test("Release 1.1.51 - Requirement 5: Document editing allows updating quotes an
   assert.strictEqual(typeof editRoute.PUT, "function", "PUT handler must be exported");
   assert.strictEqual(typeof editRoute.POST, "function", "POST handler must be exported");
 });
+
+test("Release 1.1.51 - Requirement 5b: Zoho Books updateInvoice and updateEstimate enforce customer_id and reason", async () => {
+  let capturedPayload: any = null;
+  let capturedEndpoint: string = "";
+  const zoho = new ZohoBooksService(
+    {
+      client_id: "dummy_client",
+      client_secret: "dummy_secret",
+      refresh_token: "dummy_token",
+      organization_id: "dummy_org",
+      domain: "com",
+    },
+    { info: () => {}, warn: () => {}, error: () => {} } as any
+  );
+
+  (zoho as any).request = async (method: string, endpoint: string, body?: any) => {
+    capturedEndpoint = endpoint;
+    capturedPayload = body;
+    if (endpoint.startsWith("/invoices/")) {
+      return { invoice: { invoice_id: "inv_999", invoice_number: "RT-100200" } };
+    }
+    if (endpoint.startsWith("/estimates/")) {
+      return { estimate: { estimate_id: "est_999", estimate_number: "EST-100200" } };
+    }
+    return {};
+  };
+
+  await zoho.updateInvoice("inv_999", {
+    customer_id: "cust_777",
+    notes: "Updated invoice notes",
+    line_items: [{ name: "Repair Service", rate: "5000.00", quantity: 1 }],
+  });
+
+  assert.strictEqual(capturedEndpoint, "/invoices/inv_999");
+  assert.strictEqual(capturedPayload.customer_id, "cust_777", "customer_id is mandatory on PUT /invoices/{id}");
+  assert.strictEqual(capturedPayload.reason, "Updated via Admin Dashboard", "reason is mandatory on PUT /invoices/{id} for open invoices");
+
+  await zoho.updateEstimate("est_999", {
+    customer_id: "cust_777",
+    notes: "Updated estimate notes",
+  });
+
+  assert.strictEqual(capturedEndpoint, "/estimates/est_999");
+  assert.strictEqual(capturedPayload.customer_id, "cust_777", "customer_id is mandatory on PUT /estimates/{id}");
+});
+
+test("Release 1.1.51 - Requirement 4b: registerPayment gracefully falls back to 'others' if payment_mode is rejected", async () => {
+  let callCount = 0;
+  let lastPayload: any = null;
+  const zoho = new ZohoBooksService(
+    {
+      client_id: "dummy_client",
+      client_secret: "dummy_secret",
+      refresh_token: "dummy_token",
+      organization_id: "dummy_org",
+      domain: "com",
+    },
+    { info: () => {}, warn: () => {}, error: () => {} } as any
+  );
+
+  (zoho as any).request = async (method: string, endpoint: string, body?: any) => {
+    callCount++;
+    lastPayload = body;
+    if (callCount === 1) {
+      throw new Error("Invalid value passed for payment_mode");
+    }
+    return { payment: { payment_id: "pay_fallback_456" } };
+  };
+
+  const paymentId = await zoho.registerPayment("inv_123", 2000, "cust_123", "Paystack", "REF_FALLBACK");
+  assert.strictEqual(paymentId, "pay_fallback_456");
+  assert.strictEqual(callCount, 2, "Must retry with fallback payment_mode");
+  assert.strictEqual(lastPayload.payment_mode, "others");
+  assert.ok(lastPayload.description.includes("Mode: Paystack"));
+});
+
+test("Release 1.1.51 - Requirement 1b: Custom documents use DOC- or CERT- prefix, never INV-", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+  let createdDoc: any = null;
+
+  service.getSettings = async () => ({
+    company_name: "Urban Device Care",
+    zoho_books_enabled: true,
+    zoho_invoice_prefix: "INV-",
+  });
+
+  service.getOrGenerateShortUrl = async (url: string) => url;
+  service.createDocumentRecords = async (data: any) => {
+    createdDoc = data;
+    return data;
+  };
+  service.createDocumentLinks = async () => {};
+
+  await service.generateDocument(
+    {
+      title: "Trade-In Agreement",
+      type: "custom",
+      force_source: "pdfkit",
+      customer: { name: "John Doe" },
+    },
+    { resolve: () => null }
+  );
+
+  assert.ok(createdDoc, "Document must be created");
+  assert.ok(!createdDoc.display_id.startsWith("INV-"), "Custom document display_id must NOT start with INV-");
+  assert.ok(createdDoc.display_id.startsWith("DOC-"), "Custom non-repair document display_id must start with DOC-");
+});
+
+test("Release 1.1.51 - Requirement 1c: deleteDocumentsForRepairTicket deletes receipts before invoices", async () => {
+  const service: any = Object.create(DocumentModuleService.prototype);
+  const deletionLog: string[] = [];
+
+  service.listDocumentRecords = async () => [
+    { id: "doc_inv", type: "invoice", zoho_document_id: "zoho_inv_01" },
+    { id: "doc_rcpt", type: "receipt", zoho_document_id: "zoho_rcpt_01" },
+    { id: "doc_est", type: "estimate", zoho_document_id: "zoho_est_01" },
+  ];
+
+  service.getSettings = async () => ({
+    zoho_books_enabled: true,
+    zoho_client_id: "cid",
+    zoho_client_secret: "csecret",
+    zoho_refresh_token: "rtoken",
+    zoho_organization_id: "orgid",
+  });
+
+  service.deleteDocumentRecords = async () => {};
+
+  // Mock ZohoBooksService methods
+  const originalZoho = ZohoBooksService.prototype;
+  const mockDeletePayment = async (id: string) => { deletionLog.push(`deletePayment:${id}`); };
+  const mockDeleteInvoice = async (id: string) => { deletionLog.push(`deleteInvoice:${id}`); };
+  const mockDeleteEstimate = async (id: string) => { deletionLog.push(`deleteEstimate:${id}`); };
+
+  (ZohoBooksService.prototype as any).deletePayment = mockDeletePayment;
+  (ZohoBooksService.prototype as any).deleteInvoice = mockDeleteInvoice;
+  (ZohoBooksService.prototype as any).deleteEstimate = mockDeleteEstimate;
+
+  try {
+    const res = await service.deleteDocumentsForRepairTicket("rep_ticket_999", {
+      resolve: () => ({ info: () => {}, warn: () => {}, error: () => {} }),
+    });
+
+    assert.strictEqual(deletionLog.length, 3);
+    assert.strictEqual(deletionLog[0], "deletePayment:zoho_rcpt_01", "Payment receipt must be deleted FIRST");
+    assert.strictEqual(deletionLog[1], "deleteInvoice:zoho_inv_01", "Invoice must be deleted SECOND");
+    assert.strictEqual(deletionLog[2], "deleteEstimate:zoho_est_01", "Estimate must be deleted THIRD");
+  } finally {
+    ZohoBooksService.prototype.deletePayment = originalZoho.deletePayment;
+    ZohoBooksService.prototype.deleteInvoice = originalZoho.deleteInvoice;
+    ZohoBooksService.prototype.deleteEstimate = originalZoho.deleteEstimate;
+  }
+});
+

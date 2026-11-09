@@ -297,7 +297,7 @@ export class DocumentModuleService extends MedusaService({
     if (!targetSettings) return targetSettings;
     if (repSettings) {
       if (!targetSettings.zoho_client_id && repSettings.zoho_client_id) {
-        targetSettings.zoho_books_enabled = Boolean(repSettings.zoho_books_enabled);
+        targetSettings.zoho_books_enabled = true;
         targetSettings.zoho_client_id = repSettings.zoho_client_id;
         targetSettings.zoho_client_secret = repSettings.zoho_client_secret;
         targetSettings.zoho_refresh_token = repSettings.zoho_refresh_token;
@@ -340,11 +340,9 @@ export class DocumentModuleService extends MedusaService({
       targetSettings.zoho_domain = targetSettings.zoho_domain || process.env.ZOHO_DOMAIN || "com";
     }
 
-    // When Zoho Books credentials exist, ensure zoho_books_enabled is true unless explicitly disabled
+    // When Zoho Books credentials exist, ensure zoho_books_enabled is always true (single source of truth)
     if (targetSettings.zoho_client_id && targetSettings.zoho_client_secret && targetSettings.zoho_refresh_token && targetSettings.zoho_organization_id) {
-      if (targetSettings.zoho_books_enabled === undefined || targetSettings.zoho_books_enabled === null) {
-        targetSettings.zoho_books_enabled = true;
-      }
+      targetSettings.zoho_books_enabled = true;
     }
 
     if (targetSettings.pdf_phone) {
@@ -576,8 +574,16 @@ export class DocumentModuleService extends MedusaService({
               "Reported Issue": ticket.issue_description || "Standard Repair",
               ...(input.custom_fields || {}),
             };
-            if (input.type === "invoice" && !input.payment_link && ticket.approval_token) {
-              input.payment_link = `${storeUrl}/repairs/track?token=${ticket.approval_token}`;
+            if (input.type === "invoice" && !input.payment_link) {
+              const paystackLink =
+                (ticket.metadata as any)?.paystack_payment_link ||
+                (ticket.metadata as any)?.paystack_url ||
+                (ticket.metadata as any)?.payment_link;
+              if (paystackLink) {
+                input.payment_link = paystackLink;
+              } else if (ticket.approval_token) {
+                input.payment_link = `${storeUrl}/repairs/track?token=${ticket.approval_token}`;
+              }
             }
           }
         }
@@ -585,7 +591,18 @@ export class DocumentModuleService extends MedusaService({
     }
 
     if (!input.customer) {
-      input.customer = { name: "Customer" };
+      const topName = (input as any).customer_name;
+      const topEmail = (input as any).customer_email;
+      const topPhone = (input as any).customer_phone;
+      if (topName || topEmail || topPhone) {
+        input.customer = {
+          name: topName || "Customer",
+          email: topEmail,
+          phone: topPhone,
+        };
+      } else {
+        input.customer = { name: "Customer" };
+      }
     }
     if (!input.items) {
       input.items = [];
@@ -613,11 +630,11 @@ export class DocumentModuleService extends MedusaService({
         defaultPrefix = settings.zoho_invoice_prefix || "INV-";
       }
     } else if (input.type === "custom") {
-      defaultPrefix = isRepairTicket ? "CERT-" : (settings.zoho_invoice_prefix || "DOC-");
+      defaultPrefix = isRepairTicket ? "CERT-" : "DOC-";
     } else {
       defaultPrefix = isStoreOrder
         ? (settings.store_invoice_prefix || "ST-")
-        : (settings.zoho_invoice_prefix || "DOC-");
+        : "DOC-";
     }
 
     let displayId = input.display_id || `${defaultPrefix}${Math.floor(100000 + Math.random() * 900000)}`;
@@ -1568,21 +1585,42 @@ export class DocumentModuleService extends MedusaService({
     } catch (_) {}
 
     // 3. Delete each document in Zoho Books if zoho_document_id exists
-    for (const record of records) {
+    // Crucial order: payments/receipts MUST be deleted before invoices, otherwise Zoho rejects invoice deletion
+    const paymentRecords = records.filter((r) => r.type === "receipt");
+    const invoiceRecords = records.filter((r) => r.type === "invoice");
+    const otherRecords = records.filter((r) => r.type !== "receipt" && r.type !== "invoice");
+
+    for (const record of paymentRecords) {
       if (zoho && record.zoho_document_id) {
         try {
-          if (record.type === "invoice") {
-            await zoho.deleteInvoice(record.zoho_document_id);
-            deletedInvoices.push(record.zoho_document_id);
-          } else if (record.type === "estimate") {
+          await zoho.deletePayment(record.zoho_document_id);
+          deletedPayments.push(record.zoho_document_id);
+        } catch (e: any) {
+          container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[Documents-Module] Could not delete Zoho payment ${record.zoho_document_id}: ${e.message}`);
+        }
+      }
+    }
+
+    for (const record of invoiceRecords) {
+      if (zoho && record.zoho_document_id) {
+        try {
+          await zoho.deleteInvoice(record.zoho_document_id);
+          deletedInvoices.push(record.zoho_document_id);
+        } catch (e: any) {
+          container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[Documents-Module] Could not delete Zoho invoice ${record.zoho_document_id}: ${e.message}`);
+        }
+      }
+    }
+
+    for (const record of otherRecords) {
+      if (zoho && record.zoho_document_id) {
+        try {
+          if (record.type === "estimate") {
             await zoho.deleteEstimate(record.zoho_document_id);
             deletedEstimates.push(record.zoho_document_id);
-          } else if (record.type === "receipt") {
-            await zoho.deletePayment(record.zoho_document_id);
-            deletedPayments.push(record.zoho_document_id);
           }
         } catch (e: any) {
-          container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[Documents-Module] Could not delete Zoho document ${record.zoho_document_id}: ${e.message}`);
+          container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[Documents-Module] Could not delete Zoho estimate ${record.zoho_document_id}: ${e.message}`);
         }
       }
     }
@@ -1770,10 +1808,10 @@ export class DocumentModuleService extends MedusaService({
         );
 
         const zohoLineItems = newItems.map((it: any) => ({
-          name: it.title,
+          name: it.title || it.name || "Item",
           description: it.description || "",
-          rate: Number(it.unit_price || 0).toFixed(2),
-          quantity: it.quantity || 1,
+          rate: Number(it.unit_price || it.rate || 0).toFixed(2),
+          quantity: Number(it.quantity || 1),
         }));
 
         let zohoNotes = newNotes || settings.zoho_invoice_notes || settings.pdf_payment_details || "Thank you for your business.";
@@ -1783,19 +1821,29 @@ export class DocumentModuleService extends MedusaService({
         }
         const zohoTerms = newTerms || settings.zoho_invoice_terms || settings.pdf_terms || "";
 
+        const contactId = await zoho.syncContact({
+          first_name: newCustomerName,
+          email: newCustomerEmail,
+          phone: sanitizePhoneNumber(newCustomerPhone),
+        });
+
         if (record.type === "invoice") {
+          if (!zohoDocId) {
+            const existingInZoho = await zoho.getInvoiceByNumber(record.display_id);
+            if (existingInZoho) {
+              zohoDocId = existingInZoho.invoice_id;
+            }
+          }
+
           if (zohoDocId) {
             await zoho.updateInvoice(zohoDocId, {
+              customer_id: contactId,
+              reason: "Updated via Admin Dashboard",
               line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
               notes: zohoNotes,
               terms: zohoTerms,
             });
           } else {
-            const contactId = await zoho.syncContact({
-              first_name: newCustomerName,
-              email: newCustomerEmail,
-              phone: sanitizePhoneNumber(newCustomerPhone),
-            });
             const res = await zoho.createInvoice(contactId, {
               reference_number: record.display_id,
               invoice_number: record.display_id,
@@ -1809,18 +1857,21 @@ export class DocumentModuleService extends MedusaService({
             zohoDocId = res.invoice_id;
           }
         } else if (record.type === "estimate") {
+          if (!zohoDocId) {
+            const existingInZoho = await zoho.getEstimateByNumber(record.display_id);
+            if (existingInZoho) {
+              zohoDocId = existingInZoho.estimate_id;
+            }
+          }
+
           if (zohoDocId) {
             await zoho.updateEstimate(zohoDocId, {
+              customer_id: contactId,
               line_items: zohoLineItems.length > 0 ? zohoLineItems : undefined,
               notes: zohoNotes,
               terms: zohoTerms,
             });
           } else {
-            const contactId = await zoho.syncContact({
-              first_name: newCustomerName,
-              email: newCustomerEmail,
-              phone: sanitizePhoneNumber(newCustomerPhone),
-            });
             const res = await zoho.createEstimate(contactId, {
               reference_number: record.display_id,
               estimate_number: record.display_id,
