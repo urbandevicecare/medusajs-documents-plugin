@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.63] - 2026-11-14
+
+### Robust Search, Live Customer Remote Autofill & Address Sync
+- **Live Debounced Medusa Customer Search**:
+  - Implemented live debounced server-side query to `/admin/customers?q=...&fields=*addresses` directly within `CustomerAutofillCombobox` to find customers across the entire database beyond the initial window.
+  - Added full customer address retrieval by requesting `fields=*addresses` from Medusa v2.
+  - Added digit-normalized phone number matching for local and remote customer lookups (e.g. `0712...` vs `+254 712...`).
+- **Ticket Prefix-Insensitive Search & Selection Resilience**:
+  - In `RepairTicketCombobox`, normalized ticket number search queries by stripping `RT-`, `JOB-`, `#` prefixes and testing against clean ticket number, raw ticket number, and display reference.
+  - Fixed ticket filtering when a ticket is already selected so user typing cleanly filters results without being bypassed.
+  - Connected `customersList` to repair tickets lacking joined customer relations so searching by customer/company name in the repair ticket combobox resolves accurately.
+- **Customer & Address Synchronization**:
+  - Fixed manual document route to preserve customer contact name when company name is also provided.
+  - Extended `zoho.syncContact` and `ensureContactId` to persist customer address to Zoho Books contact record.
+  - Cleared repair ticket link upon closing custom document modal.
+
+## [1.1.62] - 2026-11-14
+
+### Custom Documents & Manual Invoice Improvements
+- **Custom Document Options Clean-up**:
+  - Removed "Blank Custom Document" and "Commercial Quotation / Proforma" options from Custom Document presets.
+  - Removed Commercial Proforma Quote card from Templates preview tab.
+- **Repair Ticket Searchable Combobox**:
+  - Replaced static `<Select>` dropdown with an interactive, real-time searchable combobox that dynamically searches repair tickets by customer name, company name, ticket number (with/without RT- prefix), or device model.
+- **Cross-Source Customer Details Autofill**:
+  - Introduced unified customer search & autofill across both "Create Manual Invoice" and "Custom Documents" modals.
+  - Dynamically searches and aggregates customer records from Medusa customers (`/admin/customers`), active/recent repair tickets (`/admin/repairs`), and recent documents.
+  - Automatically populates Customer Name, Company Name, Email, Phone, and Address with 1 click.
+- **Enforced Zoho Books for Manual Invoices**:
+  - Strictly enforced Generation Source to Zoho Books (`force_source: "zoho"`) across UI, form state, and API submission (`/admin/documents/manual`).
+  - Completely removed PDFKit option and Auto fallback from manual invoice creation.
+
 ## [1.1.49] - 2026-11-01
 
 ### PDF Standard Decryption & Metadata Resilience

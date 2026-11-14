@@ -908,4 +908,101 @@ test("Repair subscriber creates exact receipt line item for deposit/partial paym
   assert.ok(capturedDocInput.items[0].description.includes("DEP_REF_99"));
 });
 
+test("Requirement: Completed or collected repair ticket that is unpaid generates invoice with payment_status unpaid and does NOT generate receipt", async () => {
+  let capturedDocInput: any = null;
+  const mockDocService = {
+    getSettings: async () => ({
+      event_repair_status_changed_enabled: true,
+      event_repair_completed_enabled: true,
+    }),
+    generateDocument: async (input: any) => {
+      capturedDocInput = input;
+      return { record: { id: "doc_inv_unpaid", type: input.type, payment_status: input.payment_status } };
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_unpaid_completed",
+          ticket_number: 1099,
+          status: "completed",
+          payment_status: "pending",
+          amount_paid: 0,
+          total_estimate: 5000,
+          total_actual: 5000,
+          customer_id: null,
+          device: { model_name: "iPhone 13" },
+        },
+      ],
+    }),
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      return null;
+    },
+  };
+
+  await repairDocumentsSubscriber({
+    event: { name: "repair.status_changed", data: { id: "rep_unpaid_completed", status: "completed" } },
+    container: mockContainer,
+  } as any);
+
+  assert.ok(capturedDocInput, "generateDocument should have been called");
+  assert.strictEqual(capturedDocInput.type, "invoice", "Work status completed MUST generate invoice, never receipt");
+  assert.strictEqual(capturedDocInput.payment_status, "unpaid", "Unpaid repair ticket invoice MUST have payment_status unpaid");
+  assert.strictEqual(capturedDocInput.amount_paid, 0, "amount_paid must be 0");
+});
+
+test("Requirement: repair.payment_received with 0 amount does NOT generate a receipt", async () => {
+  let docGenerated = false;
+  const mockDocService = {
+    getSettings: async () => ({
+      event_repair_payment_received_enabled: true,
+    }),
+    generateDocument: async () => {
+      docGenerated = true;
+      return { record: { id: "doc_test" } };
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_zero_pay",
+          ticket_number: 1100,
+          status: "completed",
+          payment_status: "pending",
+          amount_paid: 0,
+          total_estimate: 4000,
+          device: { model_name: "iPad" },
+        },
+      ],
+    }),
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      return null;
+    },
+  };
+
+  await repairDocumentsSubscriber({
+    event: { name: "repair.payment_received", data: { id: "rep_zero_pay", amount: 0 } },
+    container: mockContainer,
+  } as any);
+
+  assert.strictEqual(docGenerated, false, "Must NOT generate receipt for 0 amount payment");
+});
+
+
 

@@ -29,6 +29,9 @@ import {
   ChevronDown,
   ChevronRight,
   PencilSquare,
+  MagnifyingGlass,
+  XMark,
+  User,
 } from "@medusajs/icons";
 import {
   groupDocuments,
@@ -168,29 +171,6 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     notes: "By accepting handover, the client acknowledges satisfactory return of all custody items and confirms device operability.",
   },
   {
-    id: "proforma",
-    name: "Commercial Quotation / Proforma",
-    icon: "💼",
-    badge: "Cost Estimate",
-    title: "Commercial Quotation (Proforma)",
-    subject: "Commercial Quotation & Scope of Work - Urban Device Care",
-    body_text: `Thank you for choosing Urban Device Care. Below is an itemized commercial quotation detailing required OEM components, workshop labor, precision calibration, and expected turnaround schedule for your equipment overhaul.\n\nThis quotation is valid for 14 calendar days from the date of issue. Upon formal approval, component procurement and bench allocation will commence immediately.`,
-    items: [
-      { title: "OEM Liquid Retina XDR Display Assembly", description: "Brand new original factory panel with factory color calibration", quantity: 1, unit_price: 42000 },
-      { title: "Clean-Room Workshop Installation & Sensor Alignment", description: "Certified clean-room installation, gasket replacement & TrueTone calibration", quantity: 1, unit_price: 6500 },
-      { title: "Hydrophobic Dust & Water Ingress Seal Restoration", description: "OEM adhesive barrier pressure cured to IP68 rating", quantity: 1, unit_price: 2500 },
-    ],
-    custom_fields: {
-      "Device Model": "Apple iPad Pro 12.9-inch (6th Gen - Wi-Fi + Cellular)",
-      "Serial / IMEI": "DLXW9201M93K",
-      "Ticket Reference": "RT-2024-4190",
-      "Estimator / Technician": "Bonifencia A.",
-      "Validity Period": "14 Calendar Days",
-      "Estimated Turnaround": "24 - 48 Hours",
-    },
-    notes: "All replaced hardware carries our standard 90-day warranty coverage. Payment accepted via M-Pesa, Bank Transfer, or Credit/Debit Card.",
-  },
-  {
     id: "trade_in",
     name: "Device Trade-In Agreement",
     icon: "🔄",
@@ -212,30 +192,497 @@ const CUSTOM_DOC_PRESETS: CustomDocPreset[] = [
     },
     notes: "Ownership transfers immediately upon document execution. Valuation is binding and irrevocable once trade-in payout or store credit is issued.",
   },
-  {
-    id: "blank",
-    name: "Blank Custom Document",
-    icon: "📝",
-    badge: "Custom",
-    title: "Official Document",
-    subject: "Official Document from Urban Device Care",
-    body_text: "This official technical document confirms the specifications, service terms, and verified conditions documented by Urban Device Care for the specified customer asset.",
-    items: [
-      { title: "Professional Hardware Inspection & Maintenance Service", description: "Certified technical evaluation and service clearance", quantity: 1, unit_price: 0 },
-    ],
-    custom_fields: {
-      "Device Model": "Computing Asset / Hardware Module",
-      "Serial / IMEI": "SN-XXXX-XXXX",
-      "Ticket Reference": "RT-2024-0001",
-      "Technician": "Bonifencia A.",
-    },
-    notes: "Standard terms and conditions apply. For inquiries, contact info@urbandevicecare.co.uk.",
-  },
 ];
 
 interface DocumentRecord extends BaseDocumentRecord {}
 
 export { formatCurrency };
+
+interface CustomerCandidate {
+  id: string;
+  name: string;
+  company_name: string;
+  email: string;
+  phone: string;
+  address: string;
+  source: "customer" | "repair" | "document";
+  source_label: string;
+}
+
+interface CustomerAutofillComboboxProps {
+  candidates: CustomerCandidate[];
+  loading?: boolean;
+  onSelectCustomer: (candidate: CustomerCandidate) => void;
+  label?: string;
+}
+
+const CustomerAutofillCombobox: React.FC<CustomerAutofillComboboxProps> = ({
+  candidates,
+  loading = false,
+  onSelectCustomer,
+  label = "Quick Autofill Customer Details",
+}) => {
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [autofilledNotice, setAutofilledNotice] = useState<string | null>(null);
+  const [remoteCandidates, setRemoteCandidates] = useState<CustomerCandidate[]>([]);
+  const [isSearchingRemote, setIsSearchingRemote] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Debounced live query to /admin/customers when typing >= 2 characters
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setRemoteCandidates([]);
+      setIsSearchingRemote(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingRemote(true);
+      try {
+        const res = await fetch(`/admin/customers?q=${encodeURIComponent(q)}&fields=*addresses&limit=25`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.customers && Array.isArray(data.customers)) {
+            const mapped: CustomerCandidate[] = data.customers.map((c: any) => {
+              const fullName = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
+              const addr = c.addresses?.[0] || c.default_billing_address || c.billing_address;
+              const formattedAddr = addr
+                ? [addr.address_1, addr.address_2, addr.city, addr.postal_code, addr.province, addr.country_code?.toUpperCase()].filter(Boolean).join(", ")
+                : "";
+              const company = c.company_name || addr?.company || c.metadata?.company_name || "";
+              const name = fullName || company || c.email || "Customer";
+              return {
+                id: `remote-${c.id}`,
+                name,
+                company_name: company,
+                email: c.email || "",
+                phone: c.phone || addr?.phone || "",
+                address: formattedAddr,
+                source: "customer" as const,
+                source_label: "Medusa Customer (Live)",
+              };
+            });
+            setRemoteCandidates(mapped);
+          }
+        }
+      } catch (e) {
+        // ignore live search network errors
+      } finally {
+        setIsSearchingRemote(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Aggregate local + remote candidates
+  const allCandidates = useMemo(() => {
+    if (remoteCandidates.length === 0) return candidates;
+    const map = new Map<string, CustomerCandidate>();
+    for (const c of candidates) {
+      const key = (c.email?.toLowerCase()) || (c.phone?.replace(/\s+/g, "")) || `${c.name.toLowerCase()}::${c.company_name.toLowerCase()}`;
+      if (key) map.set(key, c);
+    }
+    for (const c of remoteCandidates) {
+      const key = (c.email?.toLowerCase()) || (c.phone?.replace(/\s+/g, "")) || `${c.name.toLowerCase()}::${c.company_name.toLowerCase()}`;
+      if (key) {
+        if (!map.has(key)) {
+          map.set(key, c);
+        } else {
+          const existing = map.get(key)!;
+          if (!existing.address && c.address) existing.address = c.address;
+          if (!existing.company_name && c.company_name) existing.company_name = c.company_name;
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [candidates, remoteCandidates]);
+
+  const filteredCandidates = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return allCandidates.slice(0, 10);
+    }
+    const cleanQ = q.replace(/\s+/g, "");
+    const digitsOnlyQ = cleanQ.replace(/\D/g, "");
+
+    return allCandidates.filter((c) => {
+      const name = c.name.toLowerCase();
+      const company = c.company_name.toLowerCase();
+      const email = c.email.toLowerCase();
+      const phone = c.phone.replace(/\s+/g, "").toLowerCase();
+      const digitsOnlyPhone = phone.replace(/\D/g, "");
+      const addr = c.address.toLowerCase();
+      const src = c.source_label.toLowerCase();
+
+      const phoneMatches =
+        phone.includes(cleanQ) ||
+        (digitsOnlyQ.length >= 4 && (digitsOnlyPhone.includes(digitsOnlyQ) || digitsOnlyQ.includes(digitsOnlyPhone)));
+
+      return (
+        name.includes(q) ||
+        company.includes(q) ||
+        email.includes(q) ||
+        phoneMatches ||
+        addr.includes(q) ||
+        src.includes(q)
+      );
+    }).slice(0, 20);
+  }, [allCandidates, query]);
+
+  const handleSelect = (candidate: CustomerCandidate) => {
+    onSelectCustomer(candidate);
+    const displayName = candidate.company_name
+      ? `${candidate.name} (${candidate.company_name})`
+      : candidate.name;
+    setAutofilledNotice(`✓ Autofilled: ${displayName}`);
+    setQuery("");
+    setIsOpen(false);
+    setTimeout(() => {
+      setAutofilledNotice(null);
+    }, 4000);
+  };
+
+  return (
+    <div ref={containerRef} className="relative flex flex-col gap-1.5 p-3 rounded-lg bg-ui-bg-subtle border border-ui-border-base">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-semibold flex items-center gap-1.5 text-ui-fg-base">
+          <Sparkles className="w-3.5 h-3.5 text-ui-fg-interactive" />
+          {label}
+        </Label>
+        {autofilledNotice && (
+          <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200">
+            {autofilledNotice}
+          </span>
+        )}
+      </div>
+      <Text className="text-[11px] text-ui-fg-subtle">
+        Search existing customer records, repair tickets, or recent documents in Medusa to automatically populate customer fields.
+      </Text>
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-ui-fg-muted">
+          <MagnifyingGlass className="w-4 h-4" />
+        </div>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={(e) => {
+            setIsOpen(true);
+            e.target.select();
+          }}
+          placeholder="Type name, company, email, phone, or ticket # to search & autofill..."
+          className="w-full pl-8.5 pr-8 py-1.5 text-xs bg-ui-bg-base border border-ui-border-base rounded-md text-ui-fg-base placeholder:text-ui-fg-muted focus:outline-none focus:ring-1 focus:ring-ui-border-interactive focus:border-ui-border-interactive"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-ui-fg-muted hover:text-ui-fg-base"
+          >
+            <XMark className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-ui-bg-base border border-ui-border-base rounded-md shadow-lg max-h-64 overflow-y-auto divide-y divide-ui-border-base">
+          {loading || isSearchingRemote ? (
+            <div className="p-3 text-xs text-ui-fg-muted text-center flex items-center justify-center gap-2">
+              <ArrowPath className="w-3 h-3 animate-spin" />
+              Searching customer records...
+            </div>
+          ) : filteredCandidates.length === 0 ? (
+            <div className="p-3 text-xs text-ui-fg-muted text-center">
+              No matching customer records found
+            </div>
+          ) : (
+            filteredCandidates.map((c) => {
+              const badgeColor =
+                c.source === "customer"
+                  ? "blue"
+                  : c.source === "repair"
+                  ? "orange"
+                  : "green";
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => handleSelect(c)}
+                  className="p-2.5 hover:bg-ui-bg-subtle-hover cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="font-semibold text-xs text-ui-fg-base truncate">
+                        {c.name}
+                      </span>
+                      {c.company_name && c.company_name !== c.name && (
+                        <span className="text-[11px] text-ui-fg-muted truncate">
+                          ({c.company_name})
+                        </span>
+                      )}
+                    </div>
+                    <Badge size="small" color={badgeColor} className="shrink-0 text-[10px]">
+                      {c.source_label}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-ui-fg-subtle truncate">
+                    {c.email && <span className="truncate">📧 {c.email}</span>}
+                    {c.phone && <span className="truncate">📞 {c.phone}</span>}
+                    {c.address && <span className="truncate max-w-[200px]">📍 {c.address}</span>}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface RepairTicketComboboxProps {
+  tickets: any[];
+  selectedTicketId: string;
+  onSelectTicket: (ticketId: string) => void;
+  onClear: () => void;
+  loading?: boolean;
+}
+
+const RepairTicketCombobox: React.FC<RepairTicketComboboxProps> = ({
+  tickets,
+  selectedTicketId,
+  onSelectTicket,
+  onClear,
+  loading = false,
+}) => {
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const getTicketLabel = (t: any): string => {
+    const cleanNum = String(t.ticket_number || t.id).replace(/^(RT-|JOB-|CERT-)+/i, "");
+    const displayRef = `RT-${cleanNum}`;
+    const custName =
+      t.customer?.company_name ||
+      t.company_name ||
+      t.customer_name ||
+      (t.customer?.first_name ? `${t.customer.first_name} ${t.customer.last_name || ""}`.trim() : "") ||
+      "Customer";
+    const brandModel = [t.device?.brand, t.device?.model_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || t.custom_fields?.["Device Model"] || "Device";
+    return `${displayRef} — ${custName} (${brandModel})`;
+  };
+
+  useEffect(() => {
+    if (!selectedTicketId) {
+      setQuery("");
+      return;
+    }
+    const t = tickets.find((item) => item.id === selectedTicketId || item.ticket_number === selectedTicketId);
+    if (t) {
+      setQuery(getTicketLabel(t));
+    }
+  }, [selectedTicketId, tickets]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredTickets = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const cleanQ = q.replace(/^(?:(?:rt|job|cert)[-–—\s#]*|[#])/i, "").trim().toLowerCase();
+    const digitsOnlyQ = cleanQ.replace(/\D/g, "");
+
+    const selectedTicket = tickets.find((item) => item.id === selectedTicketId || item.ticket_number === selectedTicketId);
+    const selectedLabel = selectedTicket ? getTicketLabel(selectedTicket).toLowerCase() : "";
+    const isUnmodifiedSelection = Boolean(selectedTicket && q === selectedLabel);
+
+    if (!q || isUnmodifiedSelection) {
+      return tickets.slice(0, 30);
+    }
+
+    return tickets.filter((t) => {
+      const cleanNum = String(t.ticket_number || t.id).replace(/^(RT-|JOB-|CERT-)+/i, "").toLowerCase();
+      const rawNum = String(t.ticket_number || "").toLowerCase();
+      const rawId = String(t.id || "").toLowerCase();
+      const displayRef = `rt-${cleanNum}`;
+      const custName = (
+        t.customer?.name ||
+        t.customer_name ||
+        (t.customer?.first_name ? `${t.customer.first_name} ${t.customer.last_name || ""}`.trim() : "")
+      ).toLowerCase();
+      const compName = (t.customer?.company_name || t.company_name || "").toLowerCase();
+      const email = (t.customer?.email || t.customer_email || "").toLowerCase();
+      const phone = (t.customer?.phone || t.customer_phone || "").replace(/\s+/g, "").toLowerCase();
+      const digitsOnlyPhone = phone.replace(/\D/g, "");
+      const brandModel = (
+        [t.device?.brand, t.device?.model_name].filter(Boolean).join(" ") ||
+        t.custom_fields?.["Device Model"] ||
+        ""
+      ).toLowerCase();
+
+      const phoneMatches =
+        phone.includes(q.replace(/\s+/g, "")) ||
+        (digitsOnlyQ.length >= 4 && (digitsOnlyPhone.includes(digitsOnlyQ) || digitsOnlyQ.includes(digitsOnlyPhone)));
+
+      return (
+        cleanNum.includes(q) ||
+        (cleanQ && cleanNum.includes(cleanQ)) ||
+        displayRef.includes(q) ||
+        rawNum.includes(q) ||
+        (cleanQ && rawNum.includes(cleanQ)) ||
+        rawId.includes(q) ||
+        custName.includes(q) ||
+        compName.includes(q) ||
+        email.includes(q) ||
+        phoneMatches ||
+        brandModel.includes(q)
+      );
+    }).slice(0, 30);
+  }, [tickets, query, selectedTicketId]);
+
+  const handleSelect = (ticket: any) => {
+    onSelectTicket(ticket.id);
+    setQuery(getTicketLabel(ticket));
+    setIsOpen(false);
+  };
+
+  const handleClear = () => {
+    onClear();
+    setQuery("");
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-ui-fg-muted">
+          <MagnifyingGlass className="w-4 h-4" />
+        </div>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={(e) => {
+            setIsOpen(true);
+            e.target.select();
+          }}
+          placeholder="Search by customer name, company, or ticket number (e.g. 5390 or RT-5390)..."
+          className="w-full pl-8.5 pr-8 py-1.5 text-xs bg-ui-bg-base border border-ui-border-base rounded-md text-ui-fg-base placeholder:text-ui-fg-muted focus:outline-none focus:ring-1 focus:ring-ui-border-interactive focus:border-ui-border-interactive"
+        />
+        {(query || selectedTicketId) && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-ui-fg-muted hover:text-ui-fg-base"
+            title="Clear ticket link"
+          >
+            <XMark className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-ui-bg-base border border-ui-border-base rounded-md shadow-lg max-h-64 overflow-y-auto divide-y divide-ui-border-base">
+          {loading ? (
+            <div className="p-3 text-xs text-ui-fg-muted text-center flex items-center justify-center gap-2">
+              <ArrowPath className="w-3 h-3 animate-spin" />
+              Loading repair tickets...
+            </div>
+          ) : filteredTickets.length === 0 ? (
+            <div className="p-3 text-xs text-ui-fg-muted text-center">
+              No repair tickets found matching "{query}"
+            </div>
+          ) : (
+            filteredTickets.map((t) => {
+              const cleanNum = String(t.ticket_number || t.id).replace(/^(RT-|JOB-|CERT-)+/i, "");
+              const displayRef = `RT-${cleanNum}`;
+              const custName =
+                t.customer?.company_name ||
+                t.company_name ||
+                t.customer_name ||
+                (t.customer?.first_name ? `${t.customer.first_name} ${t.customer.last_name || ""}`.trim() : "") ||
+                "Customer";
+              const compName = t.customer?.company_name || t.company_name;
+              const brandModel = [t.device?.brand, t.device?.model_name]
+                .filter(Boolean)
+                .join(" ")
+                .trim() || t.custom_fields?.["Device Model"] || "Device";
+              const isSelected = selectedTicketId === t.id;
+
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => handleSelect(t)}
+                  className={`p-2.5 hover:bg-ui-bg-subtle-hover cursor-pointer transition-colors ${
+                    isSelected ? "bg-ui-bg-interactive-subtle" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2 truncate">
+                      <Badge size="small" color={isSelected ? "blue" : "grey"} className="shrink-0 font-mono">
+                        {displayRef}
+                      </Badge>
+                      <span className="font-semibold text-xs text-ui-fg-base truncate">
+                        {custName}
+                      </span>
+                      {compName && compName !== custName && (
+                        <span className="text-[11px] text-ui-fg-muted truncate">
+                          ({compName})
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-ui-fg-subtle truncate shrink-0 font-medium">
+                      {brandModel}
+                    </span>
+                  </div>
+                  {(t.customer?.email || t.customer_email || t.customer?.phone || t.customer_phone) && (
+                    <div className="flex items-center gap-3 text-[11px] text-ui-fg-muted truncate">
+                      {(t.customer?.email || t.customer_email) && (
+                        <span className="truncate">📧 {t.customer?.email || t.customer_email}</span>
+                      )}
+                      {(t.customer?.phone || t.customer_phone) && (
+                        <span className="truncate">📞 {t.customer?.phone || t.customer_phone}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 export const DocumentsPage = () => {
   const [activeTab, setActiveTab] = useState<"hub" | "templates" | "automations" | "settings">("hub");
@@ -377,7 +824,7 @@ export const DocumentsPage = () => {
     items: [{ title: "", description: "", quantity: 1, unit_price: 0 }],
     currency_code: "kes",
     notes: "",
-    force_source: "auto",
+    force_source: "zoho",
     auto_send: false,
   });
 
@@ -389,6 +836,7 @@ export const DocumentsPage = () => {
     customer_name: "Jane Doe",
     customer_email: "jane.doe@example.com",
     customer_phone: "+254 712 345 678",
+    customer_address: "",
     body_text: CUSTOM_DOC_PRESETS[0].body_text,
     items: CUSTOM_DOC_PRESETS[0].items.map((it) => ({ ...it })),
     custom_fields: { ...(CUSTOM_DOC_PRESETS[0].custom_fields || {}) } as Record<string, string>,
@@ -403,6 +851,9 @@ export const DocumentsPage = () => {
   const [selectedTicketId, setSelectedTicketId] = useState<string>("");
   const [newCustomFieldKey, setNewCustomFieldKey] = useState<string>("");
   const [newCustomFieldValue, setNewCustomFieldValue] = useState<string>("");
+
+  const [customersList, setCustomersList] = useState<any[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
 
   const loadRepairTickets = async () => {
     setLoadingRepairs(true);
@@ -422,16 +873,91 @@ export const DocumentsPage = () => {
     }
   };
 
-  useEffect(() => {
-    if (customDocModalOpen) {
-      loadRepairTickets();
+  const loadCustomers = async () => {
+    setLoadingCustomers(true);
+    try {
+      const res = await fetch("/admin/customers?limit=100&fields=*addresses", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.customers && Array.isArray(data.customers)) {
+          setCustomersList(data.customers);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch /admin/customers:", e);
+    } finally {
+      setLoadingCustomers(false);
     }
-  }, [customDocModalOpen]);
+  };
+
+  useEffect(() => {
+    if (customDocModalOpen || manualModalOpen) {
+      loadRepairTickets();
+      loadCustomers();
+    }
+  }, [customDocModalOpen, manualModalOpen]);
 
   const availableTickets = useMemo(() => {
     const map = new Map<string, any>();
     for (const t of repairTickets) {
-      if (t.id) map.set(t.id, t);
+      if (t.id) {
+        const linkedCust = t.customer_id ? customersList.find((c) => c.id === t.customer_id) : null;
+        const custName =
+          t.customer?.name ||
+          (t.customer?.first_name ? `${t.customer.first_name} ${t.customer.last_name || ""}`.trim() : "") ||
+          t.customer_name ||
+          t.metadata?.customer_name ||
+          (linkedCust ? [linkedCust.first_name, linkedCust.last_name].filter(Boolean).join(" ").trim() : "") ||
+          "";
+        const compName =
+          t.customer?.company_name ||
+          t.company_name ||
+          t.metadata?.company_name ||
+          linkedCust?.company_name ||
+          "";
+        const email =
+          t.customer?.email ||
+          t.customer_email ||
+          t.metadata?.customer_email ||
+          linkedCust?.email ||
+          "";
+        const phone =
+          t.customer?.phone ||
+          t.customer_phone ||
+          t.metadata?.customer_phone ||
+          linkedCust?.phone ||
+          "";
+        const linkedAddr = linkedCust?.addresses?.[0];
+        const formattedCustAddr = linkedAddr
+          ? [linkedAddr.address_1, linkedAddr.address_2, linkedAddr.city, linkedAddr.postal_code, linkedAddr.province, linkedAddr.country_code?.toUpperCase()].filter(Boolean).join(", ")
+          : "";
+        const address =
+          t.customer?.address ||
+          t.customer_address ||
+          t.metadata?.address ||
+          t.custom_fields?.["Address"] ||
+          formattedCustAddr ||
+          "";
+
+        map.set(t.id, {
+          ...t,
+          customer_name: custName || t.customer_name,
+          company_name: compName || t.company_name,
+          customer_email: email || t.customer_email,
+          customer_phone: phone || t.customer_phone,
+          customer_address: address || t.customer_address,
+          customer: {
+            name: custName,
+            first_name: linkedCust?.first_name || t.customer?.first_name,
+            last_name: linkedCust?.last_name || t.customer?.last_name,
+            company_name: compName,
+            email,
+            phone,
+            address,
+          },
+        });
+      }
     }
     for (const d of documents) {
       const ticketId = (d as any).repair_ticket_id;
@@ -476,7 +1002,101 @@ export const DocumentsPage = () => {
       }
     }
     return Array.from(map.values());
-  }, [repairTickets, documents]);
+  }, [repairTickets, documents, customersList]);
+
+  const customerAutofillCandidates = useMemo(() => {
+    const map = new Map<string, CustomerCandidate>();
+
+    const addCandidate = (c: CustomerCandidate) => {
+      const key = (c.email?.trim().toLowerCase()) ||
+                  (c.phone?.trim().replace(/\s+/g, "")) ||
+                  (`${c.name.trim().toLowerCase()}::${c.company_name.trim().toLowerCase()}`);
+      
+      if (!key || key === "::" || key === "customer::") return;
+
+      if (!map.has(key)) {
+        map.set(key, c);
+      } else {
+        const existing = map.get(key)!;
+        if (!existing.name || existing.name === "Customer") existing.name = c.name;
+        if (!existing.company_name && c.company_name) existing.company_name = c.company_name;
+        if (!existing.email && c.email) existing.email = c.email;
+        if (!existing.phone && c.phone) existing.phone = c.phone;
+        if (!existing.address && c.address) existing.address = c.address;
+      }
+    };
+
+    // 1. Medusa Customers
+    for (const c of customersList) {
+      const fullName = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
+      const addr = c.addresses?.[0] || c.default_billing_address || c.billing_address;
+      const formattedAddr = addr
+        ? [addr.address_1, addr.address_2, addr.city, addr.postal_code, addr.province, addr.country_code?.toUpperCase()].filter(Boolean).join(", ")
+        : "";
+      const company = c.company_name || addr?.company || c.metadata?.company_name || "";
+      const name = fullName || company || c.email || "Customer";
+      addCandidate({
+        id: c.id || `cust-${Math.random()}`,
+        name,
+        company_name: company,
+        email: c.email || "",
+        phone: c.phone || addr?.phone || "",
+        address: formattedAddr,
+        source: "customer",
+        source_label: "Medusa Customer",
+      });
+    }
+
+    // 2. Repair Tickets
+    for (const t of availableTickets) {
+      const fullName = (t.customer?.first_name ? `${t.customer.first_name} ${t.customer.last_name || ""}`.trim() : "") ||
+        t.customer?.name ||
+        t.customer_name ||
+        "";
+      const company = t.customer?.company_name || t.company_name || t.metadata?.company_name || "";
+      const email = t.customer?.email || t.customer_email || t.metadata?.customer_email || "";
+      const phone = t.customer?.phone || t.customer_phone || t.metadata?.customer_phone || "";
+      const address = t.customer?.address || t.customer_address || t.metadata?.address || t.custom_fields?.["Address"] || "";
+      const cleanNum = String(t.ticket_number || t.id).replace(/^(RT-|JOB-|CERT-)+/i, "");
+      const name = fullName || company || "Customer";
+      if (name || company || email || phone) {
+        addCandidate({
+          id: `ticket-${t.id || cleanNum}`,
+          name,
+          company_name: company,
+          email,
+          phone,
+          address,
+          source: "repair",
+          source_label: `Ticket RT-${cleanNum}`,
+        });
+      }
+    }
+
+    // 3. Documents
+    for (const d of documents) {
+      const name = d.customer_name || "";
+      const company = (d as any).customer?.company_name || (d as any).metadata?.company_name || (d as any).company_name || "";
+      const email = d.customer_email || (d as any).customer?.email || "";
+      const phone = d.customer_phone || (d as any).customer?.phone || "";
+      const address = (d as any).customer?.address || (d as any).customer_address || (d as any).metadata?.customer_address || (d as any).metadata?.customer?.address || "";
+      const docRef = d.display_id || d.id?.slice(0, 8);
+      if (name || company || email || phone) {
+        addCandidate({
+          id: `doc-${d.id}`,
+          name: name || company || "Customer",
+          company_name: company,
+          email,
+          phone,
+          address,
+          source: "document",
+          source_label: `Doc ${docRef}`,
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [customersList, availableTickets, documents]);
 
   const handleSelectRepairTicket = (ticketId: string) => {
     setSelectedTicketId(ticketId);
@@ -570,12 +1190,15 @@ export const DocumentsPage = () => {
       }
     }
 
+    const customerAddress = ticket.customer?.address || ticket.customer_address || ticket.metadata?.address || ticket.custom_fields?.["Address"] || "";
+
     setCustomDocForm((prev) => ({
       ...prev,
       customer_name: customerName,
       customer_email: customerEmail,
       customer_phone: customerPhone,
       company_name: companyName,
+      customer_address: customerAddress || prev.customer_address,
       custom_fields: {
         ...prev.custom_fields,
         "Device Model": brandModel,
@@ -751,7 +1374,7 @@ export const DocumentsPage = () => {
           items: validItems,
           currency_code: manualForm.currency_code,
           notes: manualForm.notes,
-          force_source: manualForm.force_source === "auto" ? undefined : manualForm.force_source,
+          force_source: "zoho",
           auto_send: manualForm.auto_send,
         }),
       });
@@ -770,7 +1393,7 @@ export const DocumentsPage = () => {
           items: [{ title: "", description: "", quantity: 1, unit_price: 0 }],
           currency_code: "kes",
           notes: "",
-          force_source: "auto",
+          force_source: "zoho",
           auto_send: false,
         });
         loadDocuments();
@@ -809,6 +1432,7 @@ export const DocumentsPage = () => {
             company_name: customDocForm.company_name || undefined,
             email: customDocForm.customer_email,
             phone: customDocForm.customer_phone,
+            address: customDocForm.customer_address || undefined,
           },
           body_text: customDocForm.body_text,
           notes: customDocForm.notes,
@@ -828,6 +1452,7 @@ export const DocumentsPage = () => {
             : "Custom document generated and saved to Documents Hub!"
         );
         setCustomDocModalOpen(false);
+        setSelectedTicketId("");
         loadDocuments();
       } else {
         alert(`Failed to generate custom document: ${data.message || res.statusText}`);
@@ -2442,49 +3067,6 @@ export const DocumentsPage = () => {
               </div>
             </div>
 
-            {/* 10. Commercial Quotation (Proforma) */}
-            <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">💼</span>
-                    <Label className="font-semibold text-sm">Commercial Proforma Quote</Label>
-                  </div>
-                  <Badge color="orange" size="small">Cost Estimate</Badge>
-                </div>
-                <Text className="text-xs text-ui-fg-subtle mb-4">
-                  Itemized corporate repair quotation with workshop turnaround estimate, OEM part warranties, and 14-day validity period.
-                </Text>
-                <div className="flex flex-col gap-2">
-                  <Label className="text-xs font-medium">Template Style</Label>
-                  <Select
-                    value={settings.custom_doc_template || "modern"}
-                    onValueChange={(v) => updateSettingField("custom_doc_template", v)}
-                  >
-                    <Select.Trigger size="small">
-                      <Select.Value />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="modern">Modern Minimalist</Select.Item>
-                      <Select.Item value="classic">Classic Corporate</Select.Item>
-                      <Select.Item value="minimal">Clean Tech Monospace</Select.Item>
-                    </Select.Content>
-                  </Select>
-                </div>
-              </div>
-              <div className="mt-5 pt-3 border-t border-ui-border-base flex items-center justify-between">
-                <Text className="text-[11px] text-ui-fg-muted font-mono">Preset: proforma</Text>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => handlePreviewTemplate(settings.custom_doc_template || "modern", "custom", "proforma")}
-                  isLoading={previewLoading === `${settings.custom_doc_template || "modern"}-custom-proforma`}
-                >
-                  <ArrowDownTray className="w-3.5 h-3.5 mr-1" /> Preview Proforma
-                </Button>
-              </div>
-            </div>
-
             {/* 11. Device Trade-In Agreement */}
             <div className="p-5 border border-ui-border-base rounded-lg bg-ui-bg-base flex flex-col justify-between shadow-sm hover:border-ui-border-interactive transition-colors">
               <div>
@@ -3324,6 +3906,25 @@ export const DocumentsPage = () => {
                     size="small"
                   />
                 </div>
+
+                {/* Autofill Customer from Medusa / Tickets / Documents */}
+                <div className="col-span-2">
+                  <CustomerAutofillCombobox
+                    candidates={customerAutofillCandidates}
+                    loading={loadingCustomers || loadingRepairs}
+                    onSelectCustomer={(candidate) => {
+                      setManualForm((prev) => ({
+                        ...prev,
+                        customer_name: candidate.name,
+                        company_name: candidate.company_name,
+                        customer_email: candidate.email,
+                        customer_phone: candidate.phone,
+                        customer_address: candidate.address || prev.customer_address,
+                      }));
+                    }}
+                  />
+                </div>
+
                 <div>
                   <Label className="text-xs">Company Name (Optional)</Label>
                   <Input
@@ -3334,7 +3935,7 @@ export const DocumentsPage = () => {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Customer Name</Label>
+                  <Label className="text-xs">Customer Name *</Label>
                   <Input
                     value={manualForm.customer_name}
                     onChange={(e) => setManualForm({ ...manualForm, customer_name: e.target.value })}
@@ -3360,19 +3961,25 @@ export const DocumentsPage = () => {
                     size="small"
                   />
                 </div>
-                <div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Customer Address (Optional)</Label>
+                  <Input
+                    value={manualForm.customer_address}
+                    onChange={(e) => setManualForm({ ...manualForm, customer_address: e.target.value })}
+                    placeholder="Street Address, City, Postal Code"
+                    size="small"
+                  />
+                </div>
+                <div className="col-span-2">
                   <Label className="text-xs">Generation Source</Label>
-                  <Select
-                    value={manualForm.force_source}
-                    onValueChange={(v) => setManualForm({ ...manualForm, force_source: v })}
-                  >
-                    <Select.Trigger size="small"><Select.Value /></Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="auto">Auto (Zoho if enabled, else PDFKit)</Select.Item>
-                      <Select.Item value="zoho">Force Zoho Books</Select.Item>
-                      <Select.Item value="pdfkit">Force Local PDFKit</Select.Item>
-                    </Select.Content>
-                  </Select>
+                  <div className="flex items-center gap-2 mt-1 px-3 py-2 rounded-md border border-ui-border-base bg-ui-bg-subtle text-xs text-ui-fg-base">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-semibold text-ui-fg-base">Zoho Books (Cloud Invoicing)</span>
+                    <Badge size="small" color="blue" className="ml-auto font-mono">Enforced</Badge>
+                  </div>
+                  <Text className="text-[11px] text-ui-fg-subtle mt-1">
+                    All manual invoices and quotes are generated and synced directly via Zoho Books. Local PDFKit fallback is disabled.
+                  </Text>
                 </div>
               </div>
 
@@ -3625,35 +4232,13 @@ export const DocumentsPage = () => {
                   Automatically autofills customer details, device specifications (model, serial/IMEI, accessories), technician notes, and services from active repairs.
                 </Text>
 
-                <Select
-                  value={selectedTicketId || undefined}
-                  onValueChange={handleSelectRepairTicket}
-                >
-                  <Select.Trigger size="small" className="w-full bg-ui-bg-base">
-                    <Select.Value placeholder="-- Select a Repair Ticket to autofill fields --" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    {availableTickets.map((t) => {
-                      const brandModel = [t.device?.brand, t.device?.model_name]
-                        .filter(Boolean)
-                        .join(" ")
-                        .trim() || t.custom_fields?.["Device Model"] || "Device";
-                      const cleanNum = String(t.ticket_number || t.id).replace(/^(RT-|JOB-)+/i, "");
-                      const displayRef = `RT-${cleanNum}`;
-                      const custName =
-                        t.customer?.company_name ||
-                        t.company_name ||
-                        t.customer_name ||
-                        (t.customer?.first_name ? `${t.customer.first_name} ${t.customer.last_name || ""}`.trim() : "") ||
-                        "Customer";
-                      return (
-                        <Select.Item key={t.id} value={t.id}>
-                          {displayRef} — {custName} ({brandModel})
-                        </Select.Item>
-                      );
-                    })}
-                  </Select.Content>
-                </Select>
+                <RepairTicketCombobox
+                  tickets={availableTickets}
+                  selectedTicketId={selectedTicketId}
+                  onSelectTicket={handleSelectRepairTicket}
+                  onClear={handleClearRepairLink}
+                  loading={loadingRepairs}
+                />
 
                 {selectedTicketId && (
                   <div className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-ui-bg-interactive-subtle border border-ui-border-interactive text-[11px] text-ui-fg-interactive font-medium">
@@ -3711,6 +4296,25 @@ export const DocumentsPage = () => {
                     size="small"
                   />
                 </div>
+
+                {/* Autofill Customer from Medusa / Tickets / Documents */}
+                <div className="col-span-2">
+                  <CustomerAutofillCombobox
+                    candidates={customerAutofillCandidates}
+                    loading={loadingCustomers || loadingRepairs}
+                    onSelectCustomer={(candidate) => {
+                      setCustomDocForm((prev) => ({
+                        ...prev,
+                        customer_name: candidate.name,
+                        company_name: candidate.company_name,
+                        customer_email: candidate.email,
+                        customer_phone: candidate.phone,
+                        customer_address: candidate.address || prev.customer_address,
+                      }));
+                    }}
+                  />
+                </div>
+
                 <div>
                   <Label className="text-xs">Company Name (Optional)</Label>
                   <Input
@@ -3744,6 +4348,15 @@ export const DocumentsPage = () => {
                     value={customDocForm.customer_phone}
                     onChange={(e) => setCustomDocForm({ ...customDocForm, customer_phone: e.target.value })}
                     placeholder="+44 7911 123456"
+                    size="small"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Customer Address (Optional)</Label>
+                  <Input
+                    value={customDocForm.customer_address}
+                    onChange={(e) => setCustomDocForm({ ...customDocForm, customer_address: e.target.value })}
+                    placeholder="Street Address, City, Postal Code"
                     size="small"
                   />
                 </div>

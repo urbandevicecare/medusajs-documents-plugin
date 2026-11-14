@@ -21,3 +21,4 @@ import "./release-1.1.44.test";
 import "./release-1.1.47.test";
 import "./release-1.1.51.test";
 import "./release-1.1.59.test";
+import "./release-1.1.62.test";

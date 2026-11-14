@@ -40,7 +40,7 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
         title: title || (type === "invoice" ? "Tax Invoice" : "Quotation"),
         type: type as any,
         customer: {
-          name: companyName || customer?.name || "Customer",
+          name: customer?.name || companyName || "Customer",
           company_name: companyName || undefined,
           email: customer?.email,
           phone: sanitizePhoneNumber(customer?.phone) || undefined,
@@ -50,7 +50,7 @@ export async function POST(req: MedusaRequest<any>, res: MedusaResponse) {
         total,
         currency_code: currency_code || "kes",
         notes,
-        force_source,
+        force_source: "zoho",
         auto_send: auto_send || send_email_now,
         notification_channels,
         email_subject,

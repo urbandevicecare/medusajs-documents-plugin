@@ -42,6 +42,7 @@ export interface GenerateDocumentInput {
   shipping_total?: number;
   discount_total?: number;
   total?: number;
+  amount_paid?: number;
   currency_code?: string;
   order_id?: string;
   repair_ticket_id?: string;
@@ -80,6 +81,7 @@ export interface UpdateDocumentInput {
   shipping_total?: number;
   discount_total?: number;
   total?: number;
+  amount_paid?: number;
   currency_code?: string;
   payment_status?: string;
   payment_link?: string;
@@ -773,6 +775,8 @@ export class DocumentModuleService extends MedusaService({
               first_name: input.customer.name,
               email: input.customer.email,
               phone: sanitizePhoneNumber(input.customer.phone),
+              company_name: input.customer.company_name,
+              address: input.customer.address,
             });
           }
           return contactId || "";
@@ -872,31 +876,34 @@ export class DocumentModuleService extends MedusaService({
             await zoho.markInvoiceAsSent(targetInvoiceId);
           }
 
-          const isRepairPaid =
-            input.payment_status === "paid" ||
-            repairTicket?.payment_status === "captured" ||
-            repairTicket?.payment_status === "paid" ||
-            ["completed", "repaired", "collected"].includes(repairTicket?.status) ||
-            ((repairTicket?.metadata as any)?.tags &&
-              (Array.isArray((repairTicket?.metadata as any)?.tags)
-                ? (repairTicket?.metadata as any)?.tags.includes("Paid")
-                : String((repairTicket?.metadata as any)?.tags).includes("Paid")));
+          const actualAmountPaid = Number(
+            input.amount_paid ??
+            repairTicket?.amount_paid ??
+            (repairTicket?.payment_status === "captured" || repairTicket?.payment_status === "paid" ? (input.total || 0) : 0)
+          );
 
-          if (isRepairPaid && targetInvoiceId) {
+          const isRepairPaid =
+            actualAmountPaid > 0 &&
+            (input.payment_status === "paid" ||
+              repairTicket?.payment_status === "captured" ||
+              repairTicket?.payment_status === "paid" ||
+              ((repairTicket?.metadata as any)?.tags &&
+                (Array.isArray((repairTicket?.metadata as any)?.tags)
+                  ? (repairTicket?.metadata as any)?.tags.includes("Paid")
+                  : String((repairTicket?.metadata as any)?.tags).includes("Paid"))));
+
+          if (isRepairPaid && targetInvoiceId && actualAmountPaid > 0) {
             try {
               const cid = await ensureContactId();
               const payRef = input.payment_reference || (repairTicket?.metadata as any)?.paystack_reference || (repairTicket?.metadata as any)?.payment_reference || displayId;
-              const payAmount = Number(input.total || 0);
-              if (payAmount > 0) {
-                await zoho.registerPayment(
-                  targetInvoiceId,
-                  payAmount,
-                  cid,
-                  "Paystack",
-                  payRef,
-                  `Repair Ticket #${repairTicket?.ticket_number || displayId} Payment`
-                );
-              }
+              await zoho.registerPayment(
+                targetInvoiceId,
+                actualAmountPaid,
+                cid,
+                "Paystack",
+                payRef,
+                `Repair Ticket #${repairTicket?.ticket_number || displayId} Payment`
+              );
             } catch (payErr: any) {
               container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[documents-service] Failed to register payment on invoice ${targetInvoiceId}: ${payErr?.message || payErr}`);
             }
@@ -979,6 +986,28 @@ export class DocumentModuleService extends MedusaService({
             isInvoice: false,
           });
         } else if (input.type === "receipt") {
+          // Determine the actual amount paid for this receipt
+          const paymentAmount = Number(
+            input.amount_paid ??
+            (isRepairTicket ? (repairTicket?.amount_paid && Number(repairTicket.amount_paid) > 0 ? repairTicket.amount_paid : input.total) : input.total) ??
+            0
+          );
+
+          const isTicketUnpaid = isRepairTicket &&
+            repairTicket?.payment_status !== "captured" &&
+            repairTicket?.payment_status !== "paid" &&
+            input.payment_status !== "paid" &&
+            Number(repairTicket?.amount_paid || 0) <= 0;
+
+          if (paymentAmount <= 0 || isTicketUnpaid) {
+            throw new Error(
+              `Cannot generate payment receipt: No payment has been received (amount: ${paymentAmount}). Repair tickets and orders must have a recorded payment before a receipt can be issued.`
+            );
+          }
+
+          input.total = paymentAmount;
+          input.payment_status = "paid";
+
           // Implement Zoho Books payment registration in service.ts for input.type === "receipt" using zoho.registerPayment
           let targetInvoiceId: string | null = null;
           let correspondingInvoiceDoc: any = null;
@@ -1057,7 +1086,6 @@ export class DocumentModuleService extends MedusaService({
           }
 
           const cid = await ensureContactId();
-          const paymentAmount = Number(input.total || 0);
           const paystackReference =
             input.payment_reference ||
             (repairTicket?.metadata as any)?.paystack_reference ||

@@ -146,6 +146,7 @@ export class ZohoBooksService {
     email?: string;
     phone?: string;
     company_name?: string;
+    address?: string;
   }): Promise<string> {
     const email = customer.email;
     const name = customer.company_name
@@ -179,7 +180,7 @@ export class ZohoBooksService {
     }
 
     // 3. Create new contact
-    const payload = {
+    const payload: any = {
       contact_name: name,
       company_name: customer.company_name || name,
       contact_type: "customer",
@@ -192,6 +193,12 @@ export class ZohoBooksService {
         },
       ],
     };
+
+    if (customer.address) {
+      payload.billing_address = {
+        address: customer.address,
+      };
+    }
 
     const createRes = await this.request("POST", "/contacts", payload);
     return createRes.contact.contact_id;
