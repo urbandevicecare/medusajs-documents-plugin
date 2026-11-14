@@ -48,6 +48,7 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
     if (!record) {
       const pg: any = getDatabaseConnection(req.scope);
       if (pg) {
+        const rawZohoId = cleanId.replace(/^zoho_/i, "");
         record = await pg("document_record")
           .whereNull("deleted_at")
           .where((builder: any) => {
@@ -55,7 +56,9 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
               .where({ id: cleanId })
               .orWhere({ display_id: cleanId })
               .orWhere({ repair_ticket_id: cleanId })
-              .orWhere({ order_id: cleanId });
+              .orWhere({ order_id: cleanId })
+              .orWhere({ zoho_document_id: cleanId })
+              .orWhere({ zoho_document_id: rawZohoId });
           })
           .first();
       }
@@ -79,6 +82,46 @@ export async function GET(req: MedusaRequest<{ id: string }>, res: MedusaRespons
           }
         }
       } catch (e) {}
+    }
+
+    if (!record && (cleanId.startsWith("zoho_") || /^\d{10,}$/.test(cleanId))) {
+      try {
+        const settings = await documentService.getSettings();
+        if (settings.zoho_books_enabled && settings.zoho_client_id) {
+          const { ZohoBooksService } = await import("../../../../../services/zoho-books.js");
+          const zoho = new ZohoBooksService({
+            client_id: settings.zoho_client_id,
+            client_secret: settings.zoho_client_secret,
+            refresh_token: settings.zoho_refresh_token,
+            organization_id: settings.zoho_organization_id,
+            domain: settings.zoho_domain || "com",
+          });
+          const rawZohoId = cleanId.replace(/^zoho_/i, "");
+          let pdfBuf: ArrayBuffer | null = null;
+          try {
+            pdfBuf = await zoho.getDocumentPdf(rawZohoId, "invoice");
+          } catch (_) {
+            try {
+              pdfBuf = await zoho.getDocumentPdf(rawZohoId, "estimate");
+            } catch (_) {
+              pdfBuf = await zoho.getPaymentReceiptPdf(rawZohoId);
+            }
+          }
+          if (pdfBuf) {
+            const buf = Buffer.from(pdfBuf);
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader("Content-Disposition", `inline; filename="zoho_${rawZohoId}.pdf"`);
+            res.setHeader("Accept-Ranges", "none");
+            res.setHeader("Content-Length", String(buf.length));
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            if (req.method === "HEAD") {
+              return res.status(200).end();
+            }
+            return res.status(200).send(buf);
+          }
+        }
+      } catch (_) {}
     }
 
     if (!record) {

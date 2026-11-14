@@ -650,10 +650,18 @@ export const DocumentsPage = () => {
       .catch((err) => console.error("Error loading settings:", err));
   };
 
-  const loadZohoLiveDocs = (customType?: string) => {
+  const loadZohoLiveDocs = (customType?: string, customSearch?: string) => {
     setLoadingZoho(true);
-    const targetType = customType || (typeFilter === "estimate" ? "estimates" : typeFilter === "payment" ? "payments" : "invoices");
-    fetch(`/admin/documents/zoho/list?type=${targetType}`, { credentials: "include" })
+    const targetType =
+      customType ||
+      (typeFilter === "estimate"
+        ? "estimates"
+        : typeFilter === "receipt" || typeFilter === "payment"
+        ? "payments"
+        : "invoices");
+    const q = customSearch !== undefined ? customSearch : searchTerm;
+    const searchParam = q ? `&search=${encodeURIComponent(q)}` : "";
+    fetch(`/admin/documents/zoho/list?type=${targetType}${searchParam}`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         if (data.items) {
@@ -1076,8 +1084,54 @@ export const DocumentsPage = () => {
     }
   };
 
-  // Filter documents (flat mode)
-  const filteredDocs = documents.filter((doc) => {
+  // Unified document list merging local documents and live Zoho Books documents into one single source
+  const unifiedDocuments = useMemo(() => {
+    const list = [...documents];
+    const existingZohoIds = new Set(documents.map((d: any) => d.zoho_document_id).filter(Boolean));
+    const existingDisplayIds = new Set(
+      documents
+        .map((d: any) => d.display_id?.toLowerCase())
+        .filter(Boolean)
+        .concat(
+          documents.map((d: any) =>
+            d.display_id ? d.display_id.toLowerCase().replace(/^(?:(?:job|rt|rec|rcpt|est|doc|inv|pkg|pack|st|store|[a-z]{2,10})-)+/i, "") : ""
+          ).filter(Boolean)
+        )
+    );
+
+    for (const zi of zohoLiveDocs) {
+      const zId = zi.invoice_id || zi.estimate_id || zi.payment_id;
+      const dispId = zi.invoice_number || zi.estimate_number || zi.payment_number || zi.reference_number;
+      const cleanDispId = dispId
+        ? String(dispId).toLowerCase().replace(/^(?:(?:job|rt|rec|rcpt|est|doc|inv|pkg|pack|st|store|[a-z]{2,10})-)+/i, "")
+        : "";
+
+      if (zId && existingZohoIds.has(zId)) continue;
+      if (dispId && existingDisplayIds.has(String(dispId).toLowerCase())) continue;
+      if (cleanDispId && existingDisplayIds.has(cleanDispId)) continue;
+
+      const docType = zi.invoice_id ? "invoice" : zi.estimate_id ? "estimate" : "receipt";
+      list.push({
+        id: `zoho_${zId}`,
+        display_id: dispId || zId,
+        type: docType,
+        title: zi.invoice_id ? "Zoho Invoice" : zi.estimate_id ? "Zoho Estimate / Quote" : "Zoho Payment Receipt",
+        customer_name: zi.customer_name || "—",
+        customer_email: zi.email || "",
+        total: zi.total != null ? Number(zi.total) : (zi.amount != null ? Number(zi.amount) : 0),
+        currency_code: (zi.currency_code || "kes").toLowerCase(),
+        status: zi.status || "sent",
+        source: "zoho",
+        zoho_document_id: zId,
+        created_at: zi.date || new Date().toISOString(),
+        metadata: { is_live_zoho: true },
+      } as any);
+    }
+    return list;
+  }, [documents, zohoLiveDocs]);
+
+  // Filter documents (flat mode) using unifiedDocuments
+  const filteredDocs = unifiedDocuments.filter((doc) => {
     if (typeFilter !== "all" && doc.type !== typeFilter) return false;
     if (sourceFilter !== "all" && doc.source !== sourceFilter) return false;
     if (searchTerm) {
@@ -1092,9 +1146,9 @@ export const DocumentsPage = () => {
     return true;
   });
 
-  // Group documents by job / order (packed mode)
+  // Group documents by job / order (packed mode) using unifiedDocuments
   const documentGroups = useMemo(() => {
-    const allGroups = groupDocuments(documents);
+    const allGroups = groupDocuments(unifiedDocuments);
 
     return allGroups.filter((group) => {
       // Source filter
@@ -1233,7 +1287,10 @@ export const DocumentsPage = () => {
               <Input
                 placeholder="Search reference, customer, or title..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  loadZohoLiveDocs(undefined, e.target.value);
+                }}
                 size="small"
               />
             </div>
@@ -1244,6 +1301,8 @@ export const DocumentsPage = () => {
                   setTypeFilter(v);
                   if (v === "estimate") {
                     loadZohoLiveDocs("estimates");
+                  } else if (v === "receipt") {
+                    loadZohoLiveDocs("payments");
                   } else if (v === "invoice" || v === "all") {
                     loadZohoLiveDocs("invoices");
                   }
@@ -1845,68 +1904,6 @@ export const DocumentsPage = () => {
               </Table.Body>
             </Table>
           )}
-
-
-          {/* Live Zoho Books Invoices View (Always Visible) */}
-          <div className="mt-8 border border-ui-border-base rounded-lg p-4 bg-ui-bg-subtle">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Heading level="h2" className="text-sm font-semibold">
-                  Live Zoho Books Invoices {zohoLiveDocs.length > 0 && `(${zohoLiveDocs.length})`}
-                </Heading>
-                <Badge color="purple" size="small">Live Cloud Sync</Badge>
-              </div>
-              <Tooltip content="Refresh Live Zoho Books Invoices">
-                <IconButton
-                  variant="transparent"
-                  size="small"
-                  onClick={() => loadZohoLiveDocs()}
-                  isLoading={loadingZoho}
-                  title="Refresh Live Zoho Books Invoices"
-                >
-                  <ArrowPath className={`w-4 h-4 ${loadingZoho ? "animate-spin" : ""}`} />
-                </IconButton>
-              </Tooltip>
-            </div>
-
-            {loadingZoho && zohoLiveDocs.length === 0 ? (
-              <div className="py-8 text-center text-ui-fg-muted text-sm">
-                Fetching live documents from Zoho Books...
-              </div>
-            ) : zohoLiveDocs.length === 0 ? (
-              <div className="py-8 text-center text-ui-fg-muted text-sm border border-dashed border-ui-border-base rounded-lg">
-                <Text className="text-sm font-medium">No live Zoho documents found</Text>
-                <Text className="text-xs text-ui-fg-subtle mt-1">
-                  Ensure Zoho Books credentials are configured in Settings and click Refresh Zoho.
-                </Text>
-              </div>
-            ) : (
-              <Table>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.HeaderCell>Invoice #</Table.HeaderCell>
-                    <Table.HeaderCell>Customer Name</Table.HeaderCell>
-                    <Table.HeaderCell>Total</Table.HeaderCell>
-                    <Table.HeaderCell>Status</Table.HeaderCell>
-                    <Table.HeaderCell>Date</Table.HeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {zohoLiveDocs.map((zi: any) => (
-                    <Table.Row key={zi.invoice_id || zi.estimate_id || zi.payment_id || `${zi.invoice_number}-${zi.date}`}>
-                      <Table.Cell className="font-medium">{zi.invoice_number || zi.estimate_number || zi.payment_number || "—"}</Table.Cell>
-                      <Table.Cell>{zi.customer_name || "—"}</Table.Cell>
-                      <Table.Cell>{zi.total != null ? `${zi.currency_symbol || "KES "}${zi.total}` : (zi.amount != null ? `${zi.currency_symbol || "KES "}${zi.amount}` : "—")}</Table.Cell>
-                      <Table.Cell>
-                        <Badge color={zi.status === "paid" ? "green" : (zi.status === "overdue" ? "red" : "blue")} size="small">{zi.status || "draft"}</Badge>
-                      </Table.Cell>
-                      <Table.Cell>{zi.date || "—"}</Table.Cell>
-                    </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table>
-            )}
-          </div>
         </div>
       )}
 

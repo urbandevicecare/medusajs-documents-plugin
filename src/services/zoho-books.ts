@@ -207,6 +207,7 @@ export class ZohoBooksService {
     payment_terms?: number;
     is_inclusive_tax?: boolean;
     due_date?: string;
+    date?: string;
     custom_fields?: Array<{ label: string; value: string }>;
   }): Promise<{ invoice_id: string; invoice_number: string }> {
     const payload: any = {
@@ -220,6 +221,9 @@ export class ZohoBooksService {
       terms: invoiceData.terms || "",
       is_inclusive_tax: invoiceData.is_inclusive_tax ?? false,
     };
+    if (invoiceData.date) {
+      payload.date = invoiceData.date;
+    }
 
     if (invoiceData.custom_fields && invoiceData.custom_fields.length > 0) {
       payload.custom_fields = invoiceData.custom_fields;
@@ -393,6 +397,7 @@ export class ZohoBooksService {
     notes?: string;
     terms?: string;
     is_inclusive_tax?: boolean;
+    date?: string;
     custom_fields?: Array<{ label: string; value: string }>;
   }): Promise<{ estimate_id: string; estimate_number: string }> {
     const payload: any = {
@@ -404,6 +409,9 @@ export class ZohoBooksService {
       terms: estimateData.terms || "",
       is_inclusive_tax: estimateData.is_inclusive_tax ?? false,
     };
+    if (estimateData.date) {
+      payload.date = estimateData.date;
+    }
 
     if (estimateData.custom_fields && estimateData.custom_fields.length > 0) {
       payload.custom_fields = estimateData.custom_fields;
@@ -629,6 +637,34 @@ export class ZohoBooksService {
 
     const res = await this.request("GET", `/customerpayments?${query.toString()}`);
     return res.customerpayments || [];
+  }
+
+  async markInvoiceAsSent(invoiceId: string): Promise<void> {
+    try {
+      await this.request("POST", `/invoices/${invoiceId}/status/sent`);
+    } catch (err: any) {
+      this.logger?.warn?.(`[Zoho Books] Could not mark invoice ${invoiceId} as sent: ${err.message}`);
+    }
+  }
+
+  async markEstimateAsSent(estimateId: string): Promise<void> {
+    try {
+      await this.request("POST", `/estimates/${estimateId}/status/sent`);
+    } catch (err: any) {
+      this.logger?.warn?.(`[Zoho Books] Could not mark estimate ${estimateId} as sent: ${err.message}`);
+    }
+  }
+
+  async getInvoiceDeliveryNotePdf(invoiceId: string): Promise<ArrayBuffer> {
+    try {
+      return await this.request("GET", `/invoices/${invoiceId}?accept=pdf&print_type=delivery_note`, undefined, true);
+    } catch (err: any) {
+      try {
+        return await this.request("GET", `/invoices/${invoiceId}/deliverynotes?accept=pdf`, undefined, true);
+      } catch (_) {
+        return await this.getDocumentPdf(invoiceId, "invoice");
+      }
+    }
   }
 }
 

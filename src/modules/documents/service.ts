@@ -58,6 +58,7 @@ export interface GenerateDocumentInput {
   notification_channels?: Array<"email" | "sms" | "whatsapp">;
   email_subject?: string;
   custom_email_message?: string;
+  date?: string;
   _skip_quote_creation?: boolean;
 }
 
@@ -749,7 +750,7 @@ export class DocumentModuleService extends MedusaService({
       Boolean(settings.zoho_client_secret) &&
       Boolean(settings.zoho_refresh_token) &&
       Boolean(settings.zoho_organization_id) &&
-      (input.type === "invoice" || input.type === "estimate" || input.type === "receipt");
+      (input.type === "invoice" || input.type === "estimate" || input.type === "receipt" || input.type === "packing_slip");
 
     if (canUseZoho) {
       try {
@@ -856,6 +857,7 @@ export class DocumentModuleService extends MedusaService({
               reference_number: displayId,
               invoice_number: displayId,
               ignore_auto_number_generation: true,
+              date: input.date,
               line_items: zohoLineItems,
               notes: zohoNotes,
               terms: zohoTerms,
@@ -864,6 +866,40 @@ export class DocumentModuleService extends MedusaService({
               custom_fields: customFields,
             });
             targetInvoiceId = res.invoice_id;
+          }
+
+          if (targetInvoiceId) {
+            await zoho.markInvoiceAsSent(targetInvoiceId);
+          }
+
+          const isRepairPaid =
+            input.payment_status === "paid" ||
+            repairTicket?.payment_status === "captured" ||
+            repairTicket?.payment_status === "paid" ||
+            ["completed", "repaired", "collected"].includes(repairTicket?.status) ||
+            ((repairTicket?.metadata as any)?.tags &&
+              (Array.isArray((repairTicket?.metadata as any)?.tags)
+                ? (repairTicket?.metadata as any)?.tags.includes("Paid")
+                : String((repairTicket?.metadata as any)?.tags).includes("Paid")));
+
+          if (isRepairPaid && targetInvoiceId) {
+            try {
+              const cid = await ensureContactId();
+              const payRef = input.payment_reference || (repairTicket?.metadata as any)?.paystack_reference || (repairTicket?.metadata as any)?.payment_reference || displayId;
+              const payAmount = Number(input.total || 0);
+              if (payAmount > 0) {
+                await zoho.registerPayment(
+                  targetInvoiceId,
+                  payAmount,
+                  cid,
+                  "Paystack",
+                  payRef,
+                  `Repair Ticket #${repairTicket?.ticket_number || displayId} Payment`
+                );
+              }
+            } catch (payErr: any) {
+              container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[documents-service] Failed to register payment on invoice ${targetInvoiceId}: ${payErr?.message || payErr}`);
+            }
           }
 
           zohoDocumentId = targetInvoiceId;
@@ -919,6 +955,7 @@ export class DocumentModuleService extends MedusaService({
             const res = await zoho.createEstimate(cid, {
               reference_number: displayId,
               estimate_number: displayId,
+              date: input.date,
               line_items: zohoLineItems,
               notes: zohoNotes,
               terms: zohoTerms,
@@ -926,6 +963,10 @@ export class DocumentModuleService extends MedusaService({
               custom_fields: customFields,
             });
             targetEstId = res.estimate_id;
+          }
+
+          if (targetEstId) {
+            await zoho.markEstimateAsSent(targetEstId);
           }
 
           zohoDocumentId = targetEstId;
@@ -1059,8 +1100,72 @@ export class DocumentModuleService extends MedusaService({
             qrUrl: receiptDocUrl,
             obscureZohoFooter: true,
           });
+        } else if (input.type === "packing_slip") {
+          let targetInvoiceId: string | null = input.zoho_document_id || null;
+          if (!targetInvoiceId && isStoreOrder) {
+            const existingDocs = await this.listDocumentRecords({
+              order_id: input.order_id,
+              type: "invoice",
+            }).catch(() => []);
+            const inv = existingDocs.find((d: any) => d.zoho_document_id);
+            if (inv) {
+              targetInvoiceId = inv.zoho_document_id;
+            }
+          }
+          if (!targetInvoiceId && isRepairTicket) {
+            const existingDocs = await this.listDocumentRecords({
+              repair_ticket_id: input.repair_ticket_id,
+              type: "invoice",
+            }).catch(() => []);
+            const inv = existingDocs.find((d: any) => d.zoho_document_id);
+            if (inv) {
+              targetInvoiceId = inv.zoho_document_id;
+            }
+          }
+          if (!targetInvoiceId) {
+            const cleanRef = String(displayId || "").replace(/^(?:(?:JOB|RT|REC|RCPT|EST|DOC|INV|PKG|PACK|ST|STORE|[A-Za-z]{2,10})-)+/i, "");
+            const expectedInvoiceNumber = isRepairTicket
+              ? (cleanRef.startsWith("RT-") ? cleanRef : `RT-${cleanRef}`)
+              : isStoreOrder
+              ? `${settings.store_invoice_prefix || "ST-"}${cleanRef}`
+              : displayId;
+            let existingInZoho = await zoho.getInvoiceByNumber(expectedInvoiceNumber);
+            if (existingInZoho) {
+              targetInvoiceId = existingInZoho.invoice_id;
+            }
+          }
+          if (!targetInvoiceId) {
+            const cid = await ensureContactId();
+            const invRes = await zoho.createInvoice(cid, {
+              reference_number: displayId,
+              invoice_number: displayId,
+              ignore_auto_number_generation: true,
+              date: input.date,
+              line_items: zohoLineItems,
+              notes: zohoNotes,
+              terms: zohoTerms,
+              payment_terms: settings.zoho_payment_terms_days || 0,
+              is_inclusive_tax: settings.zoho_tax_inclusive ?? false,
+              custom_fields: customFields,
+            });
+            targetInvoiceId = invRes.invoice_id;
+            await zoho.markInvoiceAsSent(targetInvoiceId);
+          }
+
+          zohoDocumentId = targetInvoiceId;
+          source = "zoho";
+          const rawBuffer = await zoho.getInvoiceDeliveryNotePdf(targetInvoiceId);
+          const packingDocUrl = shortPdfLink || documentPublicUrl;
+          pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
+            qrUrl: packingDocUrl,
+            obscureZohoFooter: true,
+            isInvoice: false,
+          });
         }
       } catch (zohoErr: any) {
+        if (["invoice", "estimate", "receipt", "packing_slip"].includes(input.type) && input.force_source !== "pdfkit" && settings.zoho_books_enabled) {
+          throw new Error(`[Documents-Module] Zoho Books is required for ${input.type}s: ${zohoErr.message}`);
+        }
         container?.resolve("logger")?.warn(`[Documents-Module] Zoho Books is unavailable (${zohoErr.message}). Falling back to PDFKit.`);
         source = "pdfkit";
         zohoDocumentId = null;
@@ -1072,6 +1177,9 @@ export class DocumentModuleService extends MedusaService({
     // PDFKit Fallback / Primary Generation
     // -------------------------------------------------------------
     if (!pdfBuffer) {
+      if (["invoice", "estimate", "receipt", "packing_slip"].includes(input.type) && input.force_source !== "pdfkit" && settings.zoho_books_enabled) {
+        throw new Error(`Invoices, receipts, quotes, and packing slips are only to be created by Zoho Books.`);
+      }
       source = "pdfkit";
       let templateName = settings.invoice_template || "zoho_exact";
       if (input.type === "packing_slip") templateName = settings.packing_slip_template || "modern";

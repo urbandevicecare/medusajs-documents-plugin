@@ -38,14 +38,26 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     );
 
     const type = (req.query.type as string) || "invoices";
+    const searchText = (req.query.search as string) || (req.query.search_text as string);
     let items: any[] = [];
 
     if (type === "estimates") {
       items = await zoho.listEstimates();
-    } else if (type === "payments") {
+    } else if (type === "payments" || type === "receipts") {
       items = await zoho.listPayments();
     } else {
-      items = await zoho.listInvoices();
+      items = await zoho.listInvoices({ search_text: searchText });
+    }
+
+    if (searchText && typeof searchText === "string" && searchText.trim() !== "") {
+      const q = searchText.toLowerCase();
+      items = items.filter((it: any) =>
+        (it.invoice_number && String(it.invoice_number).toLowerCase().includes(q)) ||
+        (it.estimate_number && String(it.estimate_number).toLowerCase().includes(q)) ||
+        (it.payment_number && String(it.payment_number).toLowerCase().includes(q)) ||
+        (it.reference_number && String(it.reference_number).toLowerCase().includes(q)) ||
+        (it.customer_name && String(it.customer_name).toLowerCase().includes(q))
+      );
     }
 
     return res.json({
