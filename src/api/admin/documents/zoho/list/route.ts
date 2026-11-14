@@ -39,14 +39,17 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
     const type = (req.query.type as string) || "invoices";
     const searchText = (req.query.search as string) || (req.query.search_text as string);
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const rawPerPage = Number(req.query.per_page || 100);
+    const per_page = Math.min(Math.max(rawPerPage, 1), 100);
     let items: any[] = [];
 
     if (type === "estimates") {
-      items = await zoho.listEstimates();
+      items = await zoho.listEstimates({ page, per_page });
     } else if (type === "payments" || type === "receipts") {
-      items = await zoho.listPayments();
+      items = await zoho.listPayments({ page, per_page });
     } else {
-      items = await zoho.listInvoices({ search_text: searchText });
+      items = await zoho.listInvoices({ page, per_page, search_text: searchText });
     }
 
     if (searchText && typeof searchText === "string" && searchText.trim() !== "") {

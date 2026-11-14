@@ -16,7 +16,7 @@ import {
   IconButton,
   DropdownMenu,
 } from "@medusajs/ui";
-import React, { useEffect, useState, useMemo, Fragment } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback, Fragment } from "react";
 import {
   DocumentText,
   ArrowPath,
@@ -247,6 +247,12 @@ export const DocumentsPage = () => {
   const [zohoLiveDocs, setZohoLiveDocs] = useState<any[]>([]);
   const [loadingZoho, setLoadingZoho] = useState(false);
   const [isSyncingRepairs, setIsSyncingRepairs] = useState(false);
+
+  // Pagination & Infinite Scroll State (capped at 100 rows per batch)
+  const [displayLimit, setDisplayLimit] = useState(100);
+  const [totalBackendCount, setTotalBackendCount] = useState<number>(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Grouping state
   const [groupByJob, setGroupByJob] = useState(true);
@@ -628,12 +634,18 @@ export const DocumentsPage = () => {
     subject: "",
   });
 
-  const loadDocuments = () => {
+  const loadDocuments = (resetLimit = true) => {
     setLoading(true);
-    fetch("/admin/documents", { credentials: "include" })
+    fetch("/admin/documents?take=100&skip=0", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         setDocuments(data.documents || []);
+        if (data.count != null) {
+          setTotalBackendCount(Number(data.count));
+        }
+        if (resetLimit) {
+          setDisplayLimit(100);
+        }
       })
       .catch((err) => console.error("Error loading documents:", err))
       .finally(() => setLoading(false));
@@ -1184,6 +1196,84 @@ export const DocumentsPage = () => {
     });
   }, [documents, sourceFilter, typeFilter, searchTerm]);
 
+  // Infinite scroll calculations & triggers
+  const totalItemCount = groupByJob ? documentGroups.length : filteredDocs.length;
+  const hasMoreLocally = displayLimit < totalItemCount;
+  const hasMoreBackend = documents.length < totalBackendCount;
+  const canLoadMore = hasMoreLocally || hasMoreBackend;
+
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || loading) return;
+
+    if (hasMoreLocally) {
+      setDisplayLimit((prev) => prev + 100);
+      return;
+    }
+
+    if (hasMoreBackend) {
+      setIsLoadingMore(true);
+      try {
+        const nextSkip = documents.length;
+        const res = await fetch(`/admin/documents?take=100&skip=${nextSkip}`, { credentials: "include" });
+        const data = await res.json();
+        if (data.documents && data.documents.length > 0) {
+          setDocuments((prev) => {
+            const existingIds = new Set(prev.map((d: any) => d.id));
+            const newUnique = data.documents.filter((d: any) => !existingIds.has(d.id));
+            return [...prev, ...newUnique];
+          });
+          if (data.count != null) {
+            setTotalBackendCount(Number(data.count));
+          }
+          setDisplayLimit((prev) => prev + 100);
+        } else {
+          setTotalBackendCount(documents.length);
+        }
+      } catch (err) {
+        console.error("Error loading more documents:", err);
+      } finally {
+        setIsLoadingMore(false);
+      }
+    }
+  }, [isLoadingMore, loading, hasMoreLocally, hasMoreBackend, documents.length, totalBackendCount]);
+
+  // Reset display cap when search, filters, or group mode change
+  useEffect(() => {
+    setDisplayLimit(100);
+  }, [searchTerm, typeFilter, sourceFilter, groupByJob]);
+
+  // IntersectionObserver for seamless infinite scrolling
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !canLoadMore || isLoadingMore || loading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          handleLoadMore();
+        }
+      },
+      { rootMargin: "300px" }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [handleLoadMore, canLoadMore, isLoadingMore, loading]);
+
+  // Fallback window scroll listener
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!canLoadMore || isLoadingMore || loading) return;
+      const scrollPosition = window.innerHeight + window.scrollY;
+      const threshold = document.documentElement.scrollHeight - 350;
+      if (scrollPosition >= threshold) {
+        handleLoadMore();
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleLoadMore, canLoadMore, isLoadingMore, loading]);
+
 
   return (
     <Container className="p-0">
@@ -1369,7 +1459,8 @@ export const DocumentsPage = () => {
               </Text>
             </div>
           ) : (
-            <Table>
+            <Fragment>
+              <Table>
               <Table.Header>
                 <Table.Row>
                   <Table.HeaderCell>Reference</Table.HeaderCell>
@@ -1384,7 +1475,7 @@ export const DocumentsPage = () => {
               </Table.Header>
               <Table.Body>
                 {groupByJob ? (
-                  documentGroups.map((group) => {
+                  documentGroups.slice(0, displayLimit).map((group) => {
                     const isExpanded = !!expandedGroups[group.groupId];
                     const doc = group.primaryDoc;
                     const isPaid = doc.payment_status === "paid" || doc.status === "paid";
@@ -1780,7 +1871,7 @@ export const DocumentsPage = () => {
                     );
                   })
                 ) : (
-                  filteredDocs.map((doc) => {
+                  filteredDocs.slice(0, displayLimit).map((doc) => {
                     const isPaid = doc.payment_status === "paid" || doc.status === "paid";
                     const isZoho = doc.source === "zoho";
 
@@ -1903,7 +1994,47 @@ export const DocumentsPage = () => {
                 )}
               </Table.Body>
             </Table>
-          )}
+
+            {/* Infinite Scroll Sentinel & Status Bar */}
+            <div ref={sentinelRef} className="h-6 w-full pointer-events-none" />
+
+            <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-ui-border-base bg-ui-bg-subtle text-xs text-ui-fg-subtle gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>
+                  Showing <strong className="font-semibold text-ui-fg-base">{Math.min(displayLimit, totalItemCount)}</strong> of{" "}
+                  <strong className="font-semibold text-ui-fg-base">{totalItemCount}</strong> {groupByJob ? "jobs/orders" : "documents"}
+                </span>
+                {totalBackendCount > documents.length && (
+                  <Badge size="2xsmall" color="grey">
+                    {totalBackendCount} total in database
+                  </Badge>
+                )}
+                <span className="text-ui-fg-muted">(capped at 100 per scroll batch)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {isLoadingMore && (
+                  <div className="flex items-center gap-2 text-purple-600 font-medium">
+                    <ArrowPath className="w-3.5 h-3.5 animate-spin" />
+                    <span>Loading next batch...</span>
+                  </div>
+                )}
+                {canLoadMore && !isLoadingMore && (
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={handleLoadMore}
+                    className="text-xs h-7"
+                  >
+                    Load More (+100)
+                  </Button>
+                )}
+                {!canLoadMore && totalItemCount > 0 && (
+                  <span className="text-ui-fg-muted">All documents loaded</span>
+                )}
+              </div>
+            </div>
+          </Fragment>
+        )}
         </div>
       )}
 

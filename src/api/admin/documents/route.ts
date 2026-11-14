@@ -13,7 +13,10 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     const manager = req.scope.resolve("manager", { allowUnregistered: true });
     const sharedContext = manager ? { manager } : {};
 
-    const { type, source, status, search, take = 50, skip = 0 } = req.query as any;
+    const rawTake = Number((req.query as any).take || 100);
+    const take = Math.min(Math.max(rawTake, 1), 100);
+    const skip = Math.max(Number((req.query as any).skip || 0), 0);
+    const { type, source, status, search } = req.query as any;
 
     const filters: Record<string, any> = {};
     if (type && type !== "all") filters.type = type;
@@ -27,8 +30,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       const [fetchedRecords, fetchedCount] = await documentService.listAndCountDocumentRecords(
         filters,
         {
-          take: Number(take),
-          skip: Number(skip),
+          take,
+          skip,
           order: { created_at: "DESC" },
         },
         sharedContext
@@ -41,8 +44,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
           documents: [],
           count: 0,
           warning: "Migrations pending",
-          take: Number(take),
-          skip: Number(skip),
+          take,
+          skip,
+          has_more: false,
         });
       }
       // Fallback: If MikroORM fork error occurs, query pg_connection directly
@@ -93,11 +97,13 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       );
     }
 
+    const finalCount = count || filteredRecords.length;
     return res.json({
       documents: filteredRecords,
-      count: count || filteredRecords.length,
-      take: Number(take),
-      skip: Number(skip),
+      count: finalCount,
+      take,
+      skip,
+      has_more: skip + filteredRecords.length < finalCount,
     });
   } catch (outerErr: any) {
     if (isUndefinedTableError(outerErr)) {
