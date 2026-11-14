@@ -1096,5 +1096,164 @@ test("Requirement: deleteReceiptsForRepairTicket deletes receipts in Zoho and DB
   }
 });
 
+test("Requirement: generating a receipt updates corresponding invoice document_record payment_status to paid", async () => {
+  const mod = await import("../src/modules/documents/service.js");
+  const DocServiceClass = mod.DocumentModuleService || mod.default;
+  const service: any = Object.create(DocServiceClass.prototype);
+  service.getSettings = async () => ({
+    zoho_books_enabled: false,
+  });
+
+  let updatedInvoiceData: any = null;
+  service.listDocumentRecords = async (filter: any) => {
+    if (filter.type === "invoice" && filter.repair_ticket_id === "rep_pay_test") {
+      return [
+        {
+          id: "doc_inv_pay_test",
+          repair_ticket_id: "rep_pay_test",
+          type: "invoice",
+          status: "sent",
+          payment_status: "unpaid",
+          total_amount: 3000,
+        },
+      ];
+    }
+    return [];
+  };
+
+  service.updateDocumentRecords = async (data: any) => {
+    if (data.id === "doc_inv_pay_test") {
+      updatedInvoiceData = data;
+    }
+    return data;
+  };
+
+  service.createDocumentRecords = async (data: any) => {
+    return { ...data, id: "doc_rcpt_created" };
+  };
+
+  service.getOrGenerateShortUrl = async () => "https://short.url/rcpt";
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_pay_test",
+          ticket_number: 5555,
+          total_estimate: 3000,
+          amount_paid: 3000,
+          payment_status: "captured",
+        },
+      ],
+    }),
+  };
+
+  const container = {
+    resolve: (key: string) => {
+      if (key === "query") return mockQuery;
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      return null;
+    },
+  };
+
+  await service.generateDocument(
+    {
+      type: "receipt",
+      repair_ticket_id: "rep_pay_test",
+      total: 3000,
+      amount_paid: 3000,
+      payment_status: "paid",
+      force_source: "pdfkit",
+    },
+    container
+  );
+
+  assert.ok(updatedInvoiceData, "Invoice document record must be updated when receipt is generated");
+  assert.strictEqual(updatedInvoiceData.payment_status, "paid", "Invoice payment_status must be updated to paid");
+  assert.strictEqual(updatedInvoiceData.status, "paid", "Invoice status must be updated to paid");
+});
+
+test("Requirement: repairDocumentsSubscriber on repair.payment_received updates invoice payment_status", async () => {
+  let docGeneratedInput: any = null;
+  let updatedInvoicePayload: any = null;
+
+  const mockDocService = {
+    getSettings: async () => ({
+      event_repair_status_changed_enabled: true,
+      event_repair_completed_enabled: true,
+    }),
+    generateDocument: async (input: any) => {
+      docGeneratedInput = input;
+      return { record: { id: "doc_rcpt_sub", type: "receipt" } };
+    },
+    listDocumentRecords: async () => [
+      {
+        id: "inv_sub_1",
+        type: "invoice",
+        status: "sent",
+        payment_status: "unpaid",
+      },
+    ],
+    updateDocumentRecords: async (payload: any) => {
+      updatedInvoicePayload = payload;
+      return payload;
+    },
+  };
+
+  const mockQuery = {
+    graph: async () => ({
+      data: [
+        {
+          id: "rep_sub_1",
+          ticket_number: 9999,
+          status: "ready",
+          total_estimate: 4000,
+          amount_paid: 4000,
+          payment_status: "captured",
+          customer_id: null,
+          device: { model_name: "iPhone 13" },
+        },
+      ],
+    }),
+  };
+
+  const mockRepairModule = {
+    retrieveRepairTicket: async () => ({ id: "rep_sub_1", metadata: {} }),
+    updateRepairTickets: async () => ({}),
+  };
+
+  const mockContainer: any = {
+    resolve: (key: string) => {
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      if (key === "documents") return mockDocService;
+      if (key === "query") return mockQuery;
+      if (key === "repair") return mockRepairModule;
+      return null;
+    },
+  };
+
+  await repairDocumentsSubscriber({
+    event: {
+      name: "repair.payment_received",
+      data: {
+        id: "rep_sub_1",
+        repair_ticket_id: "rep_sub_1",
+        amount: 4000,
+        payment_method: "Cash",
+      },
+    },
+    container: mockContainer,
+  } as any);
+
+  assert.ok(docGeneratedInput, "generateDocument must be called for receipt");
+  assert.strictEqual(docGeneratedInput.type, "receipt");
+  assert.strictEqual(docGeneratedInput.payment_status, "paid");
+  assert.strictEqual(docGeneratedInput.payment_method, "Cash");
+  assert.ok(updatedInvoicePayload, "updateDocumentRecords must be called for invoice");
+  assert.strictEqual(updatedInvoicePayload.payment_status, "paid");
+  assert.strictEqual(updatedInvoicePayload.status, "paid");
+});
+
+
 
 

@@ -34,6 +34,8 @@ export interface DocumentGroup {
   customerPhone?: string;
   latestCreatedAt: string;
   includedTypesSummary: string;
+  paymentStatus: string;
+  isPaid: boolean;
 }
 
 /**
@@ -290,6 +292,50 @@ export function groupDocuments(documents: DocumentRecord[]): DocumentGroup[] {
       groupKey = `Order #${primaryDoc.display_id}`;
     }
 
+    // Determine payment status for the pack/group
+    const hasPaidReceipt = clusterDocs.some(
+      (d) => d.type?.toLowerCase() === "receipt" && (d.payment_status?.toLowerCase() === "paid" || (!d.payment_status && d.status?.toLowerCase() === "paid"))
+    );
+    const hasPaidInvoice = clusterDocs.some(
+      (d) => d.type?.toLowerCase() === "invoice" && (d.payment_status?.toLowerCase() === "paid" || (!d.payment_status && d.status?.toLowerCase() === "paid"))
+    );
+    const isGroupPaid = hasPaidReceipt || hasPaidInvoice || primaryDoc.payment_status?.toLowerCase() === "paid";
+
+    const hasPartialReceipt = clusterDocs.some(
+      (d) => d.type?.toLowerCase() === "receipt" && d.payment_status?.toLowerCase() === "partially_paid"
+    );
+    const hasPartialInvoice = clusterDocs.some(
+      (d) => d.type?.toLowerCase() === "invoice" && d.payment_status?.toLowerCase() === "partially_paid"
+    );
+    const isGroupPartial = !isGroupPaid && (hasPartialReceipt || hasPartialInvoice || primaryDoc.payment_status?.toLowerCase() === "partially_paid");
+
+    const paymentStatus = isGroupPaid ? "paid" : (isGroupPartial ? "partially_paid" : (primaryDoc.payment_status || primaryDoc.status || "unpaid"));
+    const isPaid = isGroupPaid;
+
+    if (isGroupPaid) {
+      if (primaryDoc.payment_status !== "paid") {
+        primaryDoc.payment_status = "paid";
+      }
+      if (primaryDoc.status !== "paid" && primaryDoc.type?.toLowerCase() === "invoice") {
+        primaryDoc.status = "paid";
+      }
+      for (const d of clusterDocs) {
+        if (d.type?.toLowerCase() === "invoice") {
+          d.payment_status = "paid";
+          if (d.status !== "paid") d.status = "paid";
+        }
+      }
+    } else if (isGroupPartial) {
+      if (primaryDoc.payment_status !== "partially_paid") {
+        primaryDoc.payment_status = "partially_paid";
+      }
+      for (const d of clusterDocs) {
+        if (d.type?.toLowerCase() === "invoice" && d.payment_status !== "paid") {
+          d.payment_status = "partially_paid";
+        }
+      }
+    }
+
     groups.push({
       groupId: clusterId,
       groupKey,
@@ -303,6 +349,8 @@ export function groupDocuments(documents: DocumentRecord[]): DocumentGroup[] {
       customerPhone: primaryDoc.customer_phone || clusterDocs.find((d) => d.customer_phone)?.customer_phone,
       latestCreatedAt,
       includedTypesSummary,
+      paymentStatus,
+      isPaid,
     });
   }
 

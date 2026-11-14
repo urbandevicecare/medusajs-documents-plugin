@@ -206,4 +206,83 @@ describe("Document Grouping Utility (Pack Related Documents by Job / Order)", ()
     assert.ok(formattedZero.includes("0.00"));
     assert.ok(!formattedZero.includes("$"));
   });
+
+  it("sets group isPaid=true, paymentStatus='paid' and heals invoice status when receipt is paid", () => {
+    const docs: DocumentRecord[] = [
+      {
+        id: "doc_inv_10",
+        display_id: "RT-10001",
+        title: "Repair Invoice",
+        type: "invoice",
+        source: "zoho",
+        status: "sent",
+        payment_status: "unpaid",
+        total_amount: 5000,
+        currency_code: "kes",
+        created_at: "2026-10-16T12:00:00Z",
+        repair_ticket_id: "rep_ticket_100",
+      },
+      {
+        id: "doc_rcpt_10",
+        display_id: "RCPT-10001",
+        title: "Payment Receipt",
+        type: "receipt",
+        source: "zoho",
+        status: "paid",
+        payment_status: "paid",
+        total_amount: 5000,
+        currency_code: "kes",
+        created_at: "2026-10-16T13:00:00Z",
+        repair_ticket_id: "rep_ticket_100",
+      },
+    ];
+
+    const groups = groupDocuments(docs);
+    assert.equal(groups.length, 1);
+    const g = groups[0];
+    assert.equal(g.isPaid, true, "Group must be marked as paid");
+    assert.equal(g.paymentStatus, "paid", "Group paymentStatus must be 'paid'");
+    assert.equal(g.primaryDoc.payment_status, "paid", "Primary invoice doc must be healed to 'paid'");
+    assert.equal(g.primaryDoc.status, "paid", "Primary invoice doc status must be healed to 'paid'");
+    const invInDocs = g.documents.find((d) => d.type === "invoice");
+    assert.equal(invInDocs?.payment_status, "paid", "Invoice in documents list must be healed to 'paid'");
+  });
+
+  it("sets group paymentStatus='partially_paid' and isPaid=false when receipt is partially_paid", () => {
+    const docs: DocumentRecord[] = [
+      {
+        id: "doc_inv_11",
+        display_id: "RT-10002",
+        title: "Repair Invoice",
+        type: "invoice",
+        source: "zoho",
+        status: "sent",
+        payment_status: "unpaid",
+        total_amount: 5000,
+        currency_code: "kes",
+        created_at: "2026-10-16T12:00:00Z",
+        repair_ticket_id: "rep_ticket_101",
+      },
+      {
+        id: "doc_rcpt_11",
+        display_id: "RCPT-10002",
+        title: "Payment Receipt",
+        type: "receipt",
+        source: "zoho",
+        status: "paid",
+        payment_status: "partially_paid",
+        total_amount: 2000,
+        currency_code: "kes",
+        created_at: "2026-10-16T13:00:00Z",
+        repair_ticket_id: "rep_ticket_101",
+      },
+    ];
+
+    const groups = groupDocuments(docs);
+    assert.equal(groups.length, 1);
+    const g = groups[0];
+    assert.equal(g.isPaid, false, "Group must not be fully paid");
+    assert.equal(g.paymentStatus, "partially_paid", "Group paymentStatus must be 'partially_paid'");
+    assert.equal(g.primaryDoc.payment_status, "partially_paid", "Primary invoice doc must show 'partially_paid'");
+  });
 });

@@ -48,6 +48,7 @@ export interface GenerateDocumentInput {
   repair_ticket_id?: string;
   zoho_document_id?: string;
   payment_status?: string;
+  payment_method?: string;
   payment_link?: string;
   payment_reference?: string;
   notes?: string;
@@ -592,6 +593,12 @@ export class DocumentModuleService extends MedusaService({
                 input.payment_link = `${storeUrl}/repairs/track?token=${ticket.approval_token}`;
               }
             }
+            if (
+              (ticket.payment_status === "captured" || ticket.payment_status === "paid") &&
+              !input.payment_status
+            ) {
+              input.payment_status = "paid";
+            }
           }
         }
       } catch (err) {}
@@ -743,6 +750,7 @@ export class DocumentModuleService extends MedusaService({
     let source: "zoho" | "pdfkit" = "pdfkit";
     let zohoDocumentId: string | null = null;
     let pdfBuffer: Buffer | null = null;
+    let targetInvoiceId: string | null = null;
 
     // Check if Zoho Books should be used - Zoho Books is single source of truth unless PDFKit is manually selected or Zoho is unavailable
     const canUseZoho =
@@ -808,7 +816,7 @@ export class DocumentModuleService extends MedusaService({
         }
 
         if (input.type === "invoice") {
-          let targetInvoiceId: string | null = input.zoho_document_id || (repairTicket?.metadata as any)?.zoho_invoice_id || null;
+          targetInvoiceId = input.zoho_document_id || (repairTicket?.metadata as any)?.zoho_invoice_id || null;
           if (!targetInvoiceId && isRepairTicket) {
             const existingDocs = await this.listDocumentRecords({
               repair_ticket_id: input.repair_ticket_id,
@@ -1021,7 +1029,7 @@ export class DocumentModuleService extends MedusaService({
           input.payment_status = "paid";
 
           // Implement Zoho Books payment registration in service.ts for input.type === "receipt" using zoho.registerPayment
-          let targetInvoiceId: string | null = null;
+          targetInvoiceId = null;
           let correspondingInvoiceDoc: any = null;
 
           if (isRepairTicket) {
@@ -1120,14 +1128,19 @@ export class DocumentModuleService extends MedusaService({
             }
           } catch (_) {}
 
+          const paymentMode =
+            (input as any).payment_method ||
+            (repairTicket?.metadata as any)?.last_payment_method ||
+            "Online";
+
           if (!paymentId) {
             paymentId = await zoho.registerPayment(
               targetInvoiceId,
               paymentAmount,
               cid,
-              "Paystack",
+              paymentMode,
               paystackReference,
-              paystackReference !== displayId ? `Payment via Paystack: ${paystackReference}` : undefined
+              paystackReference !== displayId ? `Payment via ${paymentMode}: ${paystackReference}` : undefined
             );
           }
 
@@ -1466,6 +1479,70 @@ export class DocumentModuleService extends MedusaService({
     }
     record.pdf_url = realPdfUrl;
     record.short_pdf_link = shortPdfLink;
+
+    // If generating a receipt, ensure corresponding invoice(s) for the ticket or order have their payment_status and status updated
+    if (input.type === "receipt" && (input.repair_ticket_id || input.order_id)) {
+      try {
+        const isRepair = Boolean(input.repair_ticket_id);
+        const invFilter: any = { type: "invoice" };
+        if (input.repair_ticket_id) invFilter.repair_ticket_id = input.repair_ticket_id;
+        if (input.order_id) invFilter.order_id = input.order_id;
+
+        const invRecords = await this.listDocumentRecords(invFilter, {}, sharedContext).catch(() => []);
+
+        let isFullyPaid = true;
+        let isPartiallyPaid = false;
+        if (isRepair && repairTicket) {
+          const totalTarget = Number(repairTicket.total_actual > 0 ? repairTicket.total_actual : repairTicket.total_estimate || 0);
+          const currentPaid = Number(repairTicket.amount_paid || 0);
+          isFullyPaid =
+            repairTicket.payment_status === "captured" ||
+            repairTicket.payment_status === "paid" ||
+            (totalTarget > 0 && currentPaid >= totalTarget) ||
+            (totalTarget === 0 && currentPaid >= 0);
+          isPartiallyPaid = !isFullyPaid && currentPaid > 0;
+        } else if (input.payment_status === "partially_paid") {
+          isFullyPaid = false;
+          isPartiallyPaid = true;
+        }
+
+        const newPayStatus = isFullyPaid ? "paid" : (isPartiallyPaid ? "partially_paid" : "unpaid");
+        const newDocStatus = isFullyPaid ? "paid" : (isPartiallyPaid ? "partially_paid" : "sent");
+
+        for (const inv of invRecords) {
+          if (inv.payment_status !== newPayStatus || inv.status !== newDocStatus || (targetInvoiceId && !inv.zoho_document_id)) {
+            try {
+              await this.updateDocumentRecords(
+                {
+                  id: inv.id,
+                  payment_status: newPayStatus,
+                  status: newDocStatus,
+                  ...(targetInvoiceId ? { zoho_document_id: targetInvoiceId, source: "zoho" } : {}),
+                },
+                sharedContext
+              );
+            } catch (_) {
+              const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+              if (conn) {
+                await conn("document_record")
+                  .where({ id: inv.id })
+                  .update({
+                    payment_status: newPayStatus,
+                    status: newDocStatus,
+                    ...(targetInvoiceId ? { zoho_document_id: targetInvoiceId, source: "zoho" } : {}),
+                    updated_at: new Date(),
+                  });
+              }
+            }
+            invalidatePdfCache(inv.id);
+          }
+        }
+      } catch (invSyncErr: any) {
+        container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(
+          `[Documents-Module] Failed to update corresponding invoice payment_status: ${invSyncErr?.message || invSyncErr}`
+        );
+      }
+    }
 
     // Multi-channel notification auto-dispatch
     if (input.auto_send && container) {
@@ -2041,6 +2118,16 @@ export class DocumentModuleService extends MedusaService({
               sharedContext
             );
           } catch (_) {}
+          for (const inv of invoices) {
+            try {
+              await this.updateDocumentRecords({
+                id: inv.id,
+                payment_status: "unpaid",
+                status: "sent",
+              }, sharedContext);
+            } catch (_) {}
+            invalidatePdfCache(inv.id);
+          }
           const invoice = invoices?.[0];
           if (invoice) {
             cleanMeta.document_id = invoice.id;
@@ -2073,11 +2160,20 @@ export class DocumentModuleService extends MedusaService({
             }
             delete meta.zoho_payment_id;
 
+            await conn("document_record")
+              .where({ repair_ticket_id: repairTicketId, type: "invoice" })
+              .update({
+                payment_status: "unpaid",
+                status: "sent",
+                updated_at: new Date(),
+              });
+
             const invoice = await conn("document_record")
               .where({ repair_ticket_id: repairTicketId, type: "invoice" })
               .whereNull("deleted_at")
               .first();
             if (invoice) {
+              invalidatePdfCache(invoice.id);
               meta.document_id = invoice.id;
               meta.pdf_url = invoice.pdf_url;
               meta.short_pdf_link = invoice.short_pdf_link || invoice.pdf_url;

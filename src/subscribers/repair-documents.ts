@@ -173,9 +173,14 @@ export default async function repairDocumentsSubscriber({
     }
 
     const amountPaidNum = Number(ticket.amount_paid || 0);
-    const isPaid =
+    const totalTarget = Number(ticket.total_actual > 0 ? ticket.total_actual : ticket.total_estimate || 0);
+    const isFullyPaid =
       ((ticket.payment_status === "captured" || ticket.payment_status === "paid") && amountPaidNum > 0) ||
-      (eventName === "repair.payment_received" && Number(data.amount || 0) > 0);
+      (eventName === "repair.payment_received" && totalTarget > 0 && (amountPaidNum >= totalTarget || Number(data.amount || 0) >= totalTarget));
+    const isPartiallyPaid =
+      ticket.payment_status === "partially_paid" ||
+      (!isFullyPaid && (amountPaidNum > 0 || (eventName === "repair.payment_received" && Number(data.amount || 0) > 0)));
+    const isPaid = isFullyPaid || isPartiallyPaid || (eventName === "repair.payment_received" && Number(data.amount || 0) > 0);
 
     let docType: any;
     let docTitle: string;
@@ -283,7 +288,8 @@ export default async function repairDocumentsSubscriber({
         total: totalEstimate,
         amount_paid: docType === "receipt" ? Number(data.amount || ticket.amount_paid || 0) : Number(ticket.amount_paid || 0),
         currency_code: currencyCode,
-        payment_status: isPaid ? "paid" : "unpaid",
+        payment_status: isFullyPaid ? "paid" : (isPartiallyPaid ? "partially_paid" : (isPaid ? "paid" : "unpaid")),
+        payment_method: data.payment_method || (ticket.metadata as any)?.last_payment_method || "Cash",
         payment_link: paymentOrTrackingLink || undefined,
         payment_reference: isPaid ? payRef : undefined,
         auto_send: autoSend,
@@ -305,6 +311,30 @@ export default async function repairDocumentsSubscriber({
       },
       container
     );
+
+    // Ensure existing invoices for this repair ticket are updated to reflect the new payment status
+    if (eventName === "repair.payment_received" || isPaid) {
+      try {
+        const existingInvoices = await documentService.listDocumentRecords(
+          { repair_ticket_id: ticket.id, type: "invoice" },
+          {},
+          {}
+        ).catch(() => []);
+        const targetPayStatus = isFullyPaid ? "paid" : (isPartiallyPaid ? "partially_paid" : "paid");
+        const targetDocStatus = targetPayStatus === "paid" ? "paid" : "sent";
+        for (const inv of existingInvoices) {
+          if (inv.payment_status !== targetPayStatus || inv.status !== targetDocStatus) {
+            await documentService.updateDocumentRecords({
+              id: inv.id,
+              payment_status: targetPayStatus,
+              status: targetDocStatus,
+            }).catch(() => {});
+          }
+        }
+      } catch (invErr: any) {
+        logger.warn(`[Documents-Subscriber] Could not update invoice status on ticket #${ticket.ticket_number}: ${invErr.message}`);
+      }
+    }
 
     // Hand over the generated document link and record to Meduajs-repair-plugin
     if (genResult?.record) {

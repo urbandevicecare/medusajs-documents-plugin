@@ -2103,7 +2103,9 @@ export const DocumentsPage = () => {
                   documentGroups.slice(0, displayLimit).map((group) => {
                     const isExpanded = !!expandedGroups[group.groupId];
                     const doc = group.primaryDoc;
-                    const isPaid = doc.payment_status === "paid" || doc.status === "paid";
+                    const isPaid = group.isPaid || doc.payment_status === "paid" || doc.status === "paid";
+                    const isPartial = !isPaid && (group.paymentStatus === "partially_paid" || doc.payment_status === "partially_paid" || doc.status === "partially_paid");
+                    const displayStatus = isPaid ? "paid" : isPartial ? "partially_paid" : (group.paymentStatus || doc.payment_status || doc.status || "unpaid");
                     const isZoho = doc.source === "zoho";
                     const hasMultiple = group.documents.length > 1;
 
@@ -2179,8 +2181,8 @@ export const DocumentsPage = () => {
                           </Table.Cell>
 
                           <Table.Cell>
-                            <Badge color={isPaid ? "green" : (doc.payment_status === "unpaid" ? "red" : "blue")} size="small">
-                              {doc.payment_status || doc.status}
+                            <Badge color={isPaid ? "green" : (isPartial ? "orange" : (displayStatus === "unpaid" ? "red" : "blue"))} size="small">
+                              {displayStatus}
                             </Badge>
                           </Table.Cell>
 
@@ -2361,7 +2363,9 @@ export const DocumentsPage = () => {
                                     </thead>
                                     <tbody className="divide-y divide-ui-border-base text-xs">
                                       {group.documents.map((subDoc) => {
-                                        const subIsPaid = subDoc.payment_status === "paid" || subDoc.status === "paid";
+                                        const subIsPaid = subDoc.payment_status === "paid" || subDoc.status === "paid" || (subDoc.type === "invoice" && group.isPaid);
+                                        const subIsPartial = !subIsPaid && (subDoc.payment_status === "partially_paid" || subDoc.status === "partially_paid" || (subDoc.type === "invoice" && group.paymentStatus === "partially_paid"));
+                                        const subDisplayStatus = subIsPaid ? "paid" : subIsPartial ? "partially_paid" : (subDoc.payment_status || subDoc.status || "unpaid");
                                         const subIsZoho = subDoc.source === "zoho";
                                         return (
                                           <tr key={subDoc.id} className="hover:bg-ui-bg-subtle-hover transition-colors">
@@ -2395,9 +2399,9 @@ export const DocumentsPage = () => {
                                             <td className="py-2 px-3">
                                               <Badge
                                                 size="2xsmall"
-                                                color={subIsPaid ? "green" : (subDoc.payment_status === "unpaid" ? "red" : "blue")}
+                                                color={subIsPaid ? "green" : (subIsPartial ? "orange" : (subDisplayStatus === "unpaid" ? "red" : "blue"))}
                                               >
-                                                {subDoc.payment_status || subDoc.status}
+                                                {subDisplayStatus}
                                               </Badge>
                                             </td>
                                             <td className="py-2 px-3">

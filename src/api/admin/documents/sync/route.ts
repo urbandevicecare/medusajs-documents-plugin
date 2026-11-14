@@ -291,6 +291,28 @@ async function handleSync(req: MedusaRequest, res: MedusaResponse) {
           logger?.warn?.(`[Documents-Sync] Could not generate receipt for ${ticketNum}: ${rcptErr.message}`);
         }
       }
+
+      // F. Reconcile Invoice Payment Status
+      if (hasInvoice && (isPaid || actualAmountPaid > 0 || hasReceipt)) {
+        try {
+          const isFullyPaid = isPaid || (totalAmount > 0 && actualAmountPaid >= totalAmount);
+          const isPartiallyPaid = !isFullyPaid && actualAmountPaid > 0;
+          const targetPayStatus = isFullyPaid ? "paid" : (isPartiallyPaid ? "partially_paid" : "paid");
+          const targetDocStatus = targetPayStatus === "paid" ? "paid" : "sent";
+
+          for (const inv of existingDocs.filter((d: any) => d.type === "invoice")) {
+            if (inv.payment_status !== targetPayStatus || inv.status !== targetDocStatus) {
+              await documentService.updateDocumentRecords({
+                id: inv.id,
+                payment_status: targetPayStatus,
+                status: targetDocStatus,
+              });
+            }
+          }
+        } catch (invReconcileErr: any) {
+          logger?.warn?.(`[Documents-Sync] Could not reconcile invoice status for ${ticketNum}: ${invReconcileErr.message}`);
+        }
+      }
     }
 
     return res.json({
