@@ -266,8 +266,8 @@ async function handleSync(req: MedusaRequest, res: MedusaResponse) {
 
       // E. Check for Receipt if paid with amount > 0
       const actualAmountPaid = Number(ticket.amount_paid || 0);
-      const isPaid = ticket.payment_status === "paid" || ticket.payment_status === "captured" || actualAmountPaid > 0;
-      const receiptAmount = actualAmountPaid > 0 ? actualAmountPaid : ((ticket.payment_status === "paid" || ticket.payment_status === "captured") ? totalAmount : 0);
+      const isPaid = (ticket.payment_status === "paid" || ticket.payment_status === "captured") && actualAmountPaid > 0;
+      const receiptAmount = actualAmountPaid;
 
       if (isPaid && receiptAmount > 0 && !hasReceipt) {
         try {

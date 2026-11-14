@@ -1004,5 +1004,97 @@ test("Requirement: repair.payment_received with 0 amount does NOT generate a rec
   assert.strictEqual(docGenerated, false, "Must NOT generate receipt for 0 amount payment");
 });
 
+test("Requirement: deleteReceiptsForRepairTicket deletes receipts in Zoho and DB, restoring invoice link", async () => {
+  const { DocumentModuleService } = await import("../src/modules/documents/service.js");
+  const service: any = Object.create(DocumentModuleService.prototype);
+
+  let deletedPaymentId: string | null = null;
+  let deletedRecordId: string | null = null;
+  let updatedMeta: any = null;
+
+  service.getSettings = async () => ({
+    zoho_books_enabled: true,
+    zoho_client_id: "mock_id",
+    zoho_client_secret: "mock_sec",
+    zoho_refresh_token: "mock_ref",
+    zoho_organization_id: "mock_org",
+  });
+
+  service.listDocumentRecords = async (filter: any) => {
+    if (filter.type === "receipt") {
+      return [
+        {
+          id: "doc_rcpt_01",
+          type: "receipt",
+          zoho_document_id: "zoho_pay_999",
+          repair_ticket_id: "rep_ticket_reset",
+        },
+      ];
+    }
+    if (filter.type === "invoice") {
+      return [
+        {
+          id: "doc_inv_01",
+          type: "invoice",
+          title: "Repair Invoice",
+          pdf_url: "https://urbandevicecare.co.uk/docs/inv01",
+          short_pdf_link: "https://urbandevicecare.co.uk/r/inv01",
+          repair_ticket_id: "rep_ticket_reset",
+        },
+      ];
+    }
+    return [];
+  };
+
+  service.deleteDocumentRecords = async (id: string) => {
+    deletedRecordId = id;
+  };
+
+  const mockZoho = {
+    deletePayment: async (id: string) => {
+      deletedPaymentId = id;
+    },
+  };
+
+  const { ZohoBooksService } = await import("../src/services/zoho-books.js");
+  const originalDelete = ZohoBooksService.prototype.deletePayment;
+  ZohoBooksService.prototype.deletePayment = mockZoho.deletePayment;
+
+  const mockRepair = {
+    retrieveRepairTicket: async () => ({
+      id: "rep_ticket_reset",
+      metadata: {
+        zoho_payment_id: "zoho_pay_999",
+        pdf_url: "https://urbandevicecare.co.uk/docs/rcpt01",
+        last_document_type: "receipt",
+      },
+    }),
+    updateRepairTickets: async (payload: any) => {
+      updatedMeta = payload.metadata;
+      return payload;
+    },
+  };
+
+  const mockContainer = {
+    resolve: (key: string) => {
+      if (key === "repair") return mockRepair;
+      if (key === "logger") return { info: () => {}, warn: () => {}, error: () => {} };
+      return null;
+    },
+  };
+
+  try {
+    const res = await service.deleteReceiptsForRepairTicket("rep_ticket_reset", mockContainer);
+    assert.strictEqual(res.deleted_records, 1);
+    assert.strictEqual(deletedPaymentId, "zoho_pay_999");
+    assert.strictEqual(deletedRecordId, "doc_rcpt_01");
+    assert.strictEqual(updatedMeta.zoho_payment_id, undefined, "zoho_payment_id must be cleared");
+    assert.strictEqual(updatedMeta.last_document_type, "invoice", "last_document_type must be restored to invoice");
+    assert.strictEqual(updatedMeta.pdf_url, "https://urbandevicecare.co.uk/docs/inv01", "pdf_url must point to invoice");
+  } finally {
+    ZohoBooksService.prototype.deletePayment = originalDelete;
+  }
+});
+
 
 

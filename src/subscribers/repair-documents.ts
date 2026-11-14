@@ -172,10 +172,10 @@ export default async function repairDocumentsSubscriber({
       return;
     }
 
+    const amountPaidNum = Number(ticket.amount_paid || 0);
     const isPaid =
-      ticket.payment_status === "captured" ||
-      ticket.payment_status === "paid" ||
-      (eventName === "repair.payment_received" && Number(data.amount || ticket.amount_paid || 0) > 0);
+      ((ticket.payment_status === "captured" || ticket.payment_status === "paid") && amountPaidNum > 0) ||
+      (eventName === "repair.payment_received" && Number(data.amount || 0) > 0);
 
     let docType: any;
     let docTitle: string;
@@ -184,9 +184,11 @@ export default async function repairDocumentsSubscriber({
       docType = "job_card";
       docTitle = "Repair Job Card";
     } else if (eventName === "repair.payment_received") {
-      const paymentAmount = Number(data.amount || ticket.amount_paid || 0);
+      const paymentAmount = Number(data.amount || 0);
       if (paymentAmount <= 0) {
-        logger.info(`[Documents-Subscriber] repair.payment_received received with 0 amount for #${ticket.ticket_number}. Skipping receipt generation.`);
+        logger.info(
+          `[Documents-Subscriber] repair.payment_received received with 0 or missing amount for #${ticket.ticket_number}. Skipping receipt generation.`
+        );
         return;
       }
       docType = "receipt";
@@ -279,7 +281,7 @@ export default async function repairDocumentsSubscriber({
         },
         items: lineItems,
         total: totalEstimate,
-        amount_paid: docType === "receipt" ? Number(data.amount || ticket.amount_paid || totalEstimate) : Number(ticket.amount_paid || 0),
+        amount_paid: docType === "receipt" ? Number(data.amount || ticket.amount_paid || 0) : Number(ticket.amount_paid || 0),
         currency_code: currencyCode,
         payment_status: isPaid ? "paid" : "unpaid",
         payment_link: paymentOrTrackingLink || undefined,
@@ -319,8 +321,13 @@ export default async function repairDocumentsSubscriber({
             last_document_type: docType,
             last_document_title: genResult.record.title,
           };
-          if (docType === "invoice" && genResult.record.zoho_document_id) {
-            metaUpdate.zoho_invoice_id = genResult.record.zoho_document_id;
+          if (docType === "invoice") {
+            if (genResult.record.zoho_document_id) {
+              metaUpdate.zoho_invoice_id = genResult.record.zoho_document_id;
+            }
+            if (!isPaid) {
+              delete metaUpdate.zoho_payment_id;
+            }
           } else if (docType === "estimate" && genResult.record.zoho_document_id) {
             metaUpdate.zoho_estimate_id = genResult.record.zoho_document_id;
           } else if (docType === "receipt" && genResult.record.zoho_document_id) {

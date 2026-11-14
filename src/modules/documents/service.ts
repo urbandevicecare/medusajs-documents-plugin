@@ -879,31 +879,40 @@ export class DocumentModuleService extends MedusaService({
           const actualAmountPaid = Number(
             input.amount_paid ??
             repairTicket?.amount_paid ??
-            (repairTicket?.payment_status === "captured" || repairTicket?.payment_status === "paid" ? (input.total || 0) : 0)
+            0
           );
 
           const isRepairPaid =
             actualAmountPaid > 0 &&
             (input.payment_status === "paid" ||
               repairTicket?.payment_status === "captured" ||
-              repairTicket?.payment_status === "paid" ||
-              ((repairTicket?.metadata as any)?.tags &&
-                (Array.isArray((repairTicket?.metadata as any)?.tags)
-                  ? (repairTicket?.metadata as any)?.tags.includes("Paid")
-                  : String((repairTicket?.metadata as any)?.tags).includes("Paid"))));
+              repairTicket?.payment_status === "paid");
 
           if (isRepairPaid && targetInvoiceId && actualAmountPaid > 0) {
             try {
-              const cid = await ensureContactId();
-              const payRef = input.payment_reference || (repairTicket?.metadata as any)?.paystack_reference || (repairTicket?.metadata as any)?.payment_reference || displayId;
-              await zoho.registerPayment(
-                targetInvoiceId,
-                actualAmountPaid,
-                cid,
-                "Paystack",
-                payRef,
-                `Repair Ticket #${repairTicket?.ticket_number || displayId} Payment`
-              );
+              let alreadyRegistered = false;
+              try {
+                const invDetails = await zoho.getInvoice(targetInvoiceId);
+                if (invDetails?.payments && Array.isArray(invDetails.payments) && invDetails.payments.length > 0) {
+                  const paySum = invDetails.payments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+                  if (paySum >= actualAmountPaid) {
+                    alreadyRegistered = true;
+                  }
+                }
+              } catch (_) {}
+
+              if (!alreadyRegistered) {
+                const cid = await ensureContactId();
+                const payRef = input.payment_reference || (repairTicket?.metadata as any)?.paystack_reference || (repairTicket?.metadata as any)?.payment_reference || displayId;
+                await zoho.registerPayment(
+                  targetInvoiceId,
+                  actualAmountPaid,
+                  cid,
+                  "Paystack",
+                  payRef,
+                  `Repair Ticket #${repairTicket?.ticket_number || displayId} Payment`
+                );
+              }
             } catch (payErr: any) {
               container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[documents-service] Failed to register payment on invoice ${targetInvoiceId}: ${payErr?.message || payErr}`);
             }
@@ -986,18 +995,21 @@ export class DocumentModuleService extends MedusaService({
             isInvoice: false,
           });
         } else if (input.type === "receipt") {
-          // Determine the actual amount paid for this receipt
           const paymentAmount = Number(
             input.amount_paid ??
-            (isRepairTicket ? (repairTicket?.amount_paid && Number(repairTicket.amount_paid) > 0 ? repairTicket.amount_paid : input.total) : input.total) ??
+            (isRepairTicket
+              ? (repairTicket
+                  ? (Number(repairTicket.amount_paid || 0) > 0 ? repairTicket.amount_paid : 0)
+                  : (input.payment_status === "paid" ? input.total : 0))
+              : (input.amount_paid ?? input.total)) ??
             0
           );
 
-          const isTicketUnpaid = isRepairTicket &&
-            repairTicket?.payment_status !== "captured" &&
-            repairTicket?.payment_status !== "paid" &&
-            input.payment_status !== "paid" &&
-            Number(repairTicket?.amount_paid || 0) <= 0;
+          const isTicketUnpaid = isRepairTicket
+            ? paymentAmount <= 0 ||
+              (!["captured", "paid", "partially_paid"].includes(String(repairTicket?.payment_status)) &&
+               !["paid", "partially_paid"].includes(String(input.payment_status)))
+            : paymentAmount <= 0;
 
           if (paymentAmount <= 0 || isTicketUnpaid) {
             throw new Error(
@@ -1929,6 +1941,182 @@ export class DocumentModuleService extends MedusaService({
       deleted_records: deletedCount,
       deleted_zoho_invoices: deletedInvoices,
       deleted_zoho_estimates: deletedEstimates,
+      deleted_zoho_payments: deletedPayments,
+    };
+  }
+
+  /**
+   * Deletes only payment receipts (in Zoho Books and in database) for a repair ticket
+   * restoring the invoice balance and resetting the ticket metadata link back to the unpaid invoice.
+   */
+  async deleteReceiptsForRepairTicket(repairTicketId: string, container?: any): Promise<{
+    deleted_records: number;
+    deleted_zoho_payments: string[];
+  }> {
+    const deletedPayments: string[] = [];
+    const manager = container?.resolve?.("manager", { allowUnregistered: true });
+    const sharedContext = manager ? { manager } : {};
+
+    // 1. Fetch receipt documents for this repair ticket
+    let records: any[] = [];
+    try {
+      records = await this.listDocumentRecords(
+        { repair_ticket_id: repairTicketId, type: "receipt" },
+        {},
+        sharedContext
+      );
+    } catch (_) {
+      const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+      if (conn) {
+        records = await conn("document_record")
+          .where({ repair_ticket_id: repairTicketId, type: "receipt" })
+          .whereNull("deleted_at");
+      }
+    }
+    for (const r of records) {
+      invalidatePdfCache(r.id);
+    }
+
+    // 2. Resolve ZohoBooksService if credentials exist
+    let zoho: ZohoBooksService | null = null;
+    try {
+      const settings = await this.getSettings(sharedContext, container);
+      if (
+        settings?.zoho_books_enabled &&
+        settings.zoho_client_id &&
+        settings.zoho_client_secret &&
+        settings.zoho_refresh_token &&
+        settings.zoho_organization_id
+      ) {
+        zoho = new ZohoBooksService(
+          {
+            client_id: settings.zoho_client_id,
+            client_secret: settings.zoho_client_secret,
+            refresh_token: settings.zoho_refresh_token,
+            organization_id: settings.zoho_organization_id,
+            domain: settings.zoho_domain || "com",
+          },
+          container?.resolve?.("logger", { allowUnregistered: true })
+        );
+      }
+    } catch (_) {}
+
+    // 3. Delete payments in Zoho
+    for (const record of records) {
+      if (zoho && record.zoho_document_id) {
+        try {
+          await zoho.deletePayment(record.zoho_document_id);
+          deletedPayments.push(record.zoho_document_id);
+        } catch (e: any) {
+          container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(
+            `[Documents-Module] Could not delete Zoho payment ${record.zoho_document_id}: ${e.message}`
+          );
+        }
+      }
+    }
+
+    // 4. Also check repair ticket metadata directly in case zoho_payment_id was stored there
+    try {
+      const repairModule: any = container?.resolve?.("repair", { allowUnregistered: true });
+      if (repairModule) {
+        const ticket = await repairModule.retrieveRepairTicket(repairTicketId).catch(() => null);
+        if (ticket && ticket.metadata && zoho) {
+          const meta = ticket.metadata;
+          if (meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
+            await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
+            deletedPayments.push(meta.zoho_payment_id);
+          }
+        }
+
+        // Clean ticket metadata: clear receipt details and restore invoice link if available
+        if (ticket) {
+          const cleanMeta = { ...(ticket.metadata || {}) };
+          delete cleanMeta.zoho_payment_id;
+
+          let invoices: any[] = [];
+          try {
+            invoices = await this.listDocumentRecords(
+              { repair_ticket_id: repairTicketId, type: "invoice" },
+              {},
+              sharedContext
+            );
+          } catch (_) {}
+          const invoice = invoices?.[0];
+          if (invoice) {
+            cleanMeta.document_id = invoice.id;
+            cleanMeta.pdf_url = invoice.pdf_url;
+            cleanMeta.short_pdf_link = invoice.short_pdf_link || invoice.pdf_url;
+            cleanMeta.last_document_type = "invoice";
+            cleanMeta.last_document_title = invoice.title || "Repair Invoice";
+          } else if (cleanMeta.last_document_type === "receipt") {
+            delete cleanMeta.document_id;
+            delete cleanMeta.pdf_url;
+            delete cleanMeta.short_pdf_link;
+            delete cleanMeta.last_document_type;
+            delete cleanMeta.last_document_title;
+          }
+
+          await repairModule.updateRepairTickets({
+            id: repairTicketId,
+            metadata: cleanMeta,
+          }).catch(() => {});
+        }
+      } else {
+        const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+        if (conn) {
+          const ticket = await conn("repair_ticket").where({ id: repairTicketId }).first();
+          if (ticket && ticket.metadata) {
+            const meta = typeof ticket.metadata === "string" ? JSON.parse(ticket.metadata) : { ...ticket.metadata };
+            if (zoho && meta.zoho_payment_id && !deletedPayments.includes(meta.zoho_payment_id)) {
+              await zoho.deletePayment(meta.zoho_payment_id).catch(() => {});
+              deletedPayments.push(meta.zoho_payment_id);
+            }
+            delete meta.zoho_payment_id;
+
+            const invoice = await conn("document_record")
+              .where({ repair_ticket_id: repairTicketId, type: "invoice" })
+              .whereNull("deleted_at")
+              .first();
+            if (invoice) {
+              meta.document_id = invoice.id;
+              meta.pdf_url = invoice.pdf_url;
+              meta.short_pdf_link = invoice.short_pdf_link || invoice.pdf_url;
+              meta.last_document_type = "invoice";
+              meta.last_document_title = invoice.title || "Repair Invoice";
+            } else if (meta.last_document_type === "receipt") {
+              delete meta.document_id;
+              delete meta.pdf_url;
+              delete meta.short_pdf_link;
+              delete meta.last_document_type;
+              delete meta.last_document_title;
+            }
+
+            await conn("repair_ticket").where({ id: repairTicketId }).update({
+              metadata: JSON.stringify(meta),
+              updated_at: new Date(),
+            });
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 5. Delete receipt records in database
+    let deletedCount = 0;
+    for (const record of records) {
+      try {
+        await this.deleteDocumentRecords(record.id, sharedContext);
+        deletedCount++;
+      } catch (_) {
+        const conn = getDatabaseConnection(container) || getDatabaseConnection((this as any).__container__);
+        if (conn) {
+          await conn("document_record").where({ id: record.id }).delete();
+          deletedCount++;
+        }
+      }
+    }
+
+    return {
+      deleted_records: deletedCount,
       deleted_zoho_payments: deletedPayments,
     };
   }
