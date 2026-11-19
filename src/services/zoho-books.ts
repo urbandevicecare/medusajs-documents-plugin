@@ -127,7 +127,21 @@ export class ZohoBooksService {
 
     if (isBlob) {
       if (!res.ok) {
-        throw new Error(`Zoho API Blob Error: ${res.statusText}`);
+        let errMessage = res.statusText || `HTTP ${res.status}`;
+        try {
+          const errText = await res.text();
+          if (errText) {
+            try {
+              const parsed = JSON.parse(errText);
+              if (parsed.message) errMessage = `${parsed.message} (code ${parsed.code || res.status})`;
+              else errMessage = errText;
+            } catch (_) {
+              errMessage = errText;
+            }
+          }
+        } catch (_) {}
+        this.logger?.error(`[Zoho Books] API Blob Error: ${errMessage}`);
+        throw new Error(`Zoho API Blob Error: ${errMessage}`);
       }
       return await res.arrayBuffer();
     }

@@ -862,8 +862,25 @@ export class DocumentModuleService extends MedusaService({
               try {
                 container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[documents-service] Failed to update existing Zoho invoice ${targetInvoiceId}: ${err?.message || err}`);
               } catch (_) {}
+              const errMsg = String(err?.message || "").toLowerCase();
+              if (errMsg.includes("does not exist") || errMsg.includes("1002") || errMsg.includes("not found")) {
+                targetInvoiceId = null;
+                let existingInZoho = await zoho.getInvoiceByNumber(displayId);
+                if (!existingInZoho && isRepairTicket) {
+                  if (displayId.startsWith("RT-")) {
+                    existingInZoho = await zoho.getInvoiceByNumber(displayId.replace(/^RT-/, ""));
+                  } else {
+                    existingInZoho = await zoho.getInvoiceByNumber(`RT-${displayId}`);
+                  }
+                }
+                if (existingInZoho) {
+                  targetInvoiceId = existingInZoho.invoice_id;
+                }
+              }
             }
-          } else {
+          }
+          
+          if (!targetInvoiceId) {
             const cid = await ensureContactId();
             const res = await zoho.createInvoice(cid, {
               reference_number: displayId,
@@ -928,7 +945,26 @@ export class DocumentModuleService extends MedusaService({
 
           zohoDocumentId = targetInvoiceId;
           source = "zoho";
-          const rawBuffer = await zoho.getDocumentPdf(targetInvoiceId, "invoice");
+          let rawBuffer: any;
+          try {
+            rawBuffer = await zoho.getDocumentPdf(targetInvoiceId, "invoice");
+          } catch (pdfErr: any) {
+            let fallbackInZoho = await zoho.getInvoiceByNumber(displayId);
+            if (!fallbackInZoho && isRepairTicket) {
+              if (displayId.startsWith("RT-")) {
+                fallbackInZoho = await zoho.getInvoiceByNumber(displayId.replace(/^RT-/, ""));
+              } else {
+                fallbackInZoho = await zoho.getInvoiceByNumber(`RT-${displayId}`);
+              }
+            }
+            if (fallbackInZoho && fallbackInZoho.invoice_id) {
+              targetInvoiceId = fallbackInZoho.invoice_id;
+              zohoDocumentId = targetInvoiceId;
+              rawBuffer = await zoho.getDocumentPdf(targetInvoiceId, "invoice");
+            } else {
+              throw pdfErr;
+            }
+          }
           const qrUrlToEmbed = settings.zoho_include_payment_qr !== false ? (shortPaymentLink || input.payment_link) : undefined;
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
             qrUrl: qrUrlToEmbed,
@@ -973,8 +1009,24 @@ export class DocumentModuleService extends MedusaService({
               try {
                 container?.resolve?.("logger", { allowUnregistered: true })?.warn?.(`[documents-service] Failed to update existing Zoho estimate ${targetEstId}: ${err?.message || err}`);
               } catch (_) {}
+              const errMsg = String(err?.message || "").toLowerCase();
+              if (errMsg.includes("does not exist") || errMsg.includes("1002") || errMsg.includes("not found")) {
+                targetEstId = null;
+                let existingInZoho = await zoho.getEstimateByNumber(displayId);
+                if (!existingInZoho && displayId.startsWith("EST-")) {
+                  existingInZoho = await zoho.getEstimateByNumber(displayId.replace(/^EST-/, ""));
+                }
+                if (!existingInZoho && !displayId.startsWith("EST-")) {
+                  existingInZoho = await zoho.getEstimateByNumber(`EST-${displayId}`);
+                }
+                if (existingInZoho) {
+                  targetEstId = existingInZoho.estimate_id;
+                }
+              }
             }
-          } else {
+          }
+          
+          if (!targetEstId) {
             const cid = await ensureContactId();
             const res = await zoho.createEstimate(cid, {
               reference_number: displayId,
@@ -995,7 +1047,25 @@ export class DocumentModuleService extends MedusaService({
 
           zohoDocumentId = targetEstId;
           source = "zoho";
-          const rawBuffer = await zoho.getDocumentPdf(targetEstId, "estimate");
+          let rawBuffer: any;
+          try {
+            rawBuffer = await zoho.getDocumentPdf(targetEstId, "estimate");
+          } catch (pdfErr: any) {
+            let fallbackInZoho = await zoho.getEstimateByNumber(displayId);
+            if (!fallbackInZoho && displayId.startsWith("EST-")) {
+              fallbackInZoho = await zoho.getEstimateByNumber(displayId.replace(/^EST-/, ""));
+            }
+            if (!fallbackInZoho && !displayId.startsWith("EST-")) {
+              fallbackInZoho = await zoho.getEstimateByNumber(`EST-${displayId}`);
+            }
+            if (fallbackInZoho && fallbackInZoho.estimate_id) {
+              targetEstId = fallbackInZoho.estimate_id;
+              zohoDocumentId = targetEstId;
+              rawBuffer = await zoho.getDocumentPdf(targetEstId, "estimate");
+            } else {
+              throw pdfErr;
+            }
+          }
           const quoteDocUrl = shortPdfLink || documentPublicUrl;
           pdfBuffer = await postProcessPdf(Buffer.from(rawBuffer), {
             qrUrl: quoteDocUrl,
